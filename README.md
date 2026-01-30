@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/coregx/gxpdf/actions/workflows/tests.yml/badge.svg)](https://github.com/coregx/gxpdf/actions/workflows/tests.yml)
+[![CI](https://github.com/coregx/gxpdf/actions/workflows/test.yml/badge.svg)](https://github.com/coregx/gxpdf/actions/workflows/test.yml)
 [![GoDoc](https://pkg.go.dev/badge/github.com/coregx/gxpdf)](https://pkg.go.dev/github.com/coregx/gxpdf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/coregx/gxpdf)](https://goreportcard.com/report/github.com/coregx/gxpdf)
 
