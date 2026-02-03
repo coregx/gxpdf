@@ -5,12 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] - v0.2.0 "Graphics Revolution"
 
-### Planned
-- Form filling (fill existing PDF forms)
-- Form flattening (convert forms to static content)
+### Added
+
+#### Skia-like Graphics API (for GoGPU/gg integration)
+- **Alpha Channel Support** - Transparency via ExtGState
+  - `ColorRGBA` struct with alpha channel (0.0-1.0)
+  - `Opacity` parameter on all drawing operations
+  - ExtGState caching for efficient PDF output
+  - 12 standard PDF blend modes
+- **Push/Pop Graphics State** - Skia-like state stack
+  - `Surface` type with state management
+  - `PushTransform()`, `PushOpacity()`, `PushBlendMode()`
+  - `Pop()` to restore previous state
+  - `Transform` API: Translate, Scale, Rotate, Skew
+- **Fill/Stroke Separation** - Independent fill and stroke
+  - `Fill` struct: Paint, Opacity, FillRule (NonZero, EvenOdd)
+  - `Stroke` struct: Paint, Width, LineCap, LineJoin, Dash
+  - `SetFill()`, `SetStroke()` on Surface
+  - LineCap: Butt, Round, Square
+  - LineJoin: Miter, Round, Bevel
+- **Paint Interface** - Unified color/gradient abstraction
+  - `RGB()`, `RGBA()`, `Hex()`, `GrayN()` convenience functions
+  - Color, ColorRGBA, ColorCMYK implement Paint
+  - Ready for Gradient integration
+- **Path Builder API** - Full vector path support
+  - `NewPath()` with fluent API
+  - `MoveTo()`, `LineTo()`, `CubicTo()`, `QuadraticTo()`, `Close()`
+  - Shape helpers: `AddRect()`, `AddRoundedRect()`, `AddCircle()`, `AddEllipse()`, `AddArc()`
+  - `DrawPath()`, `FillPath()`, `StrokePath()` on Surface
+  - QuadraticTo automatically converts to cubic (PDF spec)
+
+### Planned (v0.2.0)
+- Linear and Radial Gradients
+- ClipPath support
+- WASM API (OpenFromBytes, WriteTo)
+- Form filling and flattening
+
+### Planned (v0.3.0+)
 - Digital signatures (sign and verify)
+- PDF/A compliance
+- Object streams (30% file size reduction)
 
 ---
 

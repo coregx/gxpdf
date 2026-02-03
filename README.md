@@ -217,14 +217,14 @@ go test -cover ./...
 
 ## Roadmap
 
-### Completed
+### v0.1.x (Stable)
 - [x] PDF reading and parsing (PDF 1.0-2.0)
 - [x] Text extraction with positions
 - [x] Table extraction (100% accuracy)
 - [x] CSV/JSON/Excel export
 - [x] Creator API (text, graphics, tables)
 - [x] JPEG/PNG image support
-- [x] TTF/OTF font embedding
+- [x] TTF/OTF font embedding with full Unicode
 - [x] RC4/AES encryption
 - [x] Chapters and TOC
 - [x] Annotations
@@ -232,11 +232,23 @@ go test -cover ./...
 - [x] Watermarks
 - [x] Page operations (merge, split, rotate)
 
-### Planned
-- [ ] Form filling (fill existing forms)
-- [ ] Form flattening
+### v0.2.0 "Graphics Revolution" (In Development)
+
+**Skia-like Graphics API** for [GoGPU/gg](https://github.com/gogpu/gg) integration:
+
+- [x] Alpha channel / transparency (ExtGState)
+- [x] Push/Pop graphics state stack
+- [x] Fill/Stroke separation with Paint interface
+- [x] Path Builder API (MoveTo, LineTo, CubicTo, etc.)
+- [ ] Linear and Radial gradients
+- [ ] ClipPath support
+- [ ] WASM API (OpenFromBytes, WriteTo)
+- [ ] Form filling and flattening
+
+### v0.3.0+ (Planned)
 - [ ] Digital signatures
 - [ ] PDF/A compliance
+- [ ] Object streams (30% compression)
 - [ ] SVG import
 
 ## License
