@@ -23,19 +23,23 @@ import (
 //
 // Thread Safety: Not thread-safe. Caller must synchronize if needed.
 type ResourceDictionary struct {
-	fonts      map[string]int    // Font resource name -> object number (e.g., "F1" -> 5)
-	fontIDs    map[string]string // Font ID -> resource name (e.g., "custom:font_1" -> "F1")
-	xobjects   map[string]int    // XObject resource name -> object number (e.g., "Im1" -> 10)
-	extgstates map[string]int    // ExtGState resource name -> object number (e.g., "GS1" -> 15)
+	fonts           map[string]int    // Font resource name -> object number (e.g., "F1" -> 5)
+	fontIDs         map[string]string // Font ID -> resource name (e.g., "custom:font_1" -> "F1")
+	xobjects        map[string]int    // XObject resource name -> object number (e.g., "Im1" -> 10)
+	extgstates      map[string]int    // ExtGState resource name -> object number (e.g., "GS1" -> 15)
+	extgstateCache  map[float64]string // Opacity -> ExtGState name (for caching, e.g., 0.5 -> "GS1")
+	extgstateObjMap map[string]int     // ExtGState name -> object number (for later setting)
 }
 
 // NewResourceDictionary creates a new empty resource dictionary.
 func NewResourceDictionary() *ResourceDictionary {
 	return &ResourceDictionary{
-		fonts:      make(map[string]int),
-		fontIDs:    make(map[string]string),
-		xobjects:   make(map[string]int),
-		extgstates: make(map[string]int),
+		fonts:           make(map[string]int),
+		fontIDs:         make(map[string]string),
+		xobjects:        make(map[string]int),
+		extgstates:      make(map[string]int),
+		extgstateCache:  make(map[float64]string),
+		extgstateObjMap: make(map[string]int),
 	}
 }
 
@@ -159,6 +163,79 @@ func (rd *ResourceDictionary) AddExtGState(objNum int) string {
 	name := fmt.Sprintf("GS%d", len(rd.extgstates)+1)
 	rd.extgstates[name] = objNum
 	return name
+}
+
+// GetOrCreateExtGState returns an existing or creates a new ExtGState for the given opacity.
+//
+// This method caches ExtGState objects by opacity value to avoid creating duplicates.
+// Multiple drawing operations with the same opacity will share the same ExtGState object.
+//
+// Parameters:
+//   - opacity: Opacity value (0.0 = transparent, 1.0 = opaque)
+//
+// Returns:
+//   - Resource name (e.g., "GS1")
+//   - needsCreation: true if this is a new ExtGState that needs object creation
+//
+// Example:
+//
+//	rd := NewResourceDictionary()
+//	name1, needsCreate := rd.GetOrCreateExtGState(0.5)
+//	// name1 = "GS1", needsCreate = true (first time)
+//
+//	name2, needsCreate := rd.GetOrCreateExtGState(0.5)
+//	// name2 = "GS1", needsCreate = false (cached)
+//
+//	name3, needsCreate := rd.GetOrCreateExtGState(0.3)
+//	// name3 = "GS2", needsCreate = true (different opacity)
+func (rd *ResourceDictionary) GetOrCreateExtGState(opacity float64) (string, bool) {
+	// Check if ExtGState for this opacity already exists
+	if name, exists := rd.extgstateCache[opacity]; exists {
+		return name, false // Already exists, no need to create
+	}
+
+	// Create new resource name
+	name := fmt.Sprintf("GS%d", len(rd.extgstates)+1)
+
+	// Cache by opacity
+	rd.extgstateCache[opacity] = name
+
+	// Add to extgstates map with placeholder object number (0)
+	// The actual object number will be set later via SetExtGStateObjNum
+	rd.extgstates[name] = 0
+	rd.extgstateObjMap[name] = 0
+
+	return name, true // New ExtGState, needs creation
+}
+
+// SetExtGStateObjNum sets the object number for an ExtGState resource.
+//
+// This is called after the ExtGState PDF object has been created.
+//
+// Parameters:
+//   - name: ExtGState resource name (e.g., "GS1")
+//   - objNum: PDF object number
+//
+// Returns:
+//   - true if the ExtGState was found and updated, false otherwise
+func (rd *ResourceDictionary) SetExtGStateObjNum(name string, objNum int) bool {
+	if _, exists := rd.extgstates[name]; !exists {
+		return false
+	}
+	rd.extgstates[name] = objNum
+	rd.extgstateObjMap[name] = objNum
+	return true
+}
+
+// GetExtGStateObjNum returns the object number for an ExtGState resource.
+//
+// Parameters:
+//   - name: ExtGState resource name (e.g., "GS1")
+//
+// Returns:
+//   - Object number (0 if not found or not yet set)
+func (rd *ResourceDictionary) GetExtGStateObjNum(name string) int {
+	return rd.extgstates[name]
 }
 
 // HasResources returns true if any resources are registered.

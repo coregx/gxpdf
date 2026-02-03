@@ -69,6 +69,11 @@ type LineOptions struct {
 	// DashPhase is the starting offset into the dash pattern.
 	// Only used when Dashed is true.
 	DashPhase float64
+
+	// Opacity is the line opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
 
 // RectOptions configures rectangle drawing.
@@ -108,6 +113,12 @@ type RectOptions struct {
 	// DashPhase is the starting offset into the dash pattern.
 	// Only used when Dashed is true.
 	DashPhase float64
+
+	// Opacity is the rectangle opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Affects both fill and stroke.
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
 
 // CircleOptions configures circle drawing.
@@ -136,6 +147,12 @@ type CircleOptions struct {
 	// FillGradient is the gradient fill (nil = no gradient fill).
 	// Mutually exclusive with FillColor and FillColorCMYK.
 	FillGradient *Gradient
+
+	// Opacity is the circle opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Affects both fill and stroke.
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
 
 // GraphicsOperation represents a graphics drawing operation.

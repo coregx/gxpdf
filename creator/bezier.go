@@ -67,6 +67,12 @@ type BezierOptions struct {
 	// Only used when Closed is true.
 	// Mutually exclusive with FillColor.
 	FillGradient *Gradient
+
+	// Opacity is the bezier curve opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Affects both stroke and fill (if Closed is true).
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
 
 // DrawBezierCurve draws a complex curve composed of one or more cubic Bézier segments.
