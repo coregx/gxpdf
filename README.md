@@ -164,6 +164,46 @@ page.AddField(countryDropdown)
 c.WriteToFile("form.pdf")
 ```
 
+### Reading and Filling Forms
+
+```go
+// Read form fields from existing PDF
+doc, _ := gxpdf.Open("form.pdf")
+defer doc.Close()
+
+// Check if document has a form
+if doc.HasForm() {
+    fields, _ := doc.GetFormFields()
+    for _, f := range fields {
+        fmt.Printf("%s (%s): %v\n", f.Name(), f.Type(), f.Value())
+    }
+}
+
+// Fill form fields
+app, _ := creator.NewAppender("form.pdf")
+defer app.Close()
+
+app.SetFieldValue("name", "John Doe")
+app.SetFieldValue("email", "john@example.com")
+app.SetFieldValue("agree", true)  // Checkbox
+app.SetFieldValue("country", "USA")  // Dropdown
+
+app.WriteToFile("filled_form.pdf")
+```
+
+### Flattening Forms
+
+```go
+// Convert form fields to static content (non-editable)
+app, _ := creator.NewAppender("filled_form.pdf")
+defer app.Close()
+
+app.FlattenForm()  // Flatten all fields
+// Or: app.FlattenFields("signature", "date")  // Specific fields
+
+app.WriteToFile("flattened.pdf")
+```
+
 ### Extracting Tables from PDFs
 
 ```go
@@ -240,10 +280,18 @@ go test -cover ./...
 - [x] Push/Pop graphics state stack
 - [x] Fill/Stroke separation with Paint interface
 - [x] Path Builder API (MoveTo, LineTo, CubicTo, etc.)
-- [ ] Linear and Radial gradients
-- [ ] ClipPath support
-- [ ] WASM API (OpenFromBytes, WriteTo)
-- [ ] Form filling and flattening
+- [x] Linear and Radial gradients
+- [x] ClipPath support
+
+**Forms API** (Read, Fill, Flatten):
+
+- [x] Form field reader (GetFormFields, GetFieldValue)
+- [x] Form field writer (SetFieldValue with validation)
+- [x] Form flattening (FlattenForm, FlattenFields)
+
+**WASM/Platform Support**:
+
+- [x] WASM API (WriteTo, Bytes for in-memory generation)
 
 ### v0.3.0+ (Planned)
 - [ ] Digital signatures

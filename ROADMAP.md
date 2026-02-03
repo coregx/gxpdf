@@ -2,11 +2,33 @@
 
 Strategic development plan for the GxPDF PDF library.
 
-**Current Version**: v0.1.1
+**Current Version**: v0.2.0 (in development)
 
 ## Version History
 
-### v0.1.1 (Current)
+### v0.2.0 "Graphics Revolution" (In Development)
+
+**Target**: February 2026
+
+Major graphics and forms capabilities:
+
+#### Skia-like Graphics API (for GoGPU/gg integration)
+- Alpha channel support with transparency
+- Push/Pop graphics state stack
+- Fill/Stroke separation with Paint interface
+- Path Builder API (MoveTo, LineTo, CubicTo, etc.)
+- Linear and Radial gradients
+- ClipPath support
+
+#### Forms API
+- Form field reading (GetFormFields, GetFieldValue)
+- Form field writing (SetFieldValue with validation)
+- Form flattening (FlattenForm, FlattenFields)
+
+#### Platform Support
+- WASM API (WriteTo, Bytes for in-memory generation)
+
+### v0.1.1
 
 **Released**: January 2026
 
@@ -29,12 +51,6 @@ Full-featured PDF library with:
 - DDD architecture
 
 ## Planned Features
-
-### v0.2.0 - Form Operations
-
-- **Form Filling** - Fill existing PDF forms programmatically
-- **Form Flattening** - Convert forms to static content
-- **Form Data Import/Export** - FDF/XFDF support
 
 ### v0.3.0 - Digital Signatures
 
@@ -84,7 +100,13 @@ Full-featured PDF library with:
 | Text Extraction | Done | v0.1.0 |
 | Table Extraction | Done | v0.1.0 |
 | Export (CSV, JSON, Excel) | Done | v0.1.0 |
-| Form Filling | Planned | v0.2.0 |
+| Skia-like Graphics API | Done | v0.2.0 |
+| Linear/Radial Gradients | Done | v0.2.0 |
+| ClipPath Support | Done | v0.2.0 |
+| Form Reading | Done | v0.2.0 |
+| Form Filling | Done | v0.2.0 |
+| Form Flattening | Done | v0.2.0 |
+| WASM API | Done | v0.2.0 |
 | Digital Signatures | Planned | v0.3.0 |
 | PDF/A Compliance | Planned | v0.4.0 |
 

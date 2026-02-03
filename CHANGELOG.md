@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.2.0 "Graphics Revolution"
+## [0.2.0] - 2026-02-XX "Graphics Revolution"
 
 ### Added
 
@@ -37,13 +37,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `DrawPath()`, `FillPath()`, `StrokePath()` on Surface
   - QuadraticTo automatically converts to cubic (PDF spec)
 
-### Planned (v0.2.0)
-- Linear and Radial Gradients
-- ClipPath support
-- WASM API (OpenFromBytes, WriteTo)
-- Form filling and flattening
+#### Forms API (Interactive PDF Forms)
+- **Form Reading** - Read interactive form fields from PDFs
+  - `Document.GetFormFields()` - Get all form fields
+  - `Document.GetFieldValue(name)` - Get specific field value
+  - `Document.HasForm()` - Check if PDF has interactive form
+  - `FormField` type with accessors: Name, Type, Value, Options, Flags
+  - Support for Text, Button, Choice, Signature field types
+- **Form Writing** - Fill form fields programmatically
+  - `Appender.SetFieldValue(name, value)` - Set field value
+  - `Appender.GetFieldValue(name)` - Get current/pending value
+  - Type validation (string for text, bool/string for checkboxes)
+  - Option validation for choice fields
+- **Form Flattening** - Convert forms to static content
+  - `Appender.FlattenForm()` - Flatten all fields
+  - `Appender.FlattenFields(names...)` - Flatten specific fields
+  - `Appender.CanFlattenForm()` - Check if flattening is possible
+- **WASM/Byte API** - Generate PDFs in memory
+  - `Creator.WriteTo(io.Writer)` - Write to any writer
+  - `Creator.Bytes()` - Get PDF as byte slice
+  - `NewPdfWriterFromWriter(io.Writer)` - Low-level writer
 
-### Planned (v0.3.0+)
+#### Advanced Graphics
+- **Linear Gradients** - Axial shading (ShadingType 2)
+  - `NewLinearGradient(x1, y1, x2, y2)` constructor
+  - `AddColorStop()` for color transitions
+  - ExtendStart/ExtendEnd flags
+- **Radial Gradients** - Radial shading (ShadingType 3)
+  - `NewRadialGradient(x0, y0, r0, x1, y1, r1)` constructor
+  - Focal point support (inner/outer circle)
+- **ClipPath Support** - Clipping path operations
+  - `PushClipPath()` with NonZero and EvenOdd fill rules
+  - Convenience methods: `PushClipRect`, `PushClipCircle`, `PushClipEllipse`
+  - PDF 1.7 Spec Section 8.5.4 compliant
+
+---
+
+## Planned (v0.3.0+)
 - Digital signatures (sign and verify)
 - PDF/A compliance
 - Object streams (30% file size reduction)

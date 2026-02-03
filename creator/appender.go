@@ -72,6 +72,9 @@ type Appender struct {
 
 	// Form field writer for setting field values.
 	formWriter *forms.Writer
+
+	// Track fields to flatten when writing.
+	flattenedFields []*forms.FlattenInfo
 }
 
 // NewAppender opens an existing PDF file for modification.
@@ -639,4 +642,73 @@ func (a *Appender) HasForm() bool {
 	parserReader := a.pdfReader.GetParserReader()
 	acroForm, err := parserReader.GetAcroForm()
 	return err == nil && acroForm != nil
+}
+
+// FlattenForm converts all form fields to static content.
+//
+// This removes interactivity by rendering field appearances directly onto
+// pages. The resulting PDF looks the same but fields are no longer editable.
+//
+// Use this when:
+//   - Creating final versions of filled forms
+//   - Preventing further editing
+//   - Reducing file complexity
+//
+// Example:
+//
+//	app, err := creator.NewAppender("filled_form.pdf")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer app.Close()
+//
+//	if err := app.FlattenForm(); err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	app.WriteToFile("flattened.pdf")
+func (a *Appender) FlattenForm() error {
+	return a.FlattenFields() // Flatten all fields
+}
+
+// FlattenFields converts specific form fields to static content.
+//
+// If no names are provided, all fields are flattened.
+//
+// Example:
+//
+//	// Flatten only specific fields
+//	app.FlattenFields("name", "email", "signature")
+func (a *Appender) FlattenFields(names ...string) error {
+	parserReader := a.pdfReader.GetParserReader()
+	flattener := forms.NewFlattener(parserReader)
+
+	var flattenInfo []*forms.FlattenInfo
+	var err error
+
+	if len(names) == 0 {
+		flattenInfo, err = flattener.GetFlattenInfo()
+	} else {
+		flattenInfo, err = flattener.GetFlattenInfoByName(names...)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to get flatten info: %w", err)
+	}
+
+	if len(flattenInfo) == 0 {
+		return nil // Nothing to flatten
+	}
+
+	// Track which fields were flattened for later removal
+	a.flattenedFields = append(a.flattenedFields, flattenInfo...)
+
+	return nil
+}
+
+// CanFlattenForm returns true if the document has fields that can be flattened.
+func (a *Appender) CanFlattenForm() bool {
+	parserReader := a.pdfReader.GetParserReader()
+	flattener := forms.NewFlattener(parserReader)
+	return flattener.CanFlatten()
 }
