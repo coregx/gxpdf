@@ -16,9 +16,11 @@
 package creator
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/coregx/gxpdf/internal/document"
 	"github.com/coregx/gxpdf/internal/fonts"
@@ -534,6 +536,113 @@ func (c *Creator) WriteToFileContext(ctx context.Context, path string) error {
 	}
 
 	return nil
+}
+
+// WriteTo writes the PDF document to an io.Writer.
+//
+// This implements io.WriterTo and is useful for:
+//   - Writing to HTTP responses
+//   - Writing to memory buffers
+//   - Writing to network connections
+//   - Any other io.Writer implementation
+//
+// Example:
+//
+//	var buf bytes.Buffer
+//	n, err := c.WriteTo(&buf)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Printf("Wrote %d bytes\n", n)
+func (c *Creator) WriteTo(w io.Writer) (int64, error) {
+	ctx := context.Background()
+	return c.WriteToContext(ctx, w)
+}
+
+// WriteToContext writes the PDF document to an io.Writer with context support.
+//
+// This allows cancellation and timeout control during PDF generation.
+//
+// Example:
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+//	defer cancel()
+//
+//	var buf bytes.Buffer
+//	n, err := c.WriteToContext(ctx, &buf)
+func (c *Creator) WriteToContext(ctx context.Context, w io.Writer) (int64, error) {
+	// Check context before starting.
+	if err := ctx.Err(); err != nil {
+		return 0, fmt.Errorf("context canceled before PDF generation: %w", err)
+	}
+
+	// Render TOC and chapters if enabled.
+	if err := c.renderTOCAndChapters(); err != nil {
+		return 0, fmt.Errorf("failed to render TOC and chapters: %w", err)
+	}
+
+	// Check context after rendering chapters.
+	if err := ctx.Err(); err != nil {
+		return 0, fmt.Errorf("context canceled during TOC/chapter rendering: %w", err)
+	}
+
+	// Validate before writing.
+	if err := c.Validate(); err != nil {
+		return 0, err
+	}
+
+	// Check context before write.
+	if err := ctx.Err(); err != nil {
+		return 0, fmt.Errorf("context canceled before write: %w", err)
+	}
+
+	// Use counting writer to track bytes written.
+	cw := &countingWriter{w: w}
+
+	// Create PDF writer for io.Writer.
+	pdfWriter := writer.NewPdfWriterFromWriter(cw)
+	defer pdfWriter.Close()
+
+	// Write document with page content.
+	textContents, graphicsContents := c.collectAllPageContents()
+	if err := pdfWriter.WriteWithAllContent(c.doc, textContents, graphicsContents); err != nil {
+		return cw.n, fmt.Errorf("failed to write PDF: %w", err)
+	}
+
+	return cw.n, nil
+}
+
+// Bytes returns the PDF document as a byte slice.
+//
+// This is a convenience method that writes to an in-memory buffer.
+// For large documents, consider using WriteTo with a streaming writer.
+//
+// Example:
+//
+//	pdfBytes, err := c.Bytes()
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	// Use pdfBytes...
+func (c *Creator) Bytes() ([]byte, error) {
+	var buf bytes.Buffer
+	_, err := c.WriteTo(&buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// countingWriter wraps an io.Writer and counts bytes written.
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (cw *countingWriter) Write(p []byte) (int, error) {
+	n, err := cw.w.Write(p)
+	cw.n += int64(n)
+	return n, err
 }
 
 // collectAllPageContents converts creator operations to writer operations.
