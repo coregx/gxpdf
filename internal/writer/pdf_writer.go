@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -28,12 +29,25 @@ import (
 //
 //	err = writer.Write(doc)
 type PdfWriter struct {
-	file       *os.File          // Output file
-	writer     *bufio.Writer     // Buffered writer
-	objects    []*IndirectObject // All objects to write
-	offsets    map[int]int64     // Byte offsets for each object number
-	nextObjNum int               // Next available object number
-	closed     bool              // Whether Close() has been called
+	file        *os.File          // Output file (nil for io.Writer mode)
+	writer      *bufio.Writer     // Buffered writer
+	countWriter *countingWriter   // Tracks bytes written (for io.Writer mode)
+	objects     []*IndirectObject // All objects to write
+	offsets     map[int]int64     // Byte offsets for each object number
+	nextObjNum  int               // Next available object number
+	closed      bool              // Whether Close() has been called
+}
+
+// countingWriter wraps an io.Writer and tracks bytes written.
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (cw *countingWriter) Write(p []byte) (int, error) {
+	n, err := cw.w.Write(p)
+	cw.n += int64(n)
+	return n, err
 }
 
 // NewPdfWriter creates a new PDF writer for the specified file path.
@@ -55,6 +69,32 @@ func NewPdfWriter(path string) (*PdfWriter, error) {
 		nextObjNum: 1, // Object numbering starts at 1
 		closed:     false,
 	}, nil
+}
+
+// NewPdfWriterFromWriter creates a new PDF writer for an io.Writer.
+//
+// This is useful for writing PDFs to memory buffers, HTTP responses,
+// or any other io.Writer implementation. Unlike NewPdfWriter, this
+// does not create a file.
+//
+// Example:
+//
+//	var buf bytes.Buffer
+//	writer := NewPdfWriterFromWriter(&buf)
+//	err := writer.Write(doc)
+//	writer.Close()
+//	pdfBytes := buf.Bytes()
+func NewPdfWriterFromWriter(w io.Writer) *PdfWriter {
+	cw := &countingWriter{w: w}
+	return &PdfWriter{
+		file:        nil, // No file
+		countWriter: cw,
+		writer:      bufio.NewWriter(cw),
+		objects:     make([]*IndirectObject, 0),
+		offsets:     make(map[int]int64),
+		nextObjNum:  1,
+		closed:      false,
+	}
 }
 
 // WriteWithPageContent writes a document with page content operations to the PDF file.
@@ -102,17 +142,13 @@ func (w *PdfWriter) WriteWithPageContent(doc *document.Document, pageContents ma
 
 	// Write all objects and track their offsets
 	for _, obj := range w.objects {
-		offset := w.writer.Size()
-		if offset == 0 {
-			// First object - calculate offset from file position
-			pos, err := w.file.Seek(0, 1)
-			if err != nil {
-				return fmt.Errorf("failed to get file position: %w", err)
-			}
-			offset = int(pos)
+		// Get current offset
+		pos, err := w.getCurrentOffset()
+		if err != nil {
+			return fmt.Errorf("failed to get file position: %w", err)
 		}
 
-		w.offsets[obj.Number] = int64(offset)
+		w.offsets[obj.Number] = pos
 
 		if _, err := obj.WriteTo(w.writer); err != nil {
 			return fmt.Errorf("failed to write object %d: %w", obj.Number, err)
@@ -189,17 +225,13 @@ func (w *PdfWriter) WriteWithAllContent(
 
 	// Write all objects and track their offsets
 	for _, obj := range w.objects {
-		offset := w.writer.Size()
-		if offset == 0 {
-			// First object - calculate offset from file position
-			pos, err := w.file.Seek(0, 1)
-			if err != nil {
-				return fmt.Errorf("failed to get file position: %w", err)
-			}
-			offset = int(pos)
+		// Get current offset
+		pos, err := w.getCurrentOffset()
+		if err != nil {
+			return fmt.Errorf("failed to get file position: %w", err)
 		}
 
-		w.offsets[obj.Number] = int64(offset)
+		w.offsets[obj.Number] = pos
 
 		if _, err := obj.WriteTo(w.writer); err != nil {
 			return fmt.Errorf("failed to write object %d: %w", obj.Number, err)
@@ -275,17 +307,13 @@ func (w *PdfWriter) Write(doc *document.Document) error {
 
 	// Write all objects and track their offsets
 	for _, obj := range w.objects {
-		offset := w.writer.Size()
-		if offset == 0 {
-			// First object - calculate offset from file position
-			pos, err := w.file.Seek(0, 1) // Get current position
-			if err != nil {
-				return fmt.Errorf("failed to get file position: %w", err)
-			}
-			offset = int(pos)
+		// Get current offset
+		pos, err := w.getCurrentOffset()
+		if err != nil {
+			return fmt.Errorf("failed to get file position: %w", err)
 		}
 
-		w.offsets[obj.Number] = int64(offset)
+		w.offsets[obj.Number] = pos
 
 		if _, err := obj.WriteTo(w.writer); err != nil {
 			return fmt.Errorf("failed to write object %d: %w", obj.Number, err)
@@ -325,16 +353,46 @@ func (w *PdfWriter) Close() error {
 
 	// Flush any remaining buffered data
 	if err := w.writer.Flush(); err != nil {
-		_ = w.file.Close() // Best effort cleanup
+		if w.file != nil {
+			_ = w.file.Close() // Best effort cleanup
+		}
 		return fmt.Errorf("failed to flush buffer: %w", err)
 	}
 
-	// Close the file
-	if err := w.file.Close(); err != nil {
-		return fmt.Errorf("failed to close file: %w", err)
+	// Close the file if we have one (not needed for io.Writer mode)
+	if w.file != nil {
+		if err := w.file.Close(); err != nil {
+			return fmt.Errorf("failed to close file: %w", err)
+		}
 	}
 
 	return nil
+}
+
+// getCurrentOffset returns the current byte offset in the output.
+// For file mode, it uses file.Seek. For io.Writer mode, it uses
+// the counting writer plus buffered bytes.
+func (w *PdfWriter) getCurrentOffset() (int64, error) {
+	// Flush buffered data first to get accurate count
+	if err := w.writer.Flush(); err != nil {
+		return 0, err
+	}
+
+	if w.file != nil {
+		// File mode: use Seek to get position
+		pos, err := w.file.Seek(0, 1)
+		if err != nil {
+			return 0, err
+		}
+		return pos, nil
+	}
+
+	// io.Writer mode: use counting writer
+	if w.countWriter != nil {
+		return w.countWriter.n, nil
+	}
+
+	return 0, fmt.Errorf("no file or counting writer available")
 }
 
 // writeHeader writes the PDF header with version and binary marker.
@@ -376,12 +434,10 @@ func (w *PdfWriter) writeHeader(version string) error {
 // Returns the byte offset where xref starts.
 func (w *PdfWriter) writeXRef() (int64, error) {
 	// Get current position (where xref starts)
-	currentSize := w.writer.Size()
-	pos, err := w.file.Seek(0, 1)
+	xrefOffset, err := w.getCurrentOffset()
 	if err != nil {
 		return 0, fmt.Errorf("failed to get file position: %w", err)
 	}
-	xrefOffset := pos + int64(currentSize)
 
 	// Write xref header
 	if _, err := w.writer.WriteString("xref\n"); err != nil {
