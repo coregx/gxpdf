@@ -23,10 +23,10 @@ import (
 //
 // Thread Safety: Not thread-safe. Caller must synchronize if needed.
 type ResourceDictionary struct {
-	fonts           map[string]int    // Font resource name -> object number (e.g., "F1" -> 5)
-	fontIDs         map[string]string // Font ID -> resource name (e.g., "custom:font_1" -> "F1")
-	xobjects        map[string]int    // XObject resource name -> object number (e.g., "Im1" -> 10)
-	extgstates      map[string]int    // ExtGState resource name -> object number (e.g., "GS1" -> 15)
+	fonts           map[string]int     // Font resource name -> object number (e.g., "F1" -> 5)
+	fontIDs         map[string]string  // Font ID -> resource name (e.g., "custom:font_1" -> "F1")
+	xobjects        map[string]int     // XObject resource name -> object number (e.g., "Im1" -> 10)
+	extgstates      map[string]int     // ExtGState resource name -> object number (e.g., "GS1" -> 15)
 	extgstateCache  map[float64]string // Opacity -> ExtGState name (for caching, e.g., 0.5 -> "GS1")
 	extgstateObjMap map[string]int     // ExtGState name -> object number (for later setting)
 }
