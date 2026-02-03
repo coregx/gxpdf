@@ -701,6 +701,23 @@ func (p *Page) MoveCursor(x, y float64) {
 	_ = y
 }
 
+// Surface creates a new drawing surface for this page.
+//
+// Surface provides Skia-like Push/Pop semantics for graphics state management.
+// This allows composable transformations, opacity, blend modes, and clipping.
+//
+// Example:
+//
+//	surface := page.Surface()
+//	surface.PushTransform(Rotate(45))
+//	surface.PushOpacity(0.5)
+//	// ... draw operations ...
+//	surface.Pop()
+//	surface.Pop()
+func (p *Page) Surface() *Surface {
+	return NewSurface(p)
+}
+
 // AddLink adds a clickable URL link with default styling (blue, underlined).
 //
 // The text is rendered at the specified position and made clickable.
