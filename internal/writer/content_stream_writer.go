@@ -461,6 +461,26 @@ func (csw *ContentStreamWriter) SetFillColorCMYK(c, m, y, k float64) {
 	csw.writeOp(fmt.Sprintf("%.2f %.2f %.2f %.2f", c, m, y, k), "k")
 }
 
+// SetGraphicsState applies an extended graphics state (gs operator).
+//
+// ExtGState (Extended Graphics State) is used to set advanced graphics
+// parameters like transparency (opacity), blend modes, and rendering intent.
+//
+// Parameters:
+//   - name: Graphics state resource name (e.g., "GS1")
+//
+// Example:
+//
+//	csw.SaveState()
+//	csw.SetGraphicsState("GS1")  // Apply transparency or other state
+//	// ... draw content with applied state ...
+//	csw.RestoreState()
+//
+// Reference: PDF 1.7 Spec, Section 8.4.5 (Extended Graphics State).
+func (csw *ContentStreamWriter) SetGraphicsState(name string) {
+	csw.writeOp(fmt.Sprintf("/%s", name), "gs")
+}
+
 // --- COMPRESSION ---
 
 // SetCompression sets the compression level for this content stream.

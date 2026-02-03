@@ -27,6 +27,11 @@ type PolylineOptions struct {
 	// DashPhase is the starting offset into the dash pattern.
 	// Only used when Dashed is true.
 	DashPhase float64
+
+	// Opacity is the polyline opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
 
 // DrawPolyline draws an open path through the specified vertices.

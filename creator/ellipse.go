@@ -30,6 +30,12 @@ type EllipseOptions struct {
 	// FillGradient is the gradient fill (nil = no gradient fill).
 	// Mutually exclusive with FillColor and FillColorCMYK.
 	FillGradient *Gradient
+
+	// Opacity is the ellipse opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Affects both fill and stroke.
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
 
 // DrawEllipse draws an ellipse at center (cx, cy) with horizontal radius rx and vertical radius ry.

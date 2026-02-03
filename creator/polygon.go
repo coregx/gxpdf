@@ -47,6 +47,12 @@ type PolygonOptions struct {
 	// DashPhase is the starting offset into the dash pattern.
 	// Only used when Dashed is true.
 	DashPhase float64
+
+	// Opacity is the polygon opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Affects both fill and stroke.
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
 
 // DrawPolygon draws a closed polygon through the specified vertices.

@@ -188,6 +188,106 @@ var (
 	CMYKBlue = ColorCMYK{1, 1, 0, 0}
 )
 
+// ColorRGBA represents an RGBA color with alpha channel (transparency).
+//
+// All values are in the range [0.0, 1.0]:
+// - R, G, B: Color components (0.0 = no intensity, 1.0 = full intensity)
+// - A: Alpha channel (0.0 = fully transparent, 1.0 = fully opaque)
+//
+// PDF uses ExtGState (Extended Graphics State) with /ca parameter to implement
+// transparency. The alpha value controls both fill and stroke opacity.
+//
+// Example:
+//
+//	// Semi-transparent red
+//	transparentRed := ColorRGBA{1, 0, 0, 0.5}
+//
+//	// Fully transparent (invisible)
+//	invisible := ColorRGBA{0, 0, 0, 0}
+//
+//	// Fully opaque (same as Color)
+//	opaque := ColorRGBA{1, 0, 0, 1}
+//
+// Reference: PDF 1.7 Specification, Section 8.4.5 (Extended Graphics State).
+type ColorRGBA struct {
+	R float64 // Red component (0.0 to 1.0)
+	G float64 // Green component (0.0 to 1.0)
+	B float64 // Blue component (0.0 to 1.0)
+	A float64 // Alpha component (0.0 = transparent, 1.0 = opaque)
+}
+
+// NewColorRGBA creates a new RGBA color with alpha channel.
+//
+// Parameters:
+//   - r: Red component (0.0 to 1.0)
+//   - g: Green component (0.0 to 1.0)
+//   - b: Blue component (0.0 to 1.0)
+//   - a: Alpha component (0.0 = transparent, 1.0 = opaque)
+//
+// Example:
+//
+//	// 50% transparent red
+//	red := creator.NewColorRGBA(1.0, 0.0, 0.0, 0.5)
+//
+//	// 30% transparent blue
+//	blue := creator.NewColorRGBA(0.0, 0.0, 1.0, 0.3)
+func NewColorRGBA(r, g, b, a float64) ColorRGBA {
+	return ColorRGBA{R: r, G: g, B: b, A: a}
+}
+
+// ToColor converts RGBA to RGB (discards alpha channel).
+//
+// Returns the RGB color without transparency.
+func (c ColorRGBA) ToColor() Color {
+	return Color{R: c.R, G: c.G, B: c.B}
+}
+
+// WithAlpha returns a new ColorRGBA with the specified alpha value.
+//
+// Parameters:
+//   - alpha: New alpha value (0.0 to 1.0)
+//
+// Example:
+//
+//	red := ColorRGBA{1, 0, 0, 1}
+//	transparentRed := red.WithAlpha(0.5)  // 50% transparent red
+func (c ColorRGBA) WithAlpha(alpha float64) ColorRGBA {
+	return ColorRGBA{R: c.R, G: c.G, B: c.B, A: alpha}
+}
+
+// Predefined transparent colors for common use cases.
+var (
+	// TransparentBlack is fully transparent black (RGBA: 0, 0, 0, 0).
+	TransparentBlack = ColorRGBA{0, 0, 0, 0}
+
+	// SemiTransparentBlack is 50% transparent black.
+	SemiTransparentBlack = ColorRGBA{0, 0, 0, 0.5}
+
+	// TransparentWhite is fully transparent white.
+	TransparentWhite = ColorRGBA{1, 1, 1, 0}
+
+	// SemiTransparentWhite is 50% transparent white.
+	SemiTransparentWhite = ColorRGBA{1, 1, 1, 0.5}
+
+	// TransparentRed is fully transparent red.
+	TransparentRed = ColorRGBA{1, 0, 0, 0}
+
+	// SemiTransparentRed is 50% transparent red.
+	SemiTransparentRed = ColorRGBA{1, 0, 0, 0.5}
+
+	// TransparentGreen is fully transparent green.
+	TransparentGreen = ColorRGBA{0, 1, 0, 0}
+
+	// SemiTransparentGreen is 50% transparent green.
+	SemiTransparentGreen = ColorRGBA{0, 1, 0, 0.5}
+
+	// TransparentBlue is fully transparent blue.
+	TransparentBlue = ColorRGBA{0, 0, 1, 0}
+
+	// SemiTransparentBlue is 50% transparent blue.
+	SemiTransparentBlue = ColorRGBA{0, 0, 1, 0.5}
+)
+
 // FontName represents one of the Standard 14 fonts built into all PDF readers.
 //
 // These fonts do not require embedding and are guaranteed to be available
@@ -295,4 +395,10 @@ type TextOperation struct {
 	// If set, this takes precedence over Color (RGB).
 	// Used for professional printing workflows.
 	ColorCMYK *ColorCMYK
+
+	// Opacity is the text opacity (0.0 = transparent, 1.0 = opaque).
+	// Optional. If set, applies transparency via ExtGState.
+	// Works with both Color and ColorCMYK.
+	// Range: [0.0, 1.0]
+	Opacity *float64
 }
