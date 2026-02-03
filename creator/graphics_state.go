@@ -111,26 +111,25 @@ func NewGraphicsState() GraphicsState {
 	}
 }
 
-// Clone creates a deep copy of the graphics state.
+// Clone creates a copy of the graphics state.
 //
 // This is used when pushing state onto the stack.
+// Fill, Stroke, and ClipPath pointers are copied (shallow copy),
+// so modifications to the pointed-to objects will affect both states.
+// However, replacing the pointer (e.g., SetFill) only affects the current state.
 func (g GraphicsState) Clone() GraphicsState {
+	// Shallow copy - copies all fields including pointers
 	clone := g
 
-	// Deep copy Fill if present
-	if g.Fill != nil {
-		fillCopy := *g.Fill
-		clone.Fill = &fillCopy
-	}
-
-	// Deep copy Stroke if present
-	if g.Stroke != nil {
-		strokeCopy := *g.Stroke
-		clone.Stroke = &strokeCopy
-	}
-
-	// Note: ClipPath is not deep copied since Path is not yet implemented (feat-053)
-	// When Path is implemented, add deep copy here.
+	// Note: Fill, Stroke, and ClipPath are pointer fields.
+	// We intentionally do NOT deep copy them here.
+	// This allows Push/Pop to save/restore the pointer values themselves.
+	//
+	// Example:
+	//   surface.SetFill(fill1)      // currentState.Fill = &fill1
+	//   surface.PushOpacity(0.5)    // saves &fill1 to stack
+	//   surface.SetFill(fill2)      // currentState.Fill = &fill2
+	//   surface.Pop()               // restores &fill1 from stack
 
 	return clone
 }

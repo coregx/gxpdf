@@ -347,3 +347,218 @@ func TestGraphicsStateClone(t *testing.T) {
 		t.Error("Modifying clone affected original")
 	}
 }
+
+func TestSurfaceSetFill(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	// Initially no fill
+	if surface.CurrentFill() != nil {
+		t.Error("Initial fill should be nil")
+	}
+
+	// Set fill
+	fill := NewFill(Red).WithOpacity(0.8)
+	surface.SetFill(fill)
+
+	if surface.CurrentFill() != fill {
+		t.Error("Fill not set correctly")
+	}
+
+	// Clear fill
+	surface.SetFill(nil)
+	if surface.CurrentFill() != nil {
+		t.Error("Fill not cleared")
+	}
+}
+
+func TestSurfaceSetStroke(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	// Initially no stroke
+	if surface.CurrentStroke() != nil {
+		t.Error("Initial stroke should be nil")
+	}
+
+	// Set stroke
+	stroke := NewStroke(Black).WithWidth(2.0)
+	surface.SetStroke(stroke)
+
+	if surface.CurrentStroke() != stroke {
+		t.Error("Stroke not set correctly")
+	}
+
+	// Clear stroke
+	surface.SetStroke(nil)
+	if surface.CurrentStroke() != nil {
+		t.Error("Stroke not cleared")
+	}
+}
+
+func TestSurfaceDrawPath(t *testing.T) {
+	surface := NewSurface(&Page{})
+	path := NewPath()
+
+	// Test with nil path
+	err := surface.DrawPath(nil)
+	if err == nil {
+		t.Error("DrawPath(nil) should return error")
+	}
+
+	// Test with valid fill
+	fill := NewFill(Red).WithOpacity(0.8)
+	surface.SetFill(fill)
+	err = surface.DrawPath(path)
+	if err != nil {
+		t.Errorf("DrawPath with valid fill failed: %v", err)
+	}
+
+	// Test with valid stroke
+	surface.SetFill(nil)
+	stroke := NewStroke(Black).WithWidth(2.0)
+	surface.SetStroke(stroke)
+	err = surface.DrawPath(path)
+	if err != nil {
+		t.Errorf("DrawPath with valid stroke failed: %v", err)
+	}
+
+	// Test with both fill and stroke
+	surface.SetFill(fill)
+	err = surface.DrawPath(path)
+	if err != nil {
+		t.Errorf("DrawPath with both fill and stroke failed: %v", err)
+	}
+
+	// Test with invalid fill
+	invalidFill := &Fill{
+		Paint:   Red,
+		Opacity: 1.5, // Invalid
+		Rule:    FillRuleNonZero,
+	}
+	surface.SetFill(invalidFill)
+	err = surface.DrawPath(path)
+	if err == nil {
+		t.Error("DrawPath with invalid fill should return error")
+	}
+
+	// Test with invalid stroke
+	surface.SetFill(nil)
+	invalidStroke := &Stroke{
+		Paint: Black,
+		Width: -1.0, // Invalid
+	}
+	surface.SetStroke(invalidStroke)
+	err = surface.DrawPath(path)
+	if err == nil {
+		t.Error("DrawPath with invalid stroke should return error")
+	}
+}
+
+func TestSurfaceDrawRect(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	tests := []struct {
+		name    string
+		rect    Rect
+		wantErr bool
+	}{
+		{
+			name:    "Valid rect",
+			rect:    Rect{X: 50, Y: 50, Width: 100, Height: 100},
+			wantErr: false,
+		},
+		{
+			name:    "Invalid width <= 0",
+			rect:    Rect{X: 50, Y: 50, Width: 0, Height: 100},
+			wantErr: true,
+		},
+		{
+			name:    "Invalid negative width",
+			rect:    Rect{X: 50, Y: 50, Width: -10, Height: 100},
+			wantErr: true,
+		},
+		{
+			name:    "Invalid height <= 0",
+			rect:    Rect{X: 50, Y: 50, Width: 100, Height: 0},
+			wantErr: true,
+		},
+		{
+			name:    "Invalid negative height",
+			rect:    Rect{X: 50, Y: 50, Width: 100, Height: -10},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set valid fill and stroke
+			fill := NewFill(Red)
+			stroke := NewStroke(Black)
+			surface.SetFill(fill)
+			surface.SetStroke(stroke)
+
+			err := surface.DrawRect(tt.rect)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("DrawRect() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+
+	// Test with invalid fill
+	invalidFill := &Fill{
+		Paint:   Red,
+		Opacity: 1.5, // Invalid
+		Rule:    FillRuleNonZero,
+	}
+	surface.SetFill(invalidFill)
+	err := surface.DrawRect(Rect{X: 0, Y: 0, Width: 100, Height: 100})
+	if err == nil {
+		t.Error("DrawRect with invalid fill should return error")
+	}
+
+	// Test with invalid stroke
+	surface.SetFill(nil)
+	invalidStroke := &Stroke{
+		Paint: Black,
+		Width: -1.0, // Invalid
+	}
+	surface.SetStroke(invalidStroke)
+	err = surface.DrawRect(Rect{X: 0, Y: 0, Width: 100, Height: 100})
+	if err == nil {
+		t.Error("DrawRect with invalid stroke should return error")
+	}
+}
+
+func TestSurfaceFillStrokePersistence(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	fill := NewFill(Red)
+	stroke := NewStroke(Black)
+
+	surface.SetFill(fill)
+	surface.SetStroke(stroke)
+
+	// Push state should preserve fill/stroke
+	surface.PushOpacity(0.5)
+
+	if surface.CurrentFill() != fill {
+		t.Error("Fill not preserved after PushOpacity")
+	}
+	if surface.CurrentStroke() != stroke {
+		t.Error("Stroke not preserved after PushOpacity")
+	}
+
+	// Modify in nested state
+	newFill := NewFill(Blue)
+	surface.SetFill(newFill)
+
+	if surface.CurrentFill() != newFill {
+		t.Error("Fill not updated in nested state")
+	}
+
+	// Pop should restore original
+	surface.Pop()
+
+	if surface.CurrentFill() != fill {
+		t.Error("Fill not restored after Pop")
+	}
+}

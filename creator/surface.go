@@ -1,6 +1,9 @@
 package creator
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Surface represents a drawing surface with a graphics state stack.
 //
@@ -186,8 +189,140 @@ func (s *Surface) StackDepth() int {
 	return len(s.stateStack)
 }
 
+// SetFill sets the current fill configuration.
+//
+// All subsequent drawing operations will use this fill.
+// Pass nil to disable filling.
+//
+// Example:
+//
+//	fill := NewFill(Red).WithOpacity(0.8)
+//	surface.SetFill(fill)
+//	surface.DrawRect(rect)  // Filled with red at 80% opacity
+func (s *Surface) SetFill(fill *Fill) {
+	s.currentState.Fill = fill
+}
+
+// SetStroke sets the current stroke configuration.
+//
+// All subsequent drawing operations will use this stroke.
+// Pass nil to disable stroking.
+//
+// Example:
+//
+//	stroke := NewStroke(Black).WithWidth(2.0)
+//	surface.SetStroke(stroke)
+//	surface.DrawRect(rect)  // Stroked with black 2pt line
+func (s *Surface) SetStroke(stroke *Stroke) {
+	s.currentState.Stroke = stroke
+}
+
+// DrawPath draws a path with the current fill and stroke.
+//
+// The path is drawn using the current graphics state.
+// If both fill and stroke are set, the path is filled then stroked.
+//
+// This method will be fully implemented in feat-053 (ClipPath).
+//
+// Parameters:
+//   - path: Path to draw
+//
+// Example:
+//
+//	path := NewPath()
+//	path.MoveTo(0, 0)
+//	path.LineTo(100, 0)
+//	path.LineTo(50, 100)
+//	path.Close()
+//
+//	surface.SetFill(NewFill(Red))
+//	surface.SetStroke(NewStroke(Black).WithWidth(2))
+//	surface.DrawPath(path)
+func (s *Surface) DrawPath(path *Path) error {
+	if path == nil {
+		return errors.New("path cannot be nil")
+	}
+
+	// TODO: Implement in feat-053 when Path is fully implemented
+	// For now, this is a placeholder that validates the current state
+
+	if s.currentState.Fill != nil {
+		if err := s.currentState.Fill.Validate(); err != nil {
+			return fmt.Errorf("invalid fill: %w", err)
+		}
+	}
+
+	if s.currentState.Stroke != nil {
+		if err := s.currentState.Stroke.Validate(); err != nil {
+			return fmt.Errorf("invalid stroke: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// Rect represents a rectangle in user space.
+type Rect struct {
+	X      float64 // Left edge
+	Y      float64 // Bottom edge
+	Width  float64 // Width
+	Height float64 // Height
+}
+
+// DrawRect draws a rectangle with the current fill and stroke.
+//
+// The rectangle is drawn using the current graphics state.
+// If both fill and stroke are set, the rectangle is filled then stroked.
+//
+// Parameters:
+//   - rect: Rectangle to draw
+//
+// Example:
+//
+//	surface.SetFill(NewFill(Red))
+//	surface.SetStroke(NewStroke(Black).WithWidth(2))
+//	surface.DrawRect(Rect{X: 50, Y: 50, Width: 100, Height: 100})
+func (s *Surface) DrawRect(rect Rect) error {
+	if rect.Width <= 0 {
+		return fmt.Errorf("rect width must be positive, got: %f", rect.Width)
+	}
+	if rect.Height <= 0 {
+		return fmt.Errorf("rect height must be positive, got: %f", rect.Height)
+	}
+
+	// TODO: Implement actual PDF drawing in a later phase
+	// For now, this validates the current state
+
+	if s.currentState.Fill != nil {
+		if err := s.currentState.Fill.Validate(); err != nil {
+			return fmt.Errorf("invalid fill: %w", err)
+		}
+	}
+
+	if s.currentState.Stroke != nil {
+		if err := s.currentState.Stroke.Validate(); err != nil {
+			return fmt.Errorf("invalid stroke: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// CurrentFill returns the current fill configuration.
+func (s *Surface) CurrentFill() *Fill {
+	return s.currentState.Fill
+}
+
+// CurrentStroke returns the current stroke configuration.
+func (s *Surface) CurrentStroke() *Stroke {
+	return s.currentState.Stroke
+}
+
 // Errors
 var (
 	// ErrPopWithoutPush is returned when Pop is called without a matching Push.
 	ErrPopWithoutPush = errors.New("Pop() called without matching Push*()")
+
+	// ErrInvalidRect is returned when a rectangle has invalid dimensions.
+	ErrInvalidRect = errors.New("invalid rectangle dimensions")
 )
