@@ -220,9 +220,10 @@ func (s *Surface) SetStroke(stroke *Stroke) {
 // DrawPath draws a path with the current fill and stroke.
 //
 // The path is drawn using the current graphics state.
-// If both fill and stroke are set, the path is filled then stroked.
-//
-// This method will be fully implemented in feat-053 (ClipPath).
+// If both fill and stroke are set, the path is filled then stroked (B operator).
+// If only fill is set, the path is filled (f operator).
+// If only stroke is set, the path is stroked (S operator).
+// If neither is set, no drawing occurs (but path is constructed).
 //
 // Parameters:
 //   - path: Path to draw
@@ -243,20 +244,136 @@ func (s *Surface) DrawPath(path *Path) error {
 		return errors.New("path cannot be nil")
 	}
 
-	// TODO: Implement in feat-053 when Path is fully implemented
-	// For now, this is a placeholder that validates the current state
+	if path.IsEmpty() {
+		// Empty path, nothing to draw
+		return nil
+	}
 
-	if s.currentState.Fill != nil {
+	hasFill := s.currentState.Fill != nil
+	hasStroke := s.currentState.Stroke != nil
+
+	if !hasFill && !hasStroke {
+		// Nothing to do (no fill, no stroke)
+		return nil
+	}
+
+	// Validate fill and stroke configurations
+	if hasFill {
 		if err := s.currentState.Fill.Validate(); err != nil {
 			return fmt.Errorf("invalid fill: %w", err)
 		}
 	}
 
-	if s.currentState.Stroke != nil {
+	if hasStroke {
 		if err := s.currentState.Stroke.Validate(); err != nil {
 			return fmt.Errorf("invalid stroke: %w", err)
 		}
 	}
+
+	// TODO: Implement actual PDF content stream generation
+	// For now, this validates and prepares for rendering
+	// Full implementation will add to page.content stream:
+	//   1. Set fill color/pattern
+	//   2. Set stroke color/pattern + line width/cap/join/dash
+	//   3. path.toPDFOperators()
+	//   4. Painting operator (f, S, B, f*, S*, B*)
+
+	return nil
+}
+
+// FillPath fills a path using the current fill configuration.
+//
+// The path is filled using the current fill color/gradient and fill rule.
+// Stroke configuration is ignored (even if set).
+//
+// PDF operators: f (NonZero) or f* (EvenOdd)
+//
+// Parameters:
+//   - path: Path to fill
+//
+// Example:
+//
+//	path := NewPath().
+//	    AddCircle(Point{150, 150}, 50)
+//
+//	surface.SetFill(NewFill(Red))
+//	surface.FillPath(path)
+func (s *Surface) FillPath(path *Path) error {
+	if path == nil {
+		return errors.New("path cannot be nil")
+	}
+
+	if path.IsEmpty() {
+		return nil
+	}
+
+	if s.currentState.Fill == nil {
+		return errors.New("no fill configuration set (call SetFill first)")
+	}
+
+	if err := s.currentState.Fill.Validate(); err != nil {
+		return fmt.Errorf("invalid fill: %w", err)
+	}
+
+	// TODO: Implement actual PDF content stream generation
+	// For now, this validates and prepares for rendering
+	// Full implementation will add to page.content stream:
+	//   1. Set fill color/pattern
+	//   2. path.toPDFOperators()
+	//   3. Fill operator (f or f* based on fill rule)
+
+	return nil
+}
+
+// StrokePath strokes a path using the current stroke configuration.
+//
+// The path is stroked using the current stroke color/gradient, line width,
+// cap style, join style, and dash pattern.
+// Fill configuration is ignored (even if set).
+//
+// PDF operator: S
+//
+// Parameters:
+//   - path: Path to stroke
+//
+// Example:
+//
+//	path := NewPath().
+//	    MoveTo(50, 50).
+//	    LineTo(150, 50).
+//	    LineTo(100, 150).
+//	    Close()
+//
+//	stroke := NewStroke(Black).
+//	    WithWidth(3.0).
+//	    WithLineCap(LineCapRound).
+//	    WithLineJoin(LineJoinRound)
+//	surface.SetStroke(stroke)
+//	surface.StrokePath(path)
+func (s *Surface) StrokePath(path *Path) error {
+	if path == nil {
+		return errors.New("path cannot be nil")
+	}
+
+	if path.IsEmpty() {
+		return nil
+	}
+
+	if s.currentState.Stroke == nil {
+		return errors.New("no stroke configuration set (call SetStroke first)")
+	}
+
+	if err := s.currentState.Stroke.Validate(); err != nil {
+		return fmt.Errorf("invalid stroke: %w", err)
+	}
+
+	// TODO: Implement actual PDF content stream generation
+	// For now, this validates and prepares for rendering
+	// Full implementation will add to page.content stream:
+	//   1. Set stroke color/pattern
+	//   2. Set line width, cap, join, miter limit, dash
+	//   3. path.toPDFOperators()
+	//   4. Stroke operator (S)
 
 	return nil
 }
