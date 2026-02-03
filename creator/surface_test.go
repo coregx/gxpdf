@@ -233,15 +233,22 @@ func TestPopWithoutPushPanics(t *testing.T) {
 func TestPushClipPath(t *testing.T) {
 	surface := NewSurface(&Page{})
 
-	path := NewPath()
+	// Create a non-empty path
+	path := NewPath().AddRect(Rect{X: 10, Y: 10, Width: 100, Height: 100})
 
 	err := surface.PushClipPath(path, FillRuleNonZero)
 	if err != nil {
 		t.Fatalf("PushClipPath failed: %v", err)
 	}
 
-	if surface.CurrentClipPath() != path {
-		t.Error("CurrentClipPath not set correctly")
+	clipPath := surface.CurrentClipPath()
+	if clipPath == nil {
+		t.Fatal("CurrentClipPath returned nil")
+	}
+
+	// Verify clip rule is set
+	if surface.currentState.ClipRule != FillRuleNonZero {
+		t.Errorf("ClipRule = %d, want %d", surface.currentState.ClipRule, FillRuleNonZero)
 	}
 
 	surface.Pop()
@@ -257,6 +264,218 @@ func TestPushClipPathNil(t *testing.T) {
 	err := surface.PushClipPath(nil, FillRuleNonZero)
 	if err == nil {
 		t.Error("PushClipPath(nil) should return error")
+	}
+}
+
+func TestPushClipPathEmpty(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	emptyPath := NewPath()
+	err := surface.PushClipPath(emptyPath, FillRuleNonZero)
+	if err == nil {
+		t.Error("PushClipPath() with empty path should return error")
+	}
+}
+
+func TestPushClipPathEvenOdd(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	path := NewPath().AddCircle(Point{100, 100}, 50)
+	err := surface.PushClipPath(path, FillRuleEvenOdd)
+	if err != nil {
+		t.Fatalf("PushClipPath with EvenOdd failed: %v", err)
+	}
+
+	if surface.currentState.ClipRule != FillRuleEvenOdd {
+		t.Errorf("ClipRule = %d, want %d", surface.currentState.ClipRule, FillRuleEvenOdd)
+	}
+}
+
+func TestPushClipPathNested(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	// First clip
+	circle1 := NewPath().AddCircle(Point{100, 100}, 80)
+	err := surface.PushClipPath(circle1, FillRuleNonZero)
+	if err != nil {
+		t.Fatalf("First PushClipPath failed: %v", err)
+	}
+
+	// Second clip (should intersect with first)
+	circle2 := NewPath().AddCircle(Point{120, 100}, 60)
+	err = surface.PushClipPath(circle2, FillRuleNonZero)
+	if err != nil {
+		t.Fatalf("Second PushClipPath failed: %v", err)
+	}
+
+	if surface.StackDepth() != 2 {
+		t.Errorf("StackDepth = %d, want 2", surface.StackDepth())
+	}
+
+	// Pop both
+	surface.Pop()
+	surface.Pop()
+
+	if surface.StackDepth() != 0 {
+		t.Errorf("StackDepth = %d, want 0", surface.StackDepth())
+	}
+	if surface.CurrentClipPath() != nil {
+		t.Error("ClipPath should be nil after popping all")
+	}
+}
+
+func TestPushClipRect(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	rect := Rect{X: 20, Y: 20, Width: 100, Height: 80}
+	err := surface.PushClipRect(rect)
+	if err != nil {
+		t.Fatalf("PushClipRect failed: %v", err)
+	}
+
+	clipPath := surface.CurrentClipPath()
+	if clipPath == nil {
+		t.Fatal("CurrentClipPath returned nil after PushClipRect")
+	}
+
+	// Verify bounds match
+	bounds := clipPath.Bounds()
+	if bounds.X != rect.X || bounds.Y != rect.Y {
+		t.Errorf("Clip bounds position = (%f,%f), want (%f,%f)",
+			bounds.X, bounds.Y, rect.X, rect.Y)
+	}
+	if bounds.Width != rect.Width || bounds.Height != rect.Height {
+		t.Errorf("Clip bounds size = (%f,%f), want (%f,%f)",
+			bounds.Width, bounds.Height, rect.Width, rect.Height)
+	}
+}
+
+func TestPushClipRectInvalid(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	tests := []struct {
+		name string
+		rect Rect
+	}{
+		{"Zero width", Rect{X: 0, Y: 0, Width: 0, Height: 100}},
+		{"Zero height", Rect{X: 0, Y: 0, Width: 100, Height: 0}},
+		{"Negative width", Rect{X: 0, Y: 0, Width: -10, Height: 100}},
+		{"Negative height", Rect{X: 0, Y: 0, Width: 100, Height: -10}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := surface.PushClipRect(tt.rect)
+			if err == nil {
+				t.Error("PushClipRect should return error for invalid rect")
+			}
+		})
+	}
+}
+
+func TestPushClipCircle(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	center := Point{X: 150, Y: 150}
+	radius := 50.0
+
+	err := surface.PushClipCircle(center, radius)
+	if err != nil {
+		t.Fatalf("PushClipCircle failed: %v", err)
+	}
+
+	clipPath := surface.CurrentClipPath()
+	if clipPath == nil {
+		t.Fatal("CurrentClipPath returned nil after PushClipCircle")
+	}
+
+	// Verify bounds roughly match circle (Bézier approximation)
+	bounds := clipPath.Bounds()
+	expectedX := center.X - radius
+	expectedY := center.Y - radius
+	expectedSize := radius * 2
+
+	tolerance := 0.1
+	if abs(bounds.X-expectedX) > tolerance || abs(bounds.Y-expectedY) > tolerance {
+		t.Errorf("Clip bounds position = (%f,%f), want (%f,%f)",
+			bounds.X, bounds.Y, expectedX, expectedY)
+	}
+	if abs(bounds.Width-expectedSize) > tolerance || abs(bounds.Height-expectedSize) > tolerance {
+		t.Errorf("Clip bounds size = (%f,%f), want (%f,%f)",
+			bounds.Width, bounds.Height, expectedSize, expectedSize)
+	}
+}
+
+func TestPushClipCircleInvalid(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	tests := []struct {
+		name   string
+		center Point
+		radius float64
+	}{
+		{"Zero radius", Point{100, 100}, 0},
+		{"Negative radius", Point{100, 100}, -10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := surface.PushClipCircle(tt.center, tt.radius)
+			if err == nil {
+				t.Error("PushClipCircle should return error for invalid radius")
+			}
+		})
+	}
+}
+
+func TestPushClipEllipse(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	rect := Rect{X: 50, Y: 50, Width: 200, Height: 100}
+	err := surface.PushClipEllipse(rect)
+	if err != nil {
+		t.Fatalf("PushClipEllipse failed: %v", err)
+	}
+
+	clipPath := surface.CurrentClipPath()
+	if clipPath == nil {
+		t.Fatal("CurrentClipPath returned nil after PushClipEllipse")
+	}
+
+	// Verify bounds roughly match
+	bounds := clipPath.Bounds()
+	tolerance := 0.1
+
+	if abs(bounds.X-rect.X) > tolerance || abs(bounds.Y-rect.Y) > tolerance {
+		t.Errorf("Clip bounds position = (%f,%f), want (%f,%f)",
+			bounds.X, bounds.Y, rect.X, rect.Y)
+	}
+	if abs(bounds.Width-rect.Width) > tolerance || abs(bounds.Height-rect.Height) > tolerance {
+		t.Errorf("Clip bounds size = (%f,%f), want (%f,%f)",
+			bounds.Width, bounds.Height, rect.Width, rect.Height)
+	}
+}
+
+func TestPushClipEllipseInvalid(t *testing.T) {
+	surface := NewSurface(&Page{})
+
+	tests := []struct {
+		name string
+		rect Rect
+	}{
+		{"Zero width", Rect{X: 0, Y: 0, Width: 0, Height: 100}},
+		{"Zero height", Rect{X: 0, Y: 0, Width: 100, Height: 0}},
+		{"Negative width", Rect{X: 0, Y: 0, Width: -10, Height: 100}},
+		{"Negative height", Rect{X: 0, Y: 0, Width: 100, Height: -10}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := surface.PushClipEllipse(tt.rect)
+			if err == nil {
+				t.Error("PushClipEllipse should return error for invalid rect")
+			}
+		})
 	}
 }
 
@@ -396,7 +615,9 @@ func TestSurfaceSetStroke(t *testing.T) {
 
 func TestSurfaceDrawPath(t *testing.T) {
 	surface := NewSurface(&Page{})
-	path := NewPath()
+
+	// Create a non-empty path for testing
+	path := NewPath().AddRect(Rect{X: 0, Y: 0, Width: 100, Height: 100})
 
 	// Test with nil path
 	err := surface.DrawPath(nil)

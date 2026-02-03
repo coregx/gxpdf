@@ -109,9 +109,17 @@ func (s *Surface) PushBlendMode(mode BlendMode) {
 // PushClipPath saves the current state and applies a clipping path.
 //
 // All subsequent drawing is clipped to the path.
+// The fill rule determines which areas are "inside" the path:
+//   - FillRuleNonZero: Non-zero winding rule (default)
+//   - FillRuleEvenOdd: Even-odd rule
+//
+// Clipping paths are intersected with any existing clip path.
 // Call Pop() to restore the previous clipping state.
 //
-// This method will be implemented in feat-053 (ClipPath).
+// PDF operators:
+//   - W (clip with NonZero rule)
+//   - W* (clip with EvenOdd rule)
+//   - n (end path without painting)
 //
 // Example:
 //
@@ -124,19 +132,26 @@ func (s *Surface) PushBlendMode(mode BlendMode) {
 //	surface.PushClipPath(path, FillRuleNonZero)
 //	surface.DrawRect(rect)  // Clipped to triangle
 //	surface.Pop()
+//
+// Reference: PDF 1.7 Specification, Section 8.5.4 (Clipping Path).
 func (s *Surface) PushClipPath(path *Path, rule FillRule) error {
 	if path == nil {
 		return errors.New("clip path cannot be nil")
 	}
 
+	if path.IsEmpty() {
+		return errors.New("clip path cannot be empty")
+	}
+
 	// Save current state
 	s.stateStack = append(s.stateStack, s.currentState.Clone())
 
-	// Set clip path
-	s.currentState.ClipPath = path
+	// Clone the path to avoid mutations
+	clonedPath := path.Clone()
 
-	// Note: FillRule will be stored in Path when feat-053 is implemented
-	_ = rule
+	// Store clip path with its fill rule
+	s.currentState.ClipPath = clonedPath
+	s.currentState.ClipRule = rule
 
 	return nil
 }
@@ -433,6 +448,82 @@ func (s *Surface) CurrentFill() *Fill {
 // CurrentStroke returns the current stroke configuration.
 func (s *Surface) CurrentStroke() *Stroke {
 	return s.currentState.Stroke
+}
+
+// PushClipRect saves the current state and clips to a rectangle.
+//
+// This is a convenience method equivalent to:
+//
+//	path := NewPath().AddRect(rect)
+//	surface.PushClipPath(path, FillRuleNonZero)
+//
+// Parameters:
+//   - rect: Rectangle to clip to
+//
+// Example:
+//
+//	surface.PushClipRect(Rect{X: 10, Y: 10, Width: 100, Height: 100})
+//	surface.DrawRect(Rect{X: 0, Y: 0, Width: 200, Height: 200}) // Only 10-110 visible
+//	surface.Pop()
+func (s *Surface) PushClipRect(rect Rect) error {
+	if rect.Width <= 0 {
+		return fmt.Errorf("clip rect width must be positive, got: %f", rect.Width)
+	}
+	if rect.Height <= 0 {
+		return fmt.Errorf("clip rect height must be positive, got: %f", rect.Height)
+	}
+
+	path := NewPath().AddRect(rect)
+	return s.PushClipPath(path, FillRuleNonZero)
+}
+
+// PushClipCircle saves the current state and clips to a circle.
+//
+// This is a convenience method equivalent to:
+//
+//	path := NewPath().AddCircle(center, radius)
+//	surface.PushClipPath(path, FillRuleNonZero)
+//
+// Parameters:
+//   - center: Circle center point
+//   - radius: Circle radius (must be positive)
+//
+// Example:
+//
+//	surface.PushClipCircle(Point{150, 150}, 50)
+//	surface.DrawRect(Rect{X: 100, Y: 100, Width: 100, Height: 100}) // Circle-clipped
+//	surface.Pop()
+func (s *Surface) PushClipCircle(center Point, radius float64) error {
+	if radius <= 0 {
+		return fmt.Errorf("clip circle radius must be positive, got: %f", radius)
+	}
+
+	path := NewPath().AddCircle(center, radius)
+	return s.PushClipPath(path, FillRuleNonZero)
+}
+
+// PushClipEllipse saves the current state and clips to an ellipse.
+//
+// The ellipse is inscribed in the specified rectangle.
+//
+// Parameters:
+//   - rect: Bounding rectangle of the ellipse
+//
+// Example:
+//
+//	surface.PushClipEllipse(Rect{X: 50, Y: 50, Width: 200, Height: 100})
+//	surface.DrawRect(Rect{X: 0, Y: 0, Width: 300, Height: 200}) // Ellipse-clipped
+//	surface.Pop()
+func (s *Surface) PushClipEllipse(rect Rect) error {
+	if rect.Width <= 0 {
+		return fmt.Errorf("clip ellipse width must be positive, got: %f", rect.Width)
+	}
+	if rect.Height <= 0 {
+		return fmt.Errorf("clip ellipse height must be positive, got: %f", rect.Height)
+	}
+
+	path := NewPath().AddEllipse(rect)
+	return s.PushClipPath(path, FillRuleNonZero)
 }
 
 // Errors
