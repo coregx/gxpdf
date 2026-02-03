@@ -19,6 +19,10 @@ type GraphicsState struct {
 	// Drawing operations are clipped to this path.
 	ClipPath *Path
 
+	// ClipRule is the fill rule for the clipping path.
+	// Only used when ClipPath is not nil.
+	ClipRule FillRule
+
 	// Fill is the current fill configuration.
 	Fill *Fill
 
