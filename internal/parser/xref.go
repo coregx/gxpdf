@@ -167,6 +167,25 @@ func (t *XRefTable) GetTrailer() *Dictionary {
 	return t.Trailer
 }
 
+// MergeOlder merges entries from an older cross-reference table.
+//
+// Entries already present in this table (newer) are preserved.
+// Only entries missing from this table are added from the older table.
+// This implements the PDF incremental update semantics where newer
+// xref sections take precedence over older ones.
+//
+// Reference: PDF 1.7 specification, Section 7.5.6 (Incremental Updates).
+func (t *XRefTable) MergeOlder(older *XRefTable) {
+	if older == nil {
+		return
+	}
+	for objNum, entry := range older.Entries {
+		if _, exists := t.Entries[objNum]; !exists {
+			t.Entries[objNum] = entry
+		}
+	}
+}
+
 // String returns a string representation of the XRef table.
 func (t *XRefTable) String() string {
 	return fmt.Sprintf("XRefTable{entries: %d, trailer: %v}", t.Size(), t.Trailer)

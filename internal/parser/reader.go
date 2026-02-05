@@ -26,6 +26,11 @@ const (
 	nodeTypePages = "Pages"
 )
 
+// maxXRefChainDepth is the maximum number of /Prev links to follow
+// in the cross-reference chain. This prevents infinite loops in
+// malformed PDFs with deep or circular /Prev chains.
+const maxXRefChainDepth = 100
+
 // Reader reads and parses PDF documents, providing access to document structure.
 //
 // The Reader ties together all parser components (Lexer, Parser, XRef) to read
@@ -271,62 +276,124 @@ func (r *Reader) findStartXRef() (int64, error) {
 	return startxrefOffset, nil
 }
 
-// parseXRefAndTrailer parses the cross-reference table and trailer.
+// parseXRefAndTrailer parses the cross-reference chain following /Prev links.
 //
-// Seeks to the xref offset and parses:
-//  1. Cross-reference table (object locations) or xref stream (PDF 1.5+)
-//  2. Trailer dictionary (document metadata)
+// PDF files with incremental updates have multiple xref sections linked via
+// /Prev entries in their trailers. Hybrid-reference PDFs (e.g., MS Word)
+// also use /XRefStm to point to a supplementary xref stream.
 //
-// The trailer contains important references like /Root (catalog) and /Size.
+// This method follows the entire chain:
+//  1. Parse xref section at startxref offset (newest)
+//  2. If trailer has /XRefStm, parse supplementary xref stream and merge
+//  3. If trailer has /Prev, follow to older xref section and repeat
+//  4. Newer entries always take precedence over older ones
 //
-// Reference: PDF 1.7 specification, Section 7.5.4, 7.5.5, and 7.5.8.
+// The first (newest) trailer provides /Root, /Info, /ID etc.
+//
+// Reference: PDF 1.7 specification, Section 7.5.4, 7.5.5, 7.5.6, and 7.5.8.
 func (r *Reader) parseXRefAndTrailer(offset int64) error {
+	masterXRef := NewXRefTable()
+	var masterTrailer *Dictionary
+
+	visitedOffsets := make(map[int64]bool)
+	currentOffset := offset
+
+	for depth := 0; currentOffset >= 0; depth++ {
+		// Depth limit check
+		if depth >= maxXRefChainDepth {
+			return fmt.Errorf("xref chain exceeds maximum depth of %d (possible corruption)", maxXRefChainDepth)
+		}
+
+		// Cycle detection
+		if visitedOffsets[currentOffset] {
+			return fmt.Errorf("xref chain cycle detected at offset %d", currentOffset)
+		}
+		visitedOffsets[currentOffset] = true
+
+		// Parse single xref section
+		localXRef, localTrailer, err := r.parseSingleXRef(currentOffset)
+		if err != nil {
+			return fmt.Errorf("failed to parse xref at offset %d: %w", currentOffset, err)
+		}
+
+		// Merge: newer (already in masterXRef) wins over older (localXRef)
+		masterXRef.MergeOlder(localXRef)
+
+		// Save first trailer as master (newest trailer has /Root, /Info, etc.)
+		if masterTrailer == nil {
+			masterTrailer = localTrailer
+		}
+
+		// Handle /XRefStm (hybrid-reference PDF)
+		if xrefStmOffset := localTrailer.GetInteger("XRefStm"); xrefStmOffset > 0 {
+			if !visitedOffsets[xrefStmOffset] {
+				visitedOffsets[xrefStmOffset] = true
+				stmXRef, _, err := r.parseSingleXRef(xrefStmOffset)
+				if err != nil {
+					return fmt.Errorf("failed to parse /XRefStm at offset %d: %w", xrefStmOffset, err)
+				}
+				// XRefStm supplements the same revision — merge as older
+				masterXRef.MergeOlder(stmXRef)
+			}
+		}
+
+		// Follow /Prev to older xref section
+		if prevOffset := localTrailer.GetInteger("Prev"); prevOffset > 0 {
+			currentOffset = prevOffset
+		} else {
+			currentOffset = -1 // No more /Prev, end of chain
+		}
+	}
+
+	r.xrefTable = masterXRef
+	r.trailer = masterTrailer
+
+	return nil
+}
+
+// parseSingleXRef parses a single cross-reference section (table or stream)
+// at the given file offset and returns the xref table and trailer dictionary.
+func (r *Reader) parseSingleXRef(offset int64) (*XRefTable, *Dictionary, error) {
 	// Seek to XRef offset
 	if _, err := r.file.Seek(offset, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek to xref at offset %d: %w", offset, err)
+		return nil, nil, fmt.Errorf("failed to seek to xref at offset %d: %w", offset, err)
 	}
 
 	// Peek at first few bytes to determine xref type
 	peekBuf := make([]byte, 10)
 	n, err := r.file.Read(peekBuf)
 	if err != nil {
-		return fmt.Errorf("failed to peek at xref: %w", err)
+		return nil, nil, fmt.Errorf("failed to peek at xref: %w", err)
 	}
 
 	// Seek back to start of xref
 	if _, err := r.file.Seek(offset, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek back to xref: %w", err)
+		return nil, nil, fmt.Errorf("failed to seek back to xref: %w", err)
 	}
 
 	// Check if it's a traditional xref table or xref stream
 	isXRefStream := false
 	if n >= 4 {
-		// Check if it starts with a digit (object number for xref stream)
 		if peekBuf[0] >= '0' && peekBuf[0] <= '9' {
 			isXRefStream = true
 		}
 	}
 
 	if isXRefStream {
-		// Parse xref stream with file access for stream data
 		xrefTable, err := r.parseXRefStream(offset)
 		if err != nil {
-			return fmt.Errorf("failed to parse xref stream: %w", err)
+			return nil, nil, fmt.Errorf("failed to parse xref stream: %w", err)
 		}
-		r.xrefTable = xrefTable
-		r.trailer = xrefTable.Trailer
-	} else {
-		// Parse traditional xref table
-		parser := NewParser(r.file)
-		xrefTable, err := parser.ParseXRef()
-		if err != nil {
-			return fmt.Errorf("failed to parse xref table: %w", err)
-		}
-		r.xrefTable = xrefTable
-		r.trailer = xrefTable.Trailer
+		return xrefTable, xrefTable.Trailer, nil
 	}
 
-	return nil
+	// Parse traditional xref table
+	parser := NewParser(r.file)
+	xrefTable, err := parser.ParseXRef()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse xref table: %w", err)
+	}
+	return xrefTable, xrefTable.Trailer, nil
 }
 
 // parseXRefStream parses a PDF 1.5+ cross-reference stream.

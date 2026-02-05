@@ -207,6 +207,116 @@ func TestXRefTable_String(t *testing.T) {
 }
 
 // ============================================================================
+// MergeOlder Tests
+// ============================================================================
+
+func TestXRefTable_MergeOlder_NewerWins(t *testing.T) {
+	newer := NewXRefTable()
+	newer.AddEntry(NewXRefEntry(1, XRefEntryInUse, 100, 0))
+	newer.AddEntry(NewXRefEntry(2, XRefEntryInUse, 200, 0))
+
+	older := NewXRefTable()
+	older.AddEntry(NewXRefEntry(1, XRefEntryInUse, 999, 0)) // conflict: should be ignored
+	older.AddEntry(NewXRefEntry(2, XRefEntryInUse, 888, 0)) // conflict: should be ignored
+
+	newer.MergeOlder(older)
+
+	assert.Equal(t, 2, newer.Size())
+
+	entry1, _ := newer.GetEntry(1)
+	assert.Equal(t, int64(100), entry1.Offset, "newer entry should be preserved")
+
+	entry2, _ := newer.GetEntry(2)
+	assert.Equal(t, int64(200), entry2.Offset, "newer entry should be preserved")
+}
+
+func TestXRefTable_MergeOlder_GapFill(t *testing.T) {
+	newer := NewXRefTable()
+	newer.AddEntry(NewXRefEntry(1, XRefEntryInUse, 100, 0))
+
+	older := NewXRefTable()
+	older.AddEntry(NewXRefEntry(2, XRefEntryInUse, 200, 0))
+	older.AddEntry(NewXRefEntry(3, XRefEntryInUse, 300, 0))
+
+	newer.MergeOlder(older)
+
+	assert.Equal(t, 3, newer.Size())
+	assert.True(t, newer.HasObject(1))
+	assert.True(t, newer.HasObject(2))
+	assert.True(t, newer.HasObject(3))
+
+	entry2, _ := newer.GetEntry(2)
+	assert.Equal(t, int64(200), entry2.Offset)
+}
+
+func TestXRefTable_MergeOlder_NilSafety(t *testing.T) {
+	table := NewXRefTable()
+	table.AddEntry(NewXRefEntry(1, XRefEntryInUse, 100, 0))
+
+	// Should not panic
+	table.MergeOlder(nil)
+	assert.Equal(t, 1, table.Size())
+}
+
+func TestXRefTable_MergeOlder_EmptyTables(t *testing.T) {
+	t.Run("merge empty into empty", func(t *testing.T) {
+		newer := NewXRefTable()
+		older := NewXRefTable()
+		newer.MergeOlder(older)
+		assert.Equal(t, 0, newer.Size())
+	})
+
+	t.Run("merge non-empty into empty", func(t *testing.T) {
+		newer := NewXRefTable()
+		older := NewXRefTable()
+		older.AddEntry(NewXRefEntry(1, XRefEntryInUse, 100, 0))
+		newer.MergeOlder(older)
+		assert.Equal(t, 1, newer.Size())
+	})
+
+	t.Run("merge empty into non-empty", func(t *testing.T) {
+		newer := NewXRefTable()
+		newer.AddEntry(NewXRefEntry(1, XRefEntryInUse, 100, 0))
+		older := NewXRefTable()
+		newer.MergeOlder(older)
+		assert.Equal(t, 1, newer.Size())
+	})
+}
+
+func TestXRefTable_MergeOlder_FreeVsInUse(t *testing.T) {
+	// Newer says obj 1 is free; older says in-use. Newer wins.
+	newer := NewXRefTable()
+	newer.AddEntry(NewXRefEntry(1, XRefEntryFree, 0, 1))
+
+	older := NewXRefTable()
+	older.AddEntry(NewXRefEntry(1, XRefEntryInUse, 100, 0))
+
+	newer.MergeOlder(older)
+
+	entry, _ := newer.GetEntry(1)
+	assert.Equal(t, XRefEntryFree, entry.Type, "newer free entry should win over older in-use")
+}
+
+func TestXRefTable_MergeOlder_CompressedEntries(t *testing.T) {
+	newer := NewXRefTable()
+	newer.AddEntry(NewXRefEntry(1, XRefEntryCompressed, 42, 0)) // obj stream 42, index 0
+
+	older := NewXRefTable()
+	older.AddEntry(NewXRefEntry(1, XRefEntryInUse, 500, 0)) // traditional entry
+	older.AddEntry(NewXRefEntry(5, XRefEntryCompressed, 42, 2))
+
+	newer.MergeOlder(older)
+
+	assert.Equal(t, 2, newer.Size())
+
+	entry1, _ := newer.GetEntry(1)
+	assert.Equal(t, XRefEntryCompressed, entry1.Type, "newer compressed entry should be preserved")
+
+	entry5, _ := newer.GetEntry(5)
+	assert.Equal(t, XRefEntryCompressed, entry5.Type, "older compressed entry should be added")
+}
+
+// ============================================================================
 // ParseXRef Tests
 // ============================================================================
 

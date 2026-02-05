@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -712,6 +713,208 @@ func TestReader_EmptyFile(t *testing.T) {
 	require.Error(t, err)
 	// Should fail at header reading or startxref finding
 }
+
+// ============================================================================
+// /Prev Chain and /XRefStm Integration Tests (Issue #19)
+// ============================================================================
+
+// buildPrevChainPDF creates a synthetic PDF with two xref sections linked by /Prev.
+// Section 1 (older): objects 0-4 (catalog, pages, page, content stream)
+// Section 2 (newer): object 5 (new info dict) with /Prev pointing to section 1
+func buildPrevChainPDF() []byte {
+	// Section 1: Traditional xref at a known offset
+	body := "%PDF-1.7\n" +
+		// Object 1: Catalog
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		// Object 2: Pages
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		// Object 3: Page
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << >> >> >>\nendobj\n" +
+		// Object 4: Content stream
+		"4 0 obj\n<< /Length 44 >>\nstream\nBT\n/F1 12 Tf\n100 700 Td\n(Hello World) Tj\nET\nendstream\nendobj\n"
+
+	xref1Offset := len(body)
+
+	xref1 := fmt.Sprintf("xref\n0 5\n"+
+		"0000000000 65535 f \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n",
+		9,   // obj 1 offset
+		58,  // obj 2 offset
+		115, // obj 3 offset
+		231, // obj 4 offset
+	)
+
+	trailer1 := fmt.Sprintf("trailer\n<< /Size 6 /Root 1 0 R >>\n")
+
+	// Now add object 5 (Info dict) in the "update"
+	afterXref1 := body + xref1 + trailer1
+
+	obj5Offset := len(afterXref1)
+	obj5 := "5 0 obj\n<< /Title (Test Document) /Author (Test Author) >>\nendobj\n"
+	afterObj5 := afterXref1 + obj5
+
+	xref2Offset := len(afterObj5)
+
+	xref2 := fmt.Sprintf("xref\n5 1\n"+
+		"%010d 00000 n \n", obj5Offset)
+
+	trailer2 := fmt.Sprintf("trailer\n<< /Size 6 /Root 1 0 R /Info 5 0 R /Prev %d >>\n"+
+		"startxref\n%d\n%%%%EOF\n",
+		xref1Offset, xref2Offset)
+
+	return []byte(afterObj5 + xref2 + trailer2)
+}
+
+func TestReader_Open_PrevChain(t *testing.T) {
+	data := buildPrevChainPDF()
+
+	tmpFile, err := os.CreateTemp("", "prevchain-*.pdf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	reader := NewReader(tmpFile.Name())
+	err = reader.Open()
+	require.NoError(t, err)
+	defer reader.Close()
+
+	// Must see objects from both sections
+	assert.Equal(t, "1.7", reader.Version())
+
+	count, err := reader.GetPageCount()
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Object 1 (catalog from old section) must be accessible
+	obj1, err := reader.GetObject(1)
+	require.NoError(t, err)
+	dict1, ok := obj1.(*Dictionary)
+	require.True(t, ok)
+	assert.Equal(t, "Catalog", dict1.GetName("Type").Value())
+
+	// Object 5 (from new section) must be accessible
+	obj5, err := reader.GetObject(5)
+	require.NoError(t, err)
+	dict5, ok := obj5.(*Dictionary)
+	require.True(t, ok)
+	assert.Equal(t, "Test Document", dict5.GetString("Title"))
+
+	// Newest trailer should have /Info
+	trailer := reader.Trailer()
+	require.NotNil(t, trailer)
+	assert.NotNil(t, trailer.Get("Info"), "newest trailer should have /Info")
+}
+
+func TestReader_Open_PrevChainCycleDetection(t *testing.T) {
+	// Build a PDF where /Prev points back to itself
+	body := "%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+
+	xrefOffset := len(body)
+
+	xref := fmt.Sprintf("xref\n0 4\n"+
+		"0000000000 65535 f \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n",
+		9, 58, 115)
+
+	// /Prev points to itself — cycle!
+	trailer := fmt.Sprintf("trailer\n<< /Size 4 /Root 1 0 R /Prev %d >>\n"+
+		"startxref\n%d\n%%%%EOF\n",
+		xrefOffset, xrefOffset)
+
+	data := []byte(body + xref + trailer)
+
+	tmpFile, err := os.CreateTemp("", "cycle-*.pdf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	reader := NewReader(tmpFile.Name())
+	err = reader.Open()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cycle detected")
+}
+
+func TestReader_Open_SimplePDF_StillWorks(t *testing.T) {
+	// Backward compatibility: existing test PDFs must still open correctly
+	tests := []struct {
+		name      string
+		file      string
+		version   string
+		pageCount int
+	}{
+		{"Minimal PDF", minimalPDF, "1.7", 1},
+		{"Multipage PDF", multipagePDF, "1.4", 3},
+		{"Nested Pages PDF", nestedPagesPDF, "1.5", 4},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pdfPath := getTestFilePath(tt.file)
+			reader := NewReader(pdfPath)
+
+			err := reader.Open()
+			require.NoError(t, err)
+			defer reader.Close()
+
+			assert.Equal(t, tt.version, reader.Version())
+
+			count, err := reader.GetPageCount()
+			require.NoError(t, err)
+			assert.Equal(t, tt.pageCount, count)
+		})
+	}
+}
+
+const msWordHybridPDF = "msword_hybrid.pdf"
+
+func TestReader_Open_MSWordPDF(t *testing.T) {
+	pdfPath := getTestFilePath(msWordHybridPDF)
+
+	// Skip if test file doesn't exist
+	if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
+		t.Skip("MS Word hybrid test PDF not available")
+	}
+
+	reader := NewReader(pdfPath)
+	err := reader.Open()
+	require.NoError(t, err, "should open MS Word hybrid-reference PDF without error")
+	defer reader.Close()
+
+	// Verify basic structure
+	assert.NotEmpty(t, reader.Version())
+
+	// Must be able to get page count
+	count, err := reader.GetPageCount()
+	require.NoError(t, err)
+	assert.Greater(t, count, 0, "should have at least 1 page")
+
+	// Object 1 must be accessible (this was the failing case in issue #19)
+	obj1, err := reader.GetObject(1)
+	require.NoError(t, err, "object 1 must be found in merged xref table")
+	require.NotNil(t, obj1)
+
+	// Verify xref has entries from the /Prev chain
+	xref := reader.XRefTable()
+	assert.Greater(t, xref.Size(), 5, "xref should have entries from multiple sections")
+}
+
+// ============================================================================
+// Benchmark Tests
+// ============================================================================
 
 // BenchmarkReader_Open benchmarks opening a PDF.
 func BenchmarkReader_Open(b *testing.B) {
