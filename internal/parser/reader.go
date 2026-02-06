@@ -240,8 +240,12 @@ func (r *Reader) findStartXRef() (int64, error) {
 	}
 
 	// Parse the offset after "startxref"
-	// Format: startxref\n123\n%%EOF
+	// Format: startxref\n123\n%%EOF (or with \r line endings)
 	afterKeyword := content[idx+9:] // Skip "startxref"
+
+	// Normalize line endings: replace \r\n and \r with \n
+	afterKeyword = strings.ReplaceAll(afterKeyword, "\r\n", "\n")
+	afterKeyword = strings.ReplaceAll(afterKeyword, "\r", "\n")
 
 	// Find the number (skip whitespace)
 	lines := strings.Split(afterKeyword, "\n")
