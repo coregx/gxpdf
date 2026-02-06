@@ -195,7 +195,12 @@ func (r *Reader) readHeader() (string, error) {
 //	%%EOF
 //
 // According to the PDF spec, this should be within the last 1024 bytes.
-// However, we search the last 2048 bytes to be more tolerant of malformed PDFs.
+// However, some PDFs have trailing garbage (e.g., HTML appended after %%EOF),
+// so we use a progressive search strategy:
+//  1. First try last 2KB (fast path for normal PDFs)
+//  2. If not found, try last 64KB
+//  3. If not found, try last 1MB
+//  4. If still not found, search the entire file
 //
 // Returns the byte offset of the xref table.
 //
@@ -212,23 +217,50 @@ func (r *Reader) findStartXRef() (int64, error) {
 		return 0, fmt.Errorf("file is empty")
 	}
 
-	// Search last 2048 bytes (spec says 1024, but be tolerant)
-	searchSize := int64(2048)
-	if size < searchSize {
-		searchSize = size
+	// Progressive search sizes: 2KB, 64KB, 1MB, then entire file
+	searchSizes := []int64{2048, 65536, 1048576, size}
+
+	for _, searchSize := range searchSizes {
+		if searchSize > size {
+			searchSize = size
+		}
+
+		offset, found, err := r.searchForStartXRef(size, searchSize)
+		if err != nil {
+			return 0, err
+		}
+		if found {
+			return offset, nil
+		}
+
+		// If we've already searched the whole file, stop
+		if searchSize >= size {
+			break
+		}
 	}
 
+	return 0, fmt.Errorf("startxref keyword not found in file")
+}
+
+// searchForStartXRef searches for startxref in the last searchSize bytes.
+// Returns (offset, found, error).
+func (r *Reader) searchForStartXRef(fileSize, searchSize int64) (int64, bool, error) {
 	// Seek to search region
-	offset := size - searchSize
-	if _, err := r.file.Seek(offset, io.SeekStart); err != nil {
-		return 0, fmt.Errorf("failed to seek to end region: %w", err)
+	seekPos := fileSize - searchSize
+	if seekPos < 0 {
+		seekPos = 0
+		searchSize = fileSize
+	}
+
+	if _, err := r.file.Seek(seekPos, io.SeekStart); err != nil {
+		return 0, false, fmt.Errorf("failed to seek to search region: %w", err)
 	}
 
 	// Read search region
 	buf := make([]byte, searchSize)
 	n, err := io.ReadFull(r.file, buf)
 	if err != nil && err != io.ErrUnexpectedEOF {
-		return 0, fmt.Errorf("failed to read end region: %w", err)
+		return 0, false, fmt.Errorf("failed to read search region: %w", err)
 	}
 	buf = buf[:n]
 
@@ -236,7 +268,7 @@ func (r *Reader) findStartXRef() (int64, error) {
 	content := string(buf)
 	idx := strings.LastIndex(content, "startxref")
 	if idx == -1 {
-		return 0, fmt.Errorf("startxref keyword not found in last %d bytes", searchSize)
+		return 0, false, nil // Not found in this region
 	}
 
 	// Parse the offset after "startxref"
@@ -246,7 +278,7 @@ func (r *Reader) findStartXRef() (int64, error) {
 	// Find the number (skip whitespace)
 	lines := strings.Split(afterKeyword, "\n")
 	if len(lines) < 2 {
-		return 0, fmt.Errorf("invalid startxref format: expected offset after keyword")
+		return 0, false, fmt.Errorf("invalid startxref format: expected offset after keyword")
 	}
 
 	// The offset should be in the next non-empty line
@@ -260,20 +292,20 @@ func (r *Reader) findStartXRef() (int64, error) {
 	}
 
 	if offsetStr == "" {
-		return 0, fmt.Errorf("startxref offset not found")
+		return 0, false, fmt.Errorf("startxref offset not found")
 	}
 
 	// Parse offset
 	startxrefOffset, err := strconv.ParseInt(offsetStr, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid startxref offset %q: %w", offsetStr, err)
+		return 0, false, fmt.Errorf("invalid startxref offset %q: %w", offsetStr, err)
 	}
 
-	if startxrefOffset < 0 || startxrefOffset >= size {
-		return 0, fmt.Errorf("startxref offset %d out of bounds (file size: %d)", startxrefOffset, size)
+	if startxrefOffset < 0 || startxrefOffset >= fileSize {
+		return 0, false, fmt.Errorf("startxref offset %d out of bounds (file size: %d)", startxrefOffset, fileSize)
 	}
 
-	return startxrefOffset, nil
+	return startxrefOffset, true, nil
 }
 
 // parseXRefAndTrailer parses the cross-reference chain following /Prev links.
