@@ -535,7 +535,31 @@ func (p *Parser) ParseXRefStreamWithFileAccess(file io.ReadSeeker, xrefOffset in
 
 		if filterName == filterFlateDecode {
 			decoder := &flateDecoder{}
-			decodedData, err = decoder.Decode(streamData)
+
+			// Check for predictor in DecodeParms
+			predictor := 1 // default: no predictor
+			columns := 1   // default columns
+			decodeParmsObj := dict.Get("DecodeParms")
+			if decodeParmsObj != nil {
+				if parmsDict, ok := decodeParmsObj.(*Dictionary); ok {
+					if predObj := parmsDict.Get("Predictor"); predObj != nil {
+						if predInt, ok := predObj.(*Integer); ok {
+							predictor = int(predInt.Value())
+						}
+					}
+					if colObj := parmsDict.Get("Columns"); colObj != nil {
+						if colInt, ok := colObj.(*Integer); ok {
+							columns = int(colInt.Value())
+						}
+					}
+				}
+			}
+
+			if predictor > 1 {
+				decodedData, err = decoder.DecodeWithPredictor(streamData, predictor, columns)
+			} else {
+				decodedData, err = decoder.Decode(streamData)
+			}
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode %s stream: %w", filterFlateDecode, err)
 			}
@@ -790,6 +814,134 @@ func (d *flateDecoder) Decode(data []byte) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+// DecodeWithPredictor decompresses data and applies PNG predictor filter.
+// predictor: 1=none, 10-15=PNG predictors
+// columns: number of columns (bytes per row excluding filter byte)
+func (d *flateDecoder) DecodeWithPredictor(data []byte, predictor, columns int) ([]byte, error) {
+	// First, decompress the data
+	decompressed, err := d.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+
+	// If no predictor or predictor=1 (none), return as-is
+	if predictor <= 1 {
+		return decompressed, nil
+	}
+
+	// PNG predictors (10-15)
+	if predictor >= 10 && predictor <= 15 {
+		return applyPNGPredictor(decompressed, columns)
+	}
+
+	// TIFF predictor (2) - not implemented yet
+	if predictor == 2 {
+		return nil, fmt.Errorf("TIFF predictor not implemented")
+	}
+
+	return nil, fmt.Errorf("unsupported predictor: %d", predictor)
+}
+
+// applyPNGPredictor reverses PNG prediction filters.
+// PNG encoded data has a filter byte at the start of each row.
+// Filter types: 0=None, 1=Sub, 2=Up, 3=Average, 4=Paeth
+func applyPNGPredictor(data []byte, columns int) ([]byte, error) {
+	rowSize := columns + 1 // +1 for filter byte
+	if len(data)%rowSize != 0 {
+		return nil, fmt.Errorf("PNG predictor: data length %d not divisible by row size %d", len(data), rowSize)
+	}
+
+	numRows := len(data) / rowSize
+	result := make([]byte, 0, numRows*columns)
+	prevRow := make([]byte, columns)
+
+	for row := 0; row < numRows; row++ {
+		rowStart := row * rowSize
+		filterByte := data[rowStart]
+		rowData := data[rowStart+1 : rowStart+rowSize]
+		decodedRow := make([]byte, columns)
+
+		switch filterByte {
+		case 0: // None
+			copy(decodedRow, rowData)
+
+		case 1: // Sub: each byte depends on the byte to its left
+			for i := 0; i < columns; i++ {
+				left := byte(0)
+				if i > 0 {
+					left = decodedRow[i-1]
+				}
+				decodedRow[i] = rowData[i] + left
+			}
+
+		case 2: // Up: each byte depends on the byte above
+			for i := 0; i < columns; i++ {
+				decodedRow[i] = rowData[i] + prevRow[i]
+			}
+
+		case 3: // Average: each byte depends on average of left and above
+			for i := 0; i < columns; i++ {
+				left := byte(0)
+				if i > 0 {
+					left = decodedRow[i-1]
+				}
+				up := prevRow[i]
+				avg := (int(left) + int(up)) / 2
+				decodedRow[i] = rowData[i] + byte(avg)
+			}
+
+		case 4: // Paeth: each byte uses Paeth predictor
+			for i := 0; i < columns; i++ {
+				left := byte(0)
+				if i > 0 {
+					left = decodedRow[i-1]
+				}
+				up := prevRow[i]
+				upLeft := byte(0)
+				if i > 0 {
+					upLeft = prevRow[i-1]
+				}
+				decodedRow[i] = rowData[i] + paethPredictor(left, up, upLeft)
+			}
+
+		default:
+			return nil, fmt.Errorf("unknown PNG filter type: %d", filterByte)
+		}
+
+		result = append(result, decodedRow...)
+		copy(prevRow, decodedRow)
+	}
+
+	return result, nil
+}
+
+// paethPredictor implements the Paeth predictor algorithm from PNG spec.
+func paethPredictor(left, up, upLeft byte) byte {
+	iLeft := int(left)
+	iUp := int(up)
+	iUpLeft := int(upLeft)
+
+	p := iLeft + iUp - iUpLeft
+	pLeft := abs(p - iLeft)
+	pUp := abs(p - iUp)
+	pUpLeft := abs(p - iUpLeft)
+
+	if pLeft <= pUp && pLeft <= pUpLeft {
+		return left
+	}
+	if pUp <= pUpLeft {
+		return up
+	}
+	return upLeft
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // parseXRefStreamEntries parses binary xref entries from decoded stream data.
