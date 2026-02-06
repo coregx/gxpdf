@@ -427,10 +427,11 @@ func (p *Parser) parseStreamUntilEndstream(dict *Dictionary) (*Stream, error) {
 		}
 	}
 
-	// Update lexer state
+	// Update lexer state - skip whitespace and read the next token
+	// Unlike the normal stream parsing path (which reads "endstream" then advances to "endobj"),
+	// here we've already consumed "endstream" by scanning raw bytes, so NextToken reads "endobj" directly
 	p.lexer.skipWhitespace()
 	p.current, _ = p.lexer.NextToken()
-	_ = p.advance()
 
 	return NewStream(dict, content), nil
 }
