@@ -729,13 +729,6 @@ func (cbd *ColumnBoundaryDetector) clusterPositions(positions []float64, epsilon
 	return clusters
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // detectBoundariesWhitespace implements whitespace-based column detection.
 //
 // This is the BEST PRACTICE approach based on recent research (2024-2025).
