@@ -811,9 +811,9 @@ func (p *Parser) parseXRefStreamEntries(dict *Dictionary, data []byte) (*XRefTab
 	w3 := int(wArray.Get(2).(*Integer).Value())
 	entrySize := w1 + w2 + w3
 
-	if entrySize == 0 {
-		return nil, fmt.Errorf("invalid /W array: entry size is 0")
-	}
+	// Note: entrySize == 0 is valid per PDF spec. When all widths are 0,
+	// all fields use defaults: type=1 (in-use), offset=0, generation=0.
+	// This is used in stub xref streams that rely on /Prev chain.
 
 	// Get /Index array (object ranges) - default is [0 Size]
 	var index []int
