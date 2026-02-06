@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -697,6 +698,146 @@ func TestReader_HeaderValidation(t *testing.T) {
 			if tt.errMsg != "" {
 				assert.Contains(t, err.Error(), tt.errMsg)
 			}
+		})
+	}
+}
+
+// TestReader_HeaderWithLeadingWhitespace tests that PDFs with leading whitespace
+// before the %PDF- header are parsed correctly. Some PDF generators produce files
+// with leading tabs, spaces, or newlines before the header.
+func TestReader_HeaderWithLeadingWhitespace(t *testing.T) {
+	tests := []struct {
+		name    string
+		prefix  string
+		wantVer string
+	}{
+		{
+			name:    "Leading newlines and tabs",
+			prefix:  "\r\n\t\t\t\t \r\n",
+			wantVer: "1.4",
+		},
+		{
+			name:    "Leading spaces",
+			prefix:  "   ",
+			wantVer: "1.7",
+		},
+		{
+			name:    "Leading CRLF",
+			prefix:  "\r\n\r\n",
+			wantVer: "2.0",
+		},
+		{
+			name:    "UTF-8 BOM",
+			prefix:  "\xef\xbb\xbf",
+			wantVer: "1.7",
+		},
+		{
+			name:    "UTF-8 BOM with whitespace",
+			prefix:  "\xef\xbb\xbf  \r\n",
+			wantVer: "1.4",
+		},
+		{
+			name:    "Header near 1024 byte boundary",
+			prefix:  strings.Repeat(" ", 1000), // 1000 spaces, header at ~1008
+			wantVer: "1.7",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build PDF content without prefix first to calculate correct offsets
+			pdfContent := "%PDF-" + tt.wantVer + "\n" +
+				"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+				"2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
+
+			// Calculate where xref starts (without prefix)
+			xrefOffset := len(pdfContent)
+
+			// Build xref table - offsets are relative to %PDF- (not file start)
+			obj1Offset := len("%PDF-" + tt.wantVer + "\n")
+			obj2Offset := obj1Offset + len("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+
+			xrefTable := "xref\n0 3\n" +
+				"0000000000 65535 f \n" +
+				fmt.Sprintf("%010d", obj1Offset) + " 00000 n \n" +
+				fmt.Sprintf("%010d", obj2Offset) + " 00000 n \n"
+
+			trailer := "trailer\n<< /Root 1 0 R /Size 3 >>\n" +
+				"startxref\n" + fmt.Sprintf("%d", xrefOffset) + "\n%%EOF\n"
+
+			// Now prepend the whitespace prefix
+			content := tt.prefix + pdfContent + xrefTable + trailer
+
+			tmpFile, err := os.CreateTemp("", "whitespace-*.pdf")
+			require.NoError(t, err)
+			defer os.Remove(tmpFile.Name())
+
+			_, err = tmpFile.WriteString(content)
+			require.NoError(t, err)
+			tmpFile.Close()
+
+			reader := NewReader(tmpFile.Name())
+			err = reader.Open()
+
+			require.NoError(t, err, "PDF with leading whitespace should open successfully")
+			defer reader.Close()
+
+			assert.Equal(t, tt.wantVer, reader.Version())
+
+			catalog, err := reader.GetCatalog()
+			require.NoError(t, err, "Should be able to read catalog")
+			require.NotNil(t, catalog)
+
+			typeObj := catalog.GetName("Type")
+			require.NotNil(t, typeObj)
+			assert.Equal(t, "Catalog", typeObj.Value())
+		})
+	}
+}
+
+// TestReader_HeaderWithInvalidPrefix tests that non-whitespace before the header is rejected.
+func TestReader_HeaderWithInvalidPrefix(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix string
+	}{
+		{
+			name:   "Non-whitespace character before header",
+			prefix: "X",
+		},
+		{
+			name:   "Null byte before header",
+			prefix: "\x00",
+		},
+		{
+			name:   "HTML before header",
+			prefix: "<html>",
+		},
+		{
+			name:   "Header beyond 1024 byte window",
+			prefix: strings.Repeat(" ", 1025),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := tt.prefix + "%PDF-1.7\n" +
+				"1 0 obj\n<< /Type /Catalog >>\nendobj\n" +
+				"xref\n0 2\n0000000000 65535 f \n0000000009 00000 n \n" +
+				"trailer\n<< /Root 1 0 R /Size 2 >>\nstartxref\n56\n%%EOF\n"
+
+			tmpFile, err := os.CreateTemp("", "invalid-prefix-*.pdf")
+			require.NoError(t, err)
+			defer os.Remove(tmpFile.Name())
+
+			_, err = tmpFile.WriteString(content)
+			require.NoError(t, err)
+			tmpFile.Close()
+
+			reader := NewReader(tmpFile.Name())
+			err = reader.Open()
+
+			require.Error(t, err, "PDF with invalid prefix should be rejected")
 		})
 	}
 }

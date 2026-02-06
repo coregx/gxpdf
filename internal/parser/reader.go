@@ -2,7 +2,6 @@
 package parser
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -59,6 +58,11 @@ type Reader struct {
 	catalog   *Dictionary
 	pages     *Dictionary
 
+	// headerOffset is the number of bytes before the %PDF- marker.
+	// Some PDFs have leading whitespace that shifts all internal byte offsets.
+	// This offset must be added to all file positions read from the PDF.
+	headerOffset int64
+
 	// Object cache for resolved indirect references
 	// Key: object number, Value: resolved object
 	objectCache map[int]PdfObject
@@ -105,13 +109,14 @@ func (r *Reader) Open() error {
 	}
 	r.file = file
 
-	// Read and validate header
-	version, err := r.readHeader()
+	// Read and validate header, get offset of leading whitespace
+	version, headerOffset, err := r.readHeader()
 	if err != nil {
 		_ = r.Close()
 		return fmt.Errorf("failed to read PDF header: %w", err)
 	}
 	r.version = version
+	r.headerOffset = headerOffset
 
 	// Find startxref offset
 	startxrefOffset, err := r.findStartXRef()
@@ -145,45 +150,96 @@ func (r *Reader) Close() error {
 	return nil
 }
 
+// adjustOffset adds the header offset to a file position read from the PDF.
+// PDF internal offsets assume %PDF- is at byte 0, but some files have leading
+// whitespace that shifts all content. This method corrects for that shift.
+func (r *Reader) adjustOffset(offset int64) int64 {
+	return offset + r.headerOffset
+}
+
+// maxHeaderSearchSize is the maximum number of bytes to search for the PDF header.
+// PDF 1.7 Appendix H.3 specifies that Acrobat viewers require the header to appear
+// somewhere within the first 1024 bytes of the file.
+const maxHeaderSearchSize = 1024
+
 // readHeader reads and validates the PDF header.
 //
 // Expected format: %PDF-X.Y (e.g., %PDF-1.7)
 //
-// The header must appear in the first line of the file.
+// The header must appear within the first 1024 bytes of the file, after any
+// leading whitespace or UTF-8 BOM. Some PDF generators produce files with
+// leading whitespace (tabs, spaces, newlines) or a UTF-8 BOM before the header.
+// We allow these prefixes and then verify the file contains %PDF-.
+//
 // Some PDFs may have binary data after the header to prevent
 // misinterpretation as text files.
 //
-// Returns the PDF version string (e.g., "1.7").
+// Returns the PDF version string (e.g., "1.7") and the byte offset of the
+// %PDF- marker. The offset is used to adjust all internal file positions,
+// since PDF byte offsets are calculated from the %PDF- marker, not from
+// the actual start of the file.
 //
-// Reference: PDF 1.7 specification, Section 7.5.1 (File Header).
-func (r *Reader) readHeader() (string, error) {
+// Reference: PDF 1.7 specification, Section 7.5.1 (File Header) and Appendix H.3.
+func (r *Reader) readHeader() (version string, headerOffset int64, err error) {
 	// Seek to start of file
 	if _, err := r.file.Seek(0, io.SeekStart); err != nil {
-		return "", fmt.Errorf("failed to seek to start: %w", err)
+		return "", 0, fmt.Errorf("failed to seek to start: %w", err)
 	}
 
-	// Read first line
-	reader := bufio.NewReader(r.file)
-	header, err := reader.ReadString('\n')
+	// Read first 1024 bytes (PDF spec Appendix H.3)
+	buf := make([]byte, maxHeaderSearchSize)
+	n, err := r.file.Read(buf)
 	if err != nil && err != io.EOF {
-		return "", fmt.Errorf("failed to read header: %w", err)
+		return "", 0, fmt.Errorf("failed to read header: %w", err)
+	}
+	if n == 0 {
+		return "", 0, fmt.Errorf("empty file")
+	}
+	buf = buf[:n]
+
+	// Find %PDF- marker and calculate offset
+	const pdfMarker = "%PDF-"
+	content := string(buf)
+	idx := strings.Index(content, pdfMarker)
+	if idx < 0 {
+		// Show first 20 bytes for debugging
+		preview := content
+		if len(preview) > 20 {
+			preview = preview[:20]
+		}
+		return "", 0, fmt.Errorf("invalid PDF header: %q (expected %%PDF-X.Y)", preview)
 	}
 
-	// Trim whitespace
+	// Verify only whitespace (and optional UTF-8 BOM) before the marker
+	prefix := content[:idx]
+	// Strip UTF-8 BOM if present
+	prefix = strings.TrimPrefix(prefix, "\xef\xbb\xbf")
+	if strings.TrimLeft(prefix, " \t\r\n") != "" {
+		preview := content
+		if len(preview) > 20 {
+			preview = preview[:20]
+		}
+		return "", 0, fmt.Errorf("invalid PDF header: %q (expected %%PDF-X.Y)", preview)
+	}
+
+	headerOffset = int64(idx)
+
+	// Extract header line (up to first newline)
+	header := content[idx:]
+	if newlineIdx := strings.IndexAny(header, "\r\n"); newlineIdx > 0 {
+		header = header[:newlineIdx]
+	}
+
+	// Trim any trailing whitespace from header
 	header = strings.TrimSpace(header)
 
-	// Validate format: %PDF-X.Y
-	if !strings.HasPrefix(header, "%PDF-") {
-		return "", fmt.Errorf("invalid PDF header: %q (expected %%PDF-X.Y)", header)
-	}
-
-	// Extract version
-	version := strings.TrimPrefix(header, "%PDF-")
+	// Extract version (e.g., "1.7" from "%PDF-1.7")
+	version = strings.TrimPrefix(header, pdfMarker)
 	if len(version) < 3 {
-		return "", fmt.Errorf("invalid PDF version in header: %q", header)
+		return "", 0, fmt.Errorf("invalid PDF version in header: %q", header)
 	}
 
-	return version, nil
+	return version, headerOffset, nil
 }
 
 // findStartXRef finds the byte offset of the cross-reference table.
@@ -354,8 +410,11 @@ func (r *Reader) parseXRefAndTrailer(offset int64) error {
 // parseSingleXRef parses a single cross-reference section (table or stream)
 // at the given file offset and returns the xref table and trailer dictionary.
 func (r *Reader) parseSingleXRef(offset int64) (*XRefTable, *Dictionary, error) {
+	// Adjust offset for any leading whitespace before %PDF- header
+	adjustedOffset := r.adjustOffset(offset)
+
 	// Seek to XRef offset
-	if _, err := r.file.Seek(offset, io.SeekStart); err != nil {
+	if _, err := r.file.Seek(adjustedOffset, io.SeekStart); err != nil {
 		return nil, nil, fmt.Errorf("failed to seek to xref at offset %d: %w", offset, err)
 	}
 
@@ -367,7 +426,7 @@ func (r *Reader) parseSingleXRef(offset int64) (*XRefTable, *Dictionary, error) 
 	}
 
 	// Seek back to start of xref
-	if _, err := r.file.Seek(offset, io.SeekStart); err != nil {
+	if _, err := r.file.Seek(adjustedOffset, io.SeekStart); err != nil {
 		return nil, nil, fmt.Errorf("failed to seek back to xref: %w", err)
 	}
 
@@ -380,7 +439,7 @@ func (r *Reader) parseSingleXRef(offset int64) (*XRefTable, *Dictionary, error) 
 	}
 
 	if isXRefStream {
-		xrefTable, err := r.parseXRefStream(offset)
+		xrefTable, err := r.parseXRefStream(adjustedOffset)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to parse xref stream: %w", err)
 		}
@@ -523,8 +582,9 @@ func (r *Reader) getInUseObject(objectNum int, entry *XRefEntry) (PdfObject, err
 	// Seek and parse (lock file access)
 	r.fileMu.Lock()
 
-	// Seek to object offset
-	if _, err := r.file.Seek(entry.Offset, io.SeekStart); err != nil {
+	// Seek to object offset (adjust for any leading whitespace before %PDF- header)
+	adjustedOffset := r.adjustOffset(entry.Offset)
+	if _, err := r.file.Seek(adjustedOffset, io.SeekStart); err != nil {
 		r.fileMu.Unlock()
 		return nil, fmt.Errorf("failed to seek to object %d at offset %d: %w",
 			objectNum, entry.Offset, err)
@@ -607,9 +667,10 @@ func (r *Reader) getCompressedObject(objectNum int, entry *XRefEntry) (PdfObject
 		return nil, fmt.Errorf("ObjStm %d is not in-use (type: %s)", objStmNum, objStmEntry.Type)
 	}
 
-	// Seek to ObjStm
+	// Seek to ObjStm (adjust for any leading whitespace before %PDF- header)
 	r.fileMu.Lock()
-	if _, err := r.file.Seek(objStmEntry.Offset, io.SeekStart); err != nil {
+	adjustedOffset := r.adjustOffset(objStmEntry.Offset)
+	if _, err := r.file.Seek(adjustedOffset, io.SeekStart); err != nil {
 		r.fileMu.Unlock()
 		return nil, fmt.Errorf("failed to seek to ObjStm %d: %w", objStmNum, err)
 	}
