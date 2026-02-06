@@ -276,26 +276,75 @@ func (r *Reader) findStartXRef() (int64, error) {
 // Seeks to the xref offset and parses:
 //  1. Cross-reference table (object locations) or xref stream (PDF 1.5+)
 //  2. Trailer dictionary (document metadata)
+//  3. Follows /Prev chain to merge all xref sections (for incremental updates and linearized PDFs)
 //
 // The trailer contains important references like /Root (catalog) and /Size.
 //
 // Reference: PDF 1.7 specification, Section 7.5.4, 7.5.5, and 7.5.8.
 func (r *Reader) parseXRefAndTrailer(offset int64) error {
+	// Parse the first xref table/stream
+	xrefTable, err := r.parseXRefAtOffset(offset)
+	if err != nil {
+		return err
+	}
+
+	r.xrefTable = xrefTable
+	r.trailer = xrefTable.Trailer
+
+	// Follow /Prev chain to get all xref sections
+	// Each /Prev points to the previous xref table (for incremental updates)
+	visited := make(map[int64]bool)
+	visited[offset] = true
+
+	for {
+		prevOffset := xrefTable.Trailer.GetInteger("Prev")
+		if prevOffset <= 0 {
+			break // No more previous xref tables
+		}
+
+		// Prevent infinite loops
+		if visited[prevOffset] {
+			break
+		}
+		visited[prevOffset] = true
+
+		// Parse the previous xref table
+		prevXRef, prevErr := r.parseXRefAtOffset(prevOffset)
+		if prevErr != nil {
+			// Log warning but continue - some PDFs have invalid /Prev chains
+			break
+		}
+
+		// Merge entries (newer entries take precedence, so don't overwrite)
+		for objNum, entry := range prevXRef.Entries {
+			if _, exists := r.xrefTable.Entries[objNum]; !exists {
+				r.xrefTable.Entries[objNum] = entry
+			}
+		}
+
+		xrefTable = prevXRef
+	}
+
+	return nil
+}
+
+// parseXRefAtOffset parses a single xref table/stream at the given offset.
+func (r *Reader) parseXRefAtOffset(offset int64) (*XRefTable, error) {
 	// Seek to XRef offset
 	if _, err := r.file.Seek(offset, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek to xref at offset %d: %w", offset, err)
+		return nil, fmt.Errorf("failed to seek to xref at offset %d: %w", offset, err)
 	}
 
 	// Peek at first few bytes to determine xref type
 	peekBuf := make([]byte, 10)
 	n, err := r.file.Read(peekBuf)
 	if err != nil {
-		return fmt.Errorf("failed to peek at xref: %w", err)
+		return nil, fmt.Errorf("failed to peek at xref: %w", err)
 	}
 
 	// Seek back to start of xref
 	if _, err := r.file.Seek(offset, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek back to xref: %w", err)
+		return nil, fmt.Errorf("failed to seek back to xref: %w", err)
 	}
 
 	// Check if it's a traditional xref table or xref stream
@@ -309,24 +358,20 @@ func (r *Reader) parseXRefAndTrailer(offset int64) error {
 
 	if isXRefStream {
 		// Parse xref stream with file access for stream data
-		xrefTable, err := r.parseXRefStream(offset)
-		if err != nil {
-			return fmt.Errorf("failed to parse xref stream: %w", err)
+		xrefTable, parseErr := r.parseXRefStream(offset)
+		if parseErr != nil {
+			return nil, fmt.Errorf("failed to parse xref stream: %w", parseErr)
 		}
-		r.xrefTable = xrefTable
-		r.trailer = xrefTable.Trailer
-	} else {
-		// Parse traditional xref table
-		parser := NewParser(r.file)
-		xrefTable, err := parser.ParseXRef()
-		if err != nil {
-			return fmt.Errorf("failed to parse xref table: %w", err)
-		}
-		r.xrefTable = xrefTable
-		r.trailer = xrefTable.Trailer
+		return xrefTable, nil
 	}
 
-	return nil
+	// Parse traditional xref table
+	parser := NewParser(r.file)
+	xrefTable, parseErr := parser.ParseXRef()
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse xref table: %w", parseErr)
+	}
+	return xrefTable, nil
 }
 
 // parseXRefStream parses a PDF 1.5+ cross-reference stream.
