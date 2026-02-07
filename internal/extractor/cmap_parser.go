@@ -48,9 +48,11 @@ func (t *CMapTable) AddMapping(glyphID uint16, unicode rune) {
 //   - ...
 //   - Glyph 0x20 → U+0440 ('р')
 func (t *CMapTable) AddRangeMapping(startGlyphID, endGlyphID uint16, startUnicode rune) {
-	for glyphID := startGlyphID; glyphID <= endGlyphID; glyphID++ {
-		offset := glyphID - startGlyphID
-		t.mappings[glyphID] = startUnicode + rune(offset)
+	// Use uint32 to avoid wraparound when endGlyphID is 0xFFFF
+	// (uint16 wraps from 65535 to 0, causing infinite loop)
+	for glyphID := uint32(startGlyphID); glyphID <= uint32(endGlyphID); glyphID++ {
+		offset := glyphID - uint32(startGlyphID)
+		t.mappings[uint16(glyphID)] = startUnicode + rune(offset)
 	}
 }
 

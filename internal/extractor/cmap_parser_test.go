@@ -61,6 +61,25 @@ func TestCMapTable_RangeMapping(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, 'X', unicode)
 	})
+
+	t.Run("Full range 0x0000-0xFFFF does not infinite loop", func(t *testing.T) {
+		// Regression test: uint16 wraparound when endGlyphID is 0xFFFF
+		// caused infinite loop (65535 + 1 wraps to 0, never exceeds 65535)
+		table := NewCMapTable("TestCMap")
+		table.AddRangeMapping(0x0000, 0xFFFF, 0x0000)
+
+		// Verify range boundaries
+		unicode, ok := table.GetUnicode(0x0000)
+		assert.True(t, ok)
+		assert.Equal(t, rune(0x0000), unicode)
+
+		unicode, ok = table.GetUnicode(0xFFFF)
+		assert.True(t, ok)
+		assert.Equal(t, rune(0xFFFF), unicode)
+
+		// Verify full range was mapped
+		assert.Equal(t, 65536, table.Size())
+	})
 }
 
 func TestCMapParser_Bfchar(t *testing.T) {
