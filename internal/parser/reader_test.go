@@ -1106,3 +1106,237 @@ func BenchmarkReader_GetObject(b *testing.B) {
 		}
 	}
 }
+
+// ============================================================================
+// XRef Recovery Tests (PR #33)
+// ============================================================================
+
+// buildOffByOnePDF creates a PDF with off-by-one xref errors.
+// The xref table points to object N-1 for each entry.
+func buildOffByOnePDF() []byte {
+	// Build a simple PDF
+	body := "%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+
+	// Calculate correct offsets
+	obj1Offset := 9  // after "%PDF-1.7\n"
+	obj2Offset := 58 // after obj 1
+
+	xrefOffset := len(body)
+
+	// Off-by-one error: xref entry for obj 2 points to obj 1's offset,
+	// xref entry for obj 3 points to obj 2's offset, etc.
+	xref := fmt.Sprintf("xref\n0 4\n"+
+		"0000000000 65535 f \n"+
+		"%010d 00000 n \n"+ // obj 1 -> obj 1 (correct)
+		"%010d 00000 n \n"+ // obj 2 -> obj 1's offset (off by one)
+		"%010d 00000 n \n", // obj 3 -> obj 2's offset (off by one)
+		obj1Offset,
+		obj1Offset, // intentionally wrong - points to obj 1
+		obj2Offset, // intentionally wrong - points to obj 2
+	)
+
+	trailer := fmt.Sprintf("trailer\n<< /Size 4 /Root 1 0 R >>\n"+
+		"startxref\n%d\n%%%%EOF\n", xrefOffset)
+
+	return []byte(body + xref + trailer)
+}
+
+// buildNearbyScanPDF creates a PDF where xref offset is slightly wrong
+// but the object can be found by scanning nearby (within 4KB).
+func buildNearbyScanPDF() []byte {
+	// Add some padding between objects to make scanning work
+	body := "%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		strings.Repeat(" ", 100) + // padding
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+
+	obj1Offset := 9
+	obj2Offset := 58
+
+	xrefOffset := len(body)
+
+	// Offset for obj 3 is wrong - points to the padding area
+	// Object 3 should be found by scanning forward
+	xref := fmt.Sprintf("xref\n0 4\n"+
+		"0000000000 65535 f \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n", // points to padding area, not to obj 3
+		obj1Offset,
+		obj2Offset,
+		115, // points to start of padding, not obj 3
+	)
+
+	trailer := fmt.Sprintf("trailer\n<< /Size 4 /Root 1 0 R >>\n"+
+		"startxref\n%d\n%%%%EOF\n", xrefOffset)
+
+	return []byte(body + xref + trailer)
+}
+
+// buildUnrecoverablePDF creates a PDF where xref offset is completely wrong
+// and the object cannot be found (outside 4KB scan range).
+func buildUnrecoverablePDF() []byte {
+	// Add 8KB of padding to push object 3 outside scan range
+	padding := strings.Repeat(" ", 8192)
+
+	body := "%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		padding +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+
+	obj1Offset := 9
+	obj2Offset := 58
+
+	xrefOffset := len(body)
+
+	// Offset for obj 3 points to start of file (way outside 4KB scan range)
+	xref := fmt.Sprintf("xref\n0 4\n"+
+		"0000000000 65535 f \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n", // points to start of file - outside 4KB scan range
+		obj1Offset,
+		obj2Offset,
+		0, // completely wrong - points to %PDF header
+	)
+
+	trailer := fmt.Sprintf("trailer\n<< /Size 4 /Root 1 0 R >>\n"+
+		"startxref\n%d\n%%%%EOF\n", xrefOffset)
+
+	return []byte(body + xref + trailer)
+}
+
+func TestReader_XRefRecovery_OffByOne(t *testing.T) {
+	data := buildOffByOnePDF()
+
+	tmpFile, err := os.CreateTemp("", "offbyone-*.pdf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	reader := NewReader(tmpFile.Name())
+	err = reader.Open()
+	require.NoError(t, err, "should recover from off-by-one xref errors")
+	defer reader.Close()
+
+	// Object 1 should work (xref is correct for it)
+	obj1, err := reader.GetObject(1)
+	require.NoError(t, err)
+	dict1, ok := obj1.(*Dictionary)
+	require.True(t, ok)
+	assert.Equal(t, "Catalog", dict1.GetName("Type").Value())
+
+	// Object 2 has off-by-one error but should be recovered
+	obj2, err := reader.GetObject(2)
+	require.NoError(t, err, "should recover object 2 from off-by-one error")
+	dict2, ok := obj2.(*Dictionary)
+	require.True(t, ok)
+	assert.Equal(t, "Pages", dict2.GetName("Type").Value())
+}
+
+func TestReader_XRefRecovery_NearbyScan(t *testing.T) {
+	data := buildNearbyScanPDF()
+
+	tmpFile, err := os.CreateTemp("", "nearbyscan-*.pdf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	reader := NewReader(tmpFile.Name())
+	err = reader.Open()
+	require.NoError(t, err, "should recover by scanning nearby")
+	defer reader.Close()
+
+	// Object 3 has wrong offset but should be found by nearby scan
+	obj3, err := reader.GetObject(3)
+	require.NoError(t, err, "should find object 3 by scanning nearby")
+	dict3, ok := obj3.(*Dictionary)
+	require.True(t, ok)
+	assert.Equal(t, "Page", dict3.GetName("Type").Value())
+}
+
+func TestReader_XRefRecovery_Failure(t *testing.T) {
+	data := buildUnrecoverablePDF()
+
+	tmpFile, err := os.CreateTemp("", "unrecoverable-*.pdf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	reader := NewReader(tmpFile.Name())
+	err = reader.Open()
+	require.NoError(t, err) // Open succeeds (catalog is fine)
+	defer reader.Close()
+
+	// Object 3 cannot be found - should fail
+	_, err = reader.GetObject(3)
+	require.Error(t, err, "should fail when object cannot be recovered")
+	assert.Contains(t, err.Error(), "mismatch")
+}
+
+func TestReader_GenerationNumberValidation(t *testing.T) {
+	// This tests that generation numbers are validated for correctly-located objects.
+	// We use an optional object (Info dict) that isn't loaded during Open().
+	body := "%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n" +
+		"3 0 obj\n<< /Title (Test) >>\nendobj\n"
+
+	obj1Offset := 9
+	obj2Offset := 58
+	obj3Offset := 110 // after obj 2
+	xrefOffset := len(body)
+
+	// xref says object 3 has generation 5, but actual object has generation 0
+	xref := fmt.Sprintf("xref\n0 4\n"+
+		"0000000000 65535 f \n"+
+		"%010d 00000 n \n"+
+		"%010d 00000 n \n"+
+		"%010d 00005 n \n", // wrong generation number for obj 3
+		obj1Offset,
+		obj2Offset,
+		obj3Offset,
+	)
+
+	trailer := fmt.Sprintf("trailer\n<< /Size 4 /Root 1 0 R >>\n"+
+		"startxref\n%d\n%%%%EOF\n", xrefOffset)
+
+	data := []byte(body + xref + trailer)
+
+	tmpFile, err := os.CreateTemp("", "gennum-*.pdf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	_, err = tmpFile.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, tmpFile.Close())
+
+	reader := NewReader(tmpFile.Name())
+	err = reader.Open()
+	require.NoError(t, err)
+	defer reader.Close()
+
+	// Object 1 should work (generation matches)
+	obj1, err := reader.GetObject(1)
+	require.NoError(t, err)
+	require.NotNil(t, obj1)
+
+	// Object 3 should fail due to generation mismatch
+	_, err = reader.GetObject(3)
+	require.Error(t, err, "should fail on generation mismatch")
+	assert.Contains(t, err.Error(), "generation mismatch")
+}
