@@ -847,7 +847,17 @@ func (d *flateDecoder) DecodeWithPredictor(data []byte, predictor, columns int) 
 // applyPNGPredictor reverses PNG prediction filters.
 // PNG encoded data has a filter byte at the start of each row.
 // Filter types: 0=None, 1=Sub, 2=Up, 3=Average, 4=Paeth
+//
+// Note: This implementation assumes BitsPerComponent=8 (one byte per component).
+// PDF xref streams always use 8 bits per component, so this is safe for our use case.
+// For general PNG predictor support, BitsPerComponent validation would be needed.
 func applyPNGPredictor(data []byte, columns int) ([]byte, error) {
+	// Sanity check: prevent excessive memory allocation on malformed PDFs
+	const maxColumns = 100_000
+	if columns <= 0 || columns > maxColumns {
+		return nil, fmt.Errorf("PNG predictor: columns %d out of valid range (1-%d)", columns, maxColumns)
+	}
+
 	rowSize := columns + 1 // +1 for filter byte
 	if len(data)%rowSize != 0 {
 		return nil, fmt.Errorf("PNG predictor: data length %d not divisible by row size %d", len(data), rowSize)
