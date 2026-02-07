@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/coregx/gxpdf/internal/encoding"
+	"github.com/coregx/gxpdf/logging"
 )
 
 // PDF filter name constants.
@@ -614,37 +616,59 @@ func (r *Reader) GetObject(objectNum int) (PdfObject, error) {
 }
 
 // getInUseObject retrieves a traditional in-use object from the file.
+//
+// Security note: Lenient parsing for malformed PDFs carries risks. Recovery mode
+// may load objects from unexpected locations, which could enable object substitution
+// attacks in adversarial PDFs. Security-sensitive consumers should be aware that
+// recovered objects bypass strict xref validation.
 func (r *Reader) getInUseObject(objectNum int, entry *XRefEntry) (PdfObject, error) {
-	// Seek and parse (lock file access)
-	r.fileMu.Lock()
-
-	// Seek to object offset (adjust for any leading whitespace before %PDF- header)
-	adjustedOffset := r.adjustOffset(entry.Offset)
-	if _, err := r.file.Seek(adjustedOffset, io.SeekStart); err != nil {
-		r.fileMu.Unlock()
-		return nil, fmt.Errorf("failed to seek to object %d at offset %d: %w",
-			objectNum, entry.Offset, err)
-	}
-
-	// Parse indirect object
-	parser := NewParser(r.file)
-	indirectObj, err := parser.ParseIndirectObject()
-	r.fileMu.Unlock()
-
+	indirectObj, err := r.parseObjectAtOffset(entry.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse object %d: %w", objectNum, err)
 	}
 
-	// Verify object number matches
+	// Check for object number mismatch and attempt recovery
 	if indirectObj.Number != objectNum {
-		return nil, fmt.Errorf("object number mismatch: expected %d, got %d",
-			objectNum, indirectObj.Number)
-	}
+		// Try recovery strategies for malformed PDFs with incorrect xref entries
+		var recoveredObj *IndirectObject
+		var recoveryStrategy string
 
-	// Verify generation number matches
-	if indirectObj.Generation != entry.Generation {
-		return nil, fmt.Errorf("object %d generation mismatch: expected %d, got %d",
-			objectNum, entry.Generation, indirectObj.Generation)
+		// Strategy 1: If found object N-1, try offset for object N+1 (off-by-one pattern)
+		if indirectObj.Number == objectNum-1 {
+			if nextEntry, ok := r.xrefTable.GetEntry(objectNum + 1); ok && nextEntry.Type == XRefEntryInUse {
+				if obj, err := r.parseObjectAtOffset(nextEntry.Offset); err == nil && obj.Number == objectNum {
+					recoveredObj = obj
+					recoveryStrategy = "off-by-one"
+				}
+			}
+		}
+
+		// Strategy 2: Scan nearby (4KB each direction)
+		if recoveredObj == nil {
+			recoveredObj = r.scanForObject(objectNum, entry.Offset)
+			if recoveredObj != nil {
+				recoveryStrategy = "nearby-scan"
+			}
+		}
+
+		if recoveredObj != nil {
+			logging.Logger().Warn("xref recovery: object number mismatch",
+				slog.Int("expected", objectNum),
+				slog.Int("found", indirectObj.Number),
+				slog.Int64("offset", entry.Offset),
+				slog.String("strategy", recoveryStrategy))
+			indirectObj = recoveredObj
+		} else {
+			return nil, fmt.Errorf("object number mismatch: expected %d, got %d",
+				objectNum, indirectObj.Number)
+		}
+	} else {
+		// Object found at expected offset - validate generation number
+		// (PDF 1.7 Section 7.3.10: generation numbers are part of object identity)
+		if indirectObj.Generation != entry.Generation {
+			return nil, fmt.Errorf("object %d generation mismatch: expected %d, got %d",
+				objectNum, entry.Generation, indirectObj.Generation)
+		}
 	}
 
 	// Get the object (do NOT auto-resolve references to avoid circular refs)
@@ -656,6 +680,98 @@ func (r *Reader) getInUseObject(objectNum int, entry *XRefEntry) (PdfObject, err
 	r.mu.Unlock()
 
 	return obj, nil
+}
+
+// parseObjectAtOffset parses an indirect object at the given file offset.
+// The offset is adjusted for any leading whitespace before the %PDF- header.
+func (r *Reader) parseObjectAtOffset(offset int64) (*IndirectObject, error) {
+	r.fileMu.Lock()
+	defer r.fileMu.Unlock()
+
+	adjustedOffset := r.adjustOffset(offset)
+	if _, err := r.file.Seek(adjustedOffset, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to seek to offset %d: %w", offset, err)
+	}
+
+	parser := NewParser(r.file)
+	return parser.ParseIndirectObject()
+}
+
+// scanForObject searches for an object with the given number near the specified offset.
+// This is used for recovery when xref offsets are incorrect (e.g., off-by-one errors).
+func (r *Reader) scanForObject(objectNum int, startOffset int64) *IndirectObject {
+	r.fileMu.Lock()
+	defer r.fileMu.Unlock()
+
+	// Adjust offset for any leading whitespace before %PDF- header
+	adjustedOffset := r.adjustOffset(startOffset)
+
+	// Search pattern: "N 0 obj" where N is the object number
+	searchPattern := fmt.Sprintf("%d 0 obj", objectNum)
+	searchBytes := []byte(searchPattern)
+
+	// Scan both forward and backward from the offset
+	// Limit search to 4KB in each direction
+	const maxScanSize = 4096
+
+	// Try scanning forward first
+	if obj := r.scanDirection(adjustedOffset, searchBytes, maxScanSize, true); obj != nil {
+		return obj
+	}
+
+	// Try scanning backward
+	return r.scanDirection(adjustedOffset, searchBytes, maxScanSize, false)
+}
+
+// scanDirection scans for a pattern either forward or backward from an offset.
+// Must be called with fileMu locked.
+func (r *Reader) scanDirection(startOffset int64, pattern []byte, maxSize int, forward bool) *IndirectObject {
+	var readOffset int64
+	if forward {
+		readOffset = startOffset
+	} else {
+		readOffset = startOffset - int64(maxSize)
+		if readOffset < 0 {
+			readOffset = 0
+		}
+	}
+
+	buf := make([]byte, maxSize)
+	if _, err := r.file.Seek(readOffset, io.SeekStart); err != nil {
+		return nil
+	}
+
+	n, err := r.file.Read(buf)
+	if err != nil || n == 0 {
+		return nil
+	}
+
+	// Search for the pattern
+	idx := bytes.Index(buf[:n], pattern)
+	if idx == -1 {
+		return nil
+	}
+
+	// Found it - seek to that position and parse
+	foundOffset := readOffset + int64(idx)
+	if _, err := r.file.Seek(foundOffset, io.SeekStart); err != nil {
+		return nil
+	}
+
+	parser := NewParser(r.file)
+	obj, err := parser.ParseIndirectObject()
+	if err != nil {
+		return nil
+	}
+
+	// Verify we got the right object (handles multi-digit object numbers)
+	var expectedNum int
+	fmt.Sscanf(string(pattern), "%d", &expectedNum)
+	if obj.Number != expectedNum {
+		return nil
+	}
+
+	return obj
 }
 
 // getCompressedObject retrieves a compressed object from an Object Stream (PDF 1.5+).
