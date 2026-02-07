@@ -552,6 +552,15 @@ func (p *Parser) ParseXRefStreamWithFileAccess(file io.ReadSeeker, xrefOffset in
 							columns = int(colInt.Value())
 						}
 					}
+					// Validate BitsPerComponent if present (must be 8 for PNG predictors)
+					if bpcObj := parmsDict.Get("BitsPerComponent"); bpcObj != nil {
+						if bpcInt, ok := bpcObj.(*Integer); ok {
+							bpc := int(bpcInt.Value())
+							if bpc != 8 && predictor >= 10 {
+								return nil, fmt.Errorf("PNG predictor requires BitsPerComponent=8, got %d", bpc)
+							}
+						}
+					}
 				}
 			}
 
@@ -848,9 +857,8 @@ func (d *flateDecoder) DecodeWithPredictor(data []byte, predictor, columns int) 
 // PNG encoded data has a filter byte at the start of each row.
 // Filter types: 0=None, 1=Sub, 2=Up, 3=Average, 4=Paeth
 //
-// Note: This implementation assumes BitsPerComponent=8 (one byte per component).
-// PDF xref streams always use 8 bits per component, so this is safe for our use case.
-// For general PNG predictor support, BitsPerComponent validation would be needed.
+// This implementation requires BitsPerComponent=8 (one byte per component).
+// The caller must validate BitsPerComponent before calling this function.
 func applyPNGPredictor(data []byte, columns int) ([]byte, error) {
 	// Sanity check: prevent excessive memory allocation on malformed PDFs
 	const maxColumns = 100_000
