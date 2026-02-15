@@ -917,6 +917,19 @@ func convertGraphicsOps(ops []GraphicsOperation) []writer.GraphicsOp {
 			}
 		}
 
+		// Convert Watermark fields
+		if op.Type == GraphicsOpWatermark && op.WatermarkOp != nil {
+			wm := op.WatermarkOp
+			gop.Text = wm.Text()
+			gop.TextSize = wm.FontSize()
+			gop.TextColorR = wm.Color().R
+			gop.TextColorG = wm.Color().G
+			gop.TextColorB = wm.Color().B
+			gop.WatermarkFont = string(wm.Font())
+			gop.WatermarkOpacity = wm.Opacity()
+			gop.WatermarkRotation = wm.Rotation()
+		}
+
 		convertGraphicsOptions(&gop, &op)
 		graphicsOps = append(graphicsOps, gop)
 	}
