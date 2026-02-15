@@ -3,6 +3,7 @@ package writer
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/coregx/gxpdf/internal/fonts"
 )
@@ -152,6 +153,12 @@ type GraphicsOp struct {
 	TextColorR float64
 	TextColorG float64
 	TextColorB float64
+
+	// Watermark fields (for Type == 4)
+	// Text, TextSize, TextColorR/G/B are reused
+	WatermarkFont     string  // Font name (Standard14)
+	WatermarkOpacity  float64 // Opacity (0.0-1.0)
+	WatermarkRotation float64 // Rotation in degrees
 }
 
 // ClipOp represents a clipping operation (begin or end).
@@ -324,8 +331,7 @@ func renderGraphicsOp(csw *ContentStreamWriter, gop GraphicsOp, resources *Resou
 	case 3: // Image
 		return renderImage(csw, gop, resources)
 	case 4: // Watermark
-		// TODO: Implement watermark rendering
-		return fmt.Errorf("watermark rendering not yet implemented (type 4)")
+		return renderWatermark(csw, gop, resources)
 	case 5: // Polygon
 		return renderPolygon(csw, gop)
 	case 6: // Polyline
@@ -835,6 +841,96 @@ func renderImage(csw *ContentStreamWriter, gop GraphicsOp, resources *ResourceDi
 
 	// Draw the image XObject
 	csw.writeOp(fmt.Sprintf("/%s", imageResName), "Do")
+
+	// Restore graphics state
+	csw.RestoreState()
+	return nil
+}
+
+// renderWatermark renders a text watermark to the content stream.
+//
+// This function:
+// 1. Sets up transparency using ExtGState (for opacity)
+// 2. Applies rotation transformation matrix
+// 3. Renders text with specified font, size, and color
+//
+// PDF Watermark Rendering:
+// - Uses ExtGState for transparency (/ca and /CA operators)
+// - Applies transformation matrix for rotation around the watermark position
+// - Renders text using standard text operators (BT...Tj...ET)
+//
+// Note: The ExtGState object will be created by the writer when needed.
+func renderWatermark(csw *ContentStreamWriter, gop GraphicsOp, resources *ResourceDictionary) error {
+	if gop.Text == "" {
+		return fmt.Errorf("watermark text is empty")
+	}
+	if gop.WatermarkFont == "" {
+		return fmt.Errorf("watermark font is not set")
+	}
+	if gop.TextSize <= 0 {
+		return fmt.Errorf("watermark font size must be positive: %.2f", gop.TextSize)
+	}
+
+	// Get or create font resource
+	fontKey := "std:" + gop.WatermarkFont
+	fontResName := resources.GetFontResourceName(fontKey)
+	if fontResName == "" {
+		// Register the font
+		fontObjNum := 0 // Will be set by caller via SetFontObjNumByID
+		fontResName = resources.AddFontWithID(fontObjNum, fontKey)
+	}
+
+	// Set opacity if not fully opaque
+	if gop.WatermarkOpacity < 1.0 {
+		// Get or create ExtGState for transparency
+		opacity := gop.WatermarkOpacity
+		if opacity < 0 {
+			opacity = 0
+		}
+		gsName, _ := resources.GetOrCreateExtGState(opacity)
+		csw.SetGraphicsState(gsName)
+	}
+
+	// Apply rotation transformation if rotation is non-zero
+	if gop.WatermarkRotation != 0 {
+		// Calculate rotation matrix around point (X, Y)
+		// Convert degrees to radians
+		radians := gop.WatermarkRotation * math.Pi / 180.0
+
+		// Calculate cos and sin
+		cos := math.Cos(radians)
+		sin := math.Sin(radians)
+
+		// Apply transformation matrix for rotation around point (X, Y)
+		// Matrix: [cos sin -sin cos e f]
+		// where e = X - X*cos + Y*sin, f = Y - X*sin - Y*cos
+		e := gop.X - gop.X*cos + gop.Y*sin
+		f := gop.Y - gop.X*sin - gop.Y*cos
+		csw.ConcatMatrix(cos, sin, -sin, cos, e, f)
+	}
+
+	// Begin text object
+	csw.BeginText()
+
+	// Set text color
+	csw.SetFillColorRGB(gop.TextColorR, gop.TextColorG, gop.TextColorB)
+
+	// Set font and size
+	csw.SetFont(fontResName, gop.TextSize)
+
+	// Set position (origin if rotated, or actual position if not)
+	if gop.WatermarkRotation != 0 {
+		// Text is already positioned by the transformation matrix
+		csw.MoveTextPosition(0, 0)
+	} else {
+		csw.MoveTextPosition(gop.X, gop.Y)
+	}
+
+	// Show text
+	csw.ShowText(gop.Text)
+
+	// End text object
+	csw.EndText()
 
 	// Restore graphics state
 	csw.RestoreState()
