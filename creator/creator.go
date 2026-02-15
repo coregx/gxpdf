@@ -888,6 +888,19 @@ func convertGraphicsOps(ops []GraphicsOperation) []writer.GraphicsOp {
 			}
 		}
 
+		// Convert Image fields
+		if op.Type == GraphicsOpImage && op.Image != nil {
+			gop.Image = &writer.ImageData{
+				Data:             op.Image.Data(),
+				AlphaMask:        op.Image.AlphaMask(),
+				Width:            op.Image.Width(),
+				Height:           op.Image.Height(),
+				ColorSpace:       string(op.Image.ColorSpace()),
+				Format:           op.Image.Format(),
+				BitsPerComponent: op.Image.BitsPerComponent(),
+			}
+		}
+
 		// Convert TextBlock fields
 		if op.Type == GraphicsOpTextBlock && op.TextFont != nil {
 			gop.Text = op.Text
