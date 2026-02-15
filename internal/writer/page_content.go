@@ -84,12 +84,23 @@ type BezierSegment struct {
 	End   Point
 }
 
+// ImageData represents image data for embedding in PDF.
+type ImageData struct {
+	Data             []byte // Raw image data (JPEG bytes or compressed PNG pixels)
+	AlphaMask        []byte // Alpha mask data for PNG with transparency
+	Width            int    // Image width in pixels
+	Height           int    // Image height in pixels
+	ColorSpace       string // Color space: "DeviceRGB", "DeviceCMYK", "DeviceGray"
+	Format           string // Image format: "jpeg" or "png"
+	BitsPerComponent int    // Bits per component (usually 8)
+}
+
 // GraphicsOp represents a graphics drawing operation.
 //
 // This is an infrastructure-level representation of graphics operations
 // from the creator package.
 type GraphicsOp struct {
-	Type int // 0=line, 1=rect, 2=circle, 5=polygon, 6=polyline, 7=ellipse, 8=bezier
+	Type int // 0=line, 1=rect, 2=circle, 3=image, 4=watermark, 5=polygon, 6=polyline, 7=ellipse, 8=bezier
 
 	// Common fields
 	X float64
@@ -116,6 +127,9 @@ type GraphicsOp struct {
 	// Bezier fields
 	BezierSegs []BezierSegment
 	Closed     bool // For Bezier curves
+
+	// Image fields (for Type == 3)
+	Image *ImageData
 
 	// Appearance
 	StrokeColor     *RGB
@@ -307,6 +321,11 @@ func renderGraphicsOp(csw *ContentStreamWriter, gop GraphicsOp, resources *Resou
 		return renderRect(csw, gop)
 	case 2: // Circle
 		return renderCircle(csw, gop)
+	case 3: // Image
+		return renderImage(csw, gop, resources)
+	case 4: // Watermark
+		// TODO: Implement watermark rendering
+		return fmt.Errorf("watermark rendering not yet implemented (type 4)")
 	case 5: // Polygon
 		return renderPolygon(csw, gop)
 	case 6: // Polyline
@@ -776,6 +795,46 @@ func renderBezier(csw *ContentStreamWriter, gop GraphicsOp) error {
 	} else {
 		csw.Stroke()
 	}
+
+	// Restore graphics state
+	csw.RestoreState()
+	return nil
+}
+
+// renderImage renders an image to the content stream.
+//
+// This function:
+// 1. Registers the image in the resource dictionary (placeholder object number)
+// 2. Applies the CTM transformation to position/scale the image
+// 3. Draws the image using the Do operator
+//
+// PDF Image Rendering:
+// - Images are XObjects of type /Image
+// - The CTM (Current Transformation Matrix) is used to position and scale
+// - Format: width 0 0 height x y cm /ImN Do
+// - This scales the 1x1 unit square to width×height and translates to (x,y)
+//
+// Note: The actual image XObject will be created later by the writer
+// when it has access to object number allocation.
+func renderImage(csw *ContentStreamWriter, gop GraphicsOp, resources *ResourceDictionary) error {
+	if gop.Image == nil {
+		return fmt.Errorf("image data is nil")
+	}
+
+	// Validate dimensions
+	if gop.Width <= 0 || gop.Height <= 0 {
+		return fmt.Errorf("image dimensions must be positive: width=%.2f, height=%.2f", gop.Width, gop.Height)
+	}
+
+	// Register image in resources (object number will be set later)
+	imageResName := resources.AddImage(0) // Placeholder object number
+
+	// Apply CTM transformation: width 0 0 height x y cm
+	// This scales the 1x1 unit image to width×height and positions it at (x,y)
+	csw.ConcatMatrix(gop.Width, 0, 0, gop.Height, gop.X, gop.Y)
+
+	// Draw the image XObject
+	csw.writeOp(fmt.Sprintf("/%s", imageResName), "Do")
 
 	// Restore graphics state
 	csw.RestoreState()

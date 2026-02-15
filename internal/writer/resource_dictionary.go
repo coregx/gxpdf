@@ -144,6 +144,25 @@ func (rd *ResourceDictionary) AddImage(objNum int) string {
 	return name
 }
 
+// SetImageObjNum sets the object number for an existing image resource.
+//
+// This is used to update placeholder object numbers (0) with actual values
+// after XObjects are created.
+//
+// Parameters:
+//   - name: Image resource name (e.g., "Im1")
+//   - objNum: PDF object number
+//
+// Returns:
+//   - true if the image was found and updated, false otherwise
+func (rd *ResourceDictionary) SetImageObjNum(name string, objNum int) bool {
+	if _, exists := rd.xobjects[name]; !exists {
+		return false
+	}
+	rd.xobjects[name] = objNum
+	return true
+}
+
 // AddExtGState adds a graphics state resource and returns its resource name.
 //
 // Graphics states are named sequentially: GS1, GS2, GS3, etc.

@@ -394,6 +394,16 @@ func (w *PdfWriter) createPageWithAllContent(
 			}
 		}
 
+		// STEP 3.5: Create image XObjects for image operations and assign object numbers.
+		imageObjs, err := w.createAndAssignImageXObjects(graphicsOps, resources)
+		if err != nil {
+			// Log error but continue - don't fail the whole page
+			// TODO: Add logging when available
+			_ = err
+		} else {
+			fontObjs = append(fontObjs, imageObjs...)
+		}
+
 		// Write resources dictionary
 		pageDict.WriteString(" /Resources ")
 		pageDict.Write(resources.Bytes())
@@ -440,4 +450,150 @@ func (w *PdfWriter) createPageWithAllContent(
 func (w *PdfWriter) createPage(page *document.Page, objNum int, parentRef int) *IndirectObject {
 	pageObj, _, _ := w.createPageWithContent(page, objNum, parentRef, nil)
 	return pageObj
+}
+
+// createAndAssignImageXObjects creates image XObject dictionary objects for all image operations
+// and assigns their object numbers to the resource dictionary.
+//
+// This function:
+// 1. Collects all image operations from graphicsOps
+// 2. For each image, allocates an object number and creates the XObject
+// 3. Creates an SMask (soft mask) for images with alpha transparency
+// 4. Assigns the object numbers to the resource dictionary entries created during content stream generation
+//
+// Note: The resource dictionary already has placeholder image entries (Im1, Im2, etc.)
+// created during content stream generation. This function assigns real object numbers to them.
+//
+// Returns:
+//   - objects: Image XObject dictionary objects (and SMask objects)
+//   - error: Any error that occurred
+func (w *PdfWriter) createAndAssignImageXObjects(graphicsOps []GraphicsOp, resources *ResourceDictionary) ([]*IndirectObject, error) {
+	objects := make([]*IndirectObject, 0)
+
+	// Collect all images from graphics operations
+	images := make([]*ImageData, 0)
+	for _, gop := range graphicsOps {
+		if gop.Type == 3 && gop.Image != nil {
+			images = append(images, gop.Image)
+		}
+	}
+
+	// Create XObject for each image
+	for i, img := range images {
+		// Allocate object number for the image XObject
+		imageObjNum := w.allocateObjNum()
+
+		// Handle alpha mask (SMask) for PNG with transparency
+		var smaskObjNum int
+		if len(img.AlphaMask) > 0 {
+			smaskObjNum = w.allocateObjNum()
+			smaskObj := w.createSMaskObject(smaskObjNum, img)
+			objects = append(objects, smaskObj)
+		}
+
+		// Create the image XObject
+		imageObj := w.createImageXObject(imageObjNum, img, smaskObjNum)
+		objects = append(objects, imageObj)
+
+		// Set the object number in the resource dictionary
+		// The resource names (Im1, Im2, ...) were created during content stream generation
+		// We need to update them with the actual object numbers
+		imageResName := fmt.Sprintf("Im%d", i+1)
+		w.setImageResourceObjNum(resources, imageResName, imageObjNum)
+	}
+
+	return objects, nil
+}
+
+// setImageResourceObjNum sets the object number for an image resource.
+//
+// This is a helper function to update the resource dictionary after image XObjects are created.
+func (w *PdfWriter) setImageResourceObjNum(resources *ResourceDictionary, name string, objNum int) {
+	resources.SetImageObjNum(name, objNum)
+}
+
+// createImageXObject creates a PDF Image XObject dictionary.
+//
+// Format (JPEG):
+//
+//	N 0 obj
+//	<< /Type /XObject /Subtype /Image /Width W /Height H
+//	   /ColorSpace /DeviceRGB /BitsPerComponent 8
+//	   /Filter /DCTDecode /Length L >>
+//	stream
+//	... JPEG data ...
+//	endstream
+//	endobj
+//
+// Format (PNG with alpha):
+//
+//	N 0 obj
+//	<< /Type /XObject /Subtype /Image /Width W /Height H
+//	   /ColorSpace /DeviceRGB /BitsPerComponent 8
+//	   /Filter /FlateDecode /SMask M 0 R /Length L >>
+//	stream
+//	... compressed pixel data ...
+//	endstream
+//	endobj
+func (w *PdfWriter) createImageXObject(objNum int, img *ImageData, smaskObjNum int) *IndirectObject {
+	var buf bytes.Buffer
+
+	// Write stream dictionary
+	buf.WriteString("<< /Type /XObject /Subtype /Image")
+	buf.WriteString(fmt.Sprintf(" /Width %d /Height %d", img.Width, img.Height))
+	buf.WriteString(fmt.Sprintf(" /ColorSpace /%s", img.ColorSpace))
+	buf.WriteString(fmt.Sprintf(" /BitsPerComponent %d", img.BitsPerComponent))
+
+	// Add filter based on format
+	if img.Format == "jpeg" {
+		buf.WriteString(" /Filter /DCTDecode")
+	} else if img.Format == "png" {
+		buf.WriteString(" /Filter /FlateDecode")
+	}
+
+	// Add SMask reference if alpha mask exists
+	if smaskObjNum > 0 {
+		buf.WriteString(fmt.Sprintf(" /SMask %d 0 R", smaskObjNum))
+	}
+
+	// Write length
+	buf.WriteString(fmt.Sprintf(" /Length %d >>\n", len(img.Data)))
+
+	// Write stream
+	buf.WriteString("stream\n")
+	buf.Write(img.Data)
+	buf.WriteString("\nendstream")
+
+	return NewIndirectObject(objNum, 0, buf.Bytes())
+}
+
+// createSMaskObject creates a PDF SMask (soft mask) object for image transparency.
+//
+// Format:
+//
+//	N 0 obj
+//	<< /Type /XObject /Subtype /Image /Width W /Height H
+//	   /ColorSpace /DeviceGray /BitsPerComponent 8
+//	   /Filter /FlateDecode /Length L >>
+//	stream
+//	... compressed alpha data ...
+//	endstream
+//	endobj
+func (w *PdfWriter) createSMaskObject(objNum int, img *ImageData) *IndirectObject {
+	var buf bytes.Buffer
+
+	// Write stream dictionary
+	buf.WriteString("<< /Type /XObject /Subtype /Image")
+	buf.WriteString(fmt.Sprintf(" /Width %d /Height %d", img.Width, img.Height))
+	buf.WriteString(" /ColorSpace /DeviceGray")
+	buf.WriteString(" /BitsPerComponent 8")
+	buf.WriteString(" /Filter /FlateDecode")
+	buf.WriteString(fmt.Sprintf(" /Length %d >>\n", len(img.AlphaMask)))
+
+	// Write stream
+	buf.WriteString("stream\n")
+	buf.Write(img.AlphaMask)
+	buf.WriteString("\nendstream")
+
+	return NewIndirectObject(objNum, 0, buf.Bytes())
 }
