@@ -31,6 +31,11 @@ type FontDecoder struct {
 	// customEncoding is a custom glyph ID → Unicode mapping from /Encoding/Differences
 	// This is used when a font defines custom glyph mappings via the Differences array.
 	customEncoding map[uint16]rune
+
+	// isCompositeFont is true when the source font is a Type0 (composite) font.
+	// For composite fonts the 2-byte character codes are authoritative — the
+	// garbage heuristic fallback to 1-byte must never be applied.
+	isCompositeFont bool
 }
 
 // NewFontDecoder creates a new FontDecoder with the given CMap and encoding.
@@ -95,8 +100,12 @@ func (d *FontDecoder) DecodeString(glyphBytes []byte) string {
 	decodedStr := d.decodeWithGlyphSize(glyphBytes, d.use2ByteGlyphs)
 
 	// FALLBACK: If result contains too many non-printable chars (garbage),
-	// try alternate glyph size (1-byte if was 2-byte, vice versa)
-	if d.use2ByteGlyphs && d.looksLikeGarbage(decodedStr) {
+	// try alternate glyph size (1-byte if was 2-byte, vice versa).
+	//
+	// Exception: composite (Type0) fonts MUST NOT fall back to 1-byte decoding.
+	// Their 2-byte character codes are authoritative; applying a 1-byte fallback
+	// would silently corrupt every CID glyph ID above 0x00FF.
+	if d.use2ByteGlyphs && !d.isCompositeFont && d.looksLikeGarbage(decodedStr) {
 		// Try 1-byte glyphs instead
 		decodedStr1Byte := d.decodeWithGlyphSize(glyphBytes, false)
 		if !d.looksLikeGarbage(decodedStr1Byte) {

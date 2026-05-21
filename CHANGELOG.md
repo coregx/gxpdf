@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.1] - 2026-05-21
+
+### Fixed
+- **CID TrueType text extraction** — `ExtractTextFromPage()` now correctly decodes CID TrueType fonts with Identity-H encoding and ToUnicode CMap (#74, @iv7dev)
+  - Implemented `beginbfrange` array format parsing (previously silently skipped, producing empty CMap)
+  - Fixed `use2ByteGlyphs` detection for Identity-H encoding in all `loadFontDecoder` fallback paths
+  - Added `begincodespacerange` parsing to determine byte width from the PDF spec-defined signal
+  - Added UTF-16BE surrogate pair decoding in CMap destinations (for supplementary Unicode planes)
+  - Prevented `looksLikeGarbage` heuristic from downgrading composite (Type0) fonts to 1-byte mode
+
+---
+
 ## [0.8.0] - 2026-05-07 "Extraction & Access"
 
 ### Added
