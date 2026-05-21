@@ -601,16 +601,34 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 		}
 	}
 
+	// Detect whether this is a composite (Type0) font. Composite fonts use
+	// 2-byte character codes and must never be downgraded to 1-byte decoding.
+	isType0 := false
+	if subtypeObj := fontDict.Get("Subtype"); subtypeObj != nil {
+		if subtypeName, ok := subtypeObj.(*parser.Name); ok {
+			isType0 = subtypeName.Value() == "Type0"
+		}
+	}
+
+	// Identity-H/V and composite fonts always use 2-byte glyph codes.
+	use2ByteGlyphs := strings.Contains(encodingName, "Identity") || isType0
+
 	// Try to get ToUnicode CMap
 	toUnicodeObj := fontDict.Get("ToUnicode")
 	if toUnicodeObj == nil {
 		// No ToUnicode CMap - check if we have Differences array
 		if differences != nil && len(differences) > 0 {
-			// Create decoder with custom encoding (Differences array)
+			// Create decoder with custom encoding (Differences array).
+			// use2ByteGlyphs is false for simple fonts with Differences.
 			te.fontDecoders[fontName] = NewFontDecoderWithCustomEncoding(differences, encodingName, false)
 		} else {
-			// Fallback: create decoder with encoding name only
-			te.fontDecoders[fontName] = NewFontDecoder(nil, encodingName, false)
+			// Fallback: create decoder with encoding name only.
+			// For Identity-H/V and Type0 fonts, honor 2-byte mode.
+			decoder := NewFontDecoder(nil, encodingName, use2ByteGlyphs)
+			if isType0 {
+				decoder.isCompositeFont = true
+			}
+			te.fontDecoders[fontName] = decoder
 		}
 		return
 	}
@@ -628,7 +646,11 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 
 	if toUnicodeStream == nil {
 		// ToUnicode is not a stream - create decoder with encoding only
-		te.fontDecoders[fontName] = NewFontDecoder(nil, encodingName, false)
+		decoder := NewFontDecoder(nil, encodingName, use2ByteGlyphs)
+		if isType0 {
+			decoder.isCompositeFont = true
+		}
+		te.fontDecoders[fontName] = decoder
 		return
 	}
 
@@ -636,7 +658,11 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 	cmapData, err := te.decodeStream(toUnicodeStream)
 	if err != nil {
 		// Failed to decode stream - create decoder with encoding only
-		te.fontDecoders[fontName] = NewFontDecoder(nil, encodingName, false)
+		decoder := NewFontDecoder(nil, encodingName, use2ByteGlyphs)
+		if isType0 {
+			decoder.isCompositeFont = true
+		}
+		te.fontDecoders[fontName] = decoder
 		return
 	}
 
@@ -644,14 +670,25 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 	cmap, err := ParseCMapStream(cmapData)
 	if err != nil {
 		// Failed to parse CMap - create decoder with encoding only
-		te.fontDecoders[fontName] = NewFontDecoder(nil, encodingName, false)
+		decoder := NewFontDecoder(nil, encodingName, use2ByteGlyphs)
+		if isType0 {
+			decoder.isCompositeFont = true
+		}
+		te.fontDecoders[fontName] = decoder
 		return
 	}
 
+	// When begincodespacerange declared 2-byte codes, honor that even if
+	// no Identity encoding name was present (e.g. some CJK fonts).
+	if cmap.CodeBytes == 2 {
+		use2ByteGlyphs = true
+	}
+
 	// Create decoder with CMap
-	// Important: Identity-H/Identity-V encodings always use 2-byte glyphs
-	use2ByteGlyphs := strings.Contains(encodingName, "Identity")
 	decoder := NewFontDecoder(cmap, encodingName, use2ByteGlyphs)
+	if isType0 {
+		decoder.isCompositeFont = true
+	}
 
 	// Add Differences array if present (for fonts with custom encoding)
 	if differences != nil && len(differences) > 0 {

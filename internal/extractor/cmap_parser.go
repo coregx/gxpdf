@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 )
 
 // CMapTable represents a Character Map that maps glyph IDs to Unicode code points.
@@ -25,13 +26,19 @@ type CMapTable struct {
 
 	// name is the CMap name (e.g., "Adobe-Identity-UCS")
 	name string
+
+	// CodeBytes is the number of bytes per character code as declared in
+	// begincodespacerange. 1 for single-byte fonts, 2 for CIDFonts with
+	// Identity-H/V encoding. Defaults to 1 when not parsed.
+	CodeBytes int
 }
 
 // NewCMapTable creates a new empty CMapTable.
 func NewCMapTable(name string) *CMapTable {
 	return &CMapTable{
-		mappings: make(map[uint16]rune),
-		name:     name,
+		mappings:  make(map[uint16]rune),
+		name:      name,
+		CodeBytes: 1, // default; overridden by begincodespacerange
 	}
 }
 
@@ -142,6 +149,15 @@ func (p *CMapParser) Parse() (*CMapTable, error) {
 				table.name = strings.TrimPrefix(name, "/")
 			}
 
+		case "begincodespacerange":
+			// Parse code space range to determine bytes-per-character-code.
+			// Format:
+			//   N begincodespacerange
+			//   <low> <high>
+			//   ...
+			//   endcodespacerange
+			p.parseCodeSpaceRange(table)
+
 		case "beginbfchar":
 			// Parse single character mappings
 			if err := p.parseBfChar(table); err != nil {
@@ -172,6 +188,8 @@ func (p *CMapParser) Parse() (*CMapTable, error) {
 //	<srcCode2> <dstCode2>
 //	...
 //	endbfchar
+//
+// The destination code may be a UTF-16BE surrogate pair (8 hex chars = 4 bytes).
 func (p *CMapParser) parseBfChar(table *CMapTable) error {
 	for {
 		token := p.nextToken()
@@ -191,20 +209,21 @@ func (p *CMapParser) parseBfChar(table *CMapTable) error {
 			return fmt.Errorf("invalid bfchar mapping: missing destination code")
 		}
 
-		// Parse hex strings
+		// Parse source glyph ID
 		glyphID, err := parseHexString(srcCode)
 		if err != nil {
 			// Skip invalid mappings
 			continue
 		}
 
-		unicode, err := parseHexString(dstCode)
+		// Parse destination as UTF-16BE (handles surrogate pairs)
+		r, err := decodeUTF16BEHex(dstCode)
 		if err != nil {
 			// Skip invalid mappings
 			continue
 		}
 
-		table.AddMapping(uint16(glyphID), rune(unicode))
+		table.AddMapping(uint16(glyphID), r)
 	}
 
 	return nil
@@ -212,15 +231,17 @@ func (p *CMapParser) parseBfChar(table *CMapTable) error {
 
 // parseBfRange parses beginbfrange...endbfrange section.
 //
-// Format:
+// Supports two forms:
 //
-//	2 beginbfrange
-//	<srcCodeLow1> <srcCodeHigh1> <dstCodeLow1>
-//	<srcCodeLow2> <srcCodeHigh2> <dstCodeLow2>
-//	...
-//	endbfrange
+//  1. Scalar form (consecutive Unicode block):
+//     <srcLow> <srcHigh> <dstLow>
+//     Maps srcLow+i → dstLow+i for each i in [0, srcHigh-srcLow].
 //
-// Maps a range of source codes to consecutive destination codes.
+//  2. Array form (explicit per-code mapping):
+//     <srcLow> <srcHigh> [<dst0> <dst1> ... <dstN>]
+//     Maps srcLow+i → dst_i exactly.
+//
+// Reference: PDF 1.7 specification, Section 9.7.5 (ToUnicode CMaps).
 func (p *CMapParser) parseBfRange(table *CMapTable) error {
 	for {
 		token := p.nextToken()
@@ -235,17 +256,17 @@ func (p *CMapParser) parseBfRange(table *CMapTable) error {
 
 		srcLow := token
 		srcHigh := p.nextToken()
-		dstLow := p.nextToken()
+		dstToken := p.nextToken()
 
-		if srcHigh == "" || dstLow == "" {
+		if srcHigh == "" || dstToken == "" {
 			return fmt.Errorf("invalid bfrange mapping: incomplete range")
 		}
 
-		if !strings.HasPrefix(srcHigh, "<") || !strings.HasPrefix(dstLow, "<") {
+		if !strings.HasPrefix(srcHigh, "<") {
 			continue
 		}
 
-		// Parse hex strings
+		// Parse source range boundaries
 		startGlyphID, err := parseHexString(srcLow)
 		if err != nil {
 			continue
@@ -256,23 +277,206 @@ func (p *CMapParser) parseBfRange(table *CMapTable) error {
 			continue
 		}
 
-		startUnicode, err := parseHexString(dstLow)
+		// Array form: [<dst0> <dst1> ... <dstN>]
+		// nextToken() returns the full "[...]" as a single token.
+		if strings.HasPrefix(dstToken, "[") {
+			p.parseBfRangeArray(table, uint16(startGlyphID), uint16(endGlyphID), dstToken)
+			continue
+		}
+
+		// Scalar form: <dstLow> — consecutive Unicode block
+		if !strings.HasPrefix(dstToken, "<") {
+			continue
+		}
+
+		startUnicode, err := decodeUTF16BEHex(dstToken)
 		if err != nil {
 			continue
 		}
 
-		// Check for array format: <srcLow> <srcHigh> [<dst1> <dst2> ...]
-		// For now, we only support scalar destination (most common case)
-		if strings.HasPrefix(dstLow, "[") {
-			// Array format - skip for now (Phase 1)
-			// This would map each source code to a specific destination code
-			continue
-		}
-
-		table.AddRangeMapping(uint16(startGlyphID), uint16(endGlyphID), rune(startUnicode))
+		table.AddRangeMapping(uint16(startGlyphID), uint16(endGlyphID), startUnicode)
 	}
 
 	return nil
+}
+
+// parseBfRangeArray handles the array form of bfrange:
+//
+//	<srcLow> <srcHigh> [<dst0> <dst1> ... <dstN>]
+//
+// Each element in the array is a hex string that maps to the corresponding
+// source code: srcLow+i → dst_i. The array token has already been consumed
+// by nextToken() as the full "[...]" string.
+func (p *CMapParser) parseBfRangeArray(table *CMapTable, srcLow, srcHigh uint16, arrayToken string) {
+	// Strip the enclosing brackets
+	inner := strings.TrimPrefix(arrayToken, "[")
+	inner = strings.TrimSuffix(inner, "]")
+	inner = strings.TrimSpace(inner)
+
+	if inner == "" {
+		return
+	}
+
+	// Parse individual hex tokens from the bracket content.
+	// Each token is of the form <XXXX>.
+	hexTokens := extractHexTokensFromArray(inner)
+
+	srcCode := srcLow
+	for _, hexToken := range hexTokens {
+		if srcCode > srcHigh {
+			break
+		}
+
+		r, err := decodeUTF16BEHex(hexToken)
+		if err != nil {
+			srcCode++
+			continue
+		}
+
+		table.AddMapping(srcCode, r)
+		srcCode++
+	}
+}
+
+// extractHexTokensFromArray parses the interior of a [...] bracket, extracting
+// individual <hex> tokens. Non-hex content is silently skipped.
+func extractHexTokensFromArray(s string) []string {
+	var tokens []string
+	for i := 0; i < len(s); {
+		// Skip whitespace
+		if s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' {
+			i++
+			continue
+		}
+		if s[i] == '<' {
+			// Find the closing >
+			end := strings.IndexByte(s[i:], '>')
+			if end < 0 {
+				break
+			}
+			tokens = append(tokens, s[i:i+end+1])
+			i += end + 1
+			continue
+		}
+		i++
+	}
+	return tokens
+}
+
+// parseCodeSpaceRange parses the begincodespacerange...endcodespacerange section.
+//
+// Format:
+//
+//	N begincodespacerange
+//	<low> <high>
+//	...
+//	endcodespacerange
+//
+// The hex string length of <low> or <high> reveals the bytes-per-code:
+// 2 hex chars = 1 byte, 4 hex chars = 2 bytes.
+// We use the first entry to set table.CodeBytes.
+func (p *CMapParser) parseCodeSpaceRange(table *CMapTable) {
+	first := true
+	for {
+		token := p.nextToken()
+		if token == "" || token == "endcodespacerange" {
+			break
+		}
+
+		if !strings.HasPrefix(token, "<") {
+			continue
+		}
+
+		// Consume the matching high end token
+		high := p.nextToken()
+		if high == "" {
+			break
+		}
+
+		if first {
+			// Hex string body length: strip < and >
+			body := strings.TrimPrefix(token, "<")
+			body = strings.TrimSuffix(body, ">")
+			// 4 hex chars = 2 bytes (CIDFont), 2 hex chars = 1 byte (simple font)
+			if len(body) >= 4 {
+				table.CodeBytes = 2
+			} else {
+				table.CodeBytes = 1
+			}
+			first = false
+		}
+	}
+}
+
+// decodeUTF16BEHex decodes a hex string (e.g., "<0041>" or "<D83DDE00>") to a rune.
+//
+// The hex string may encode:
+//   - A single BMP code point (2 bytes / 4 hex chars): decode as big-endian uint16
+//   - A UTF-16BE surrogate pair (4 bytes / 8 hex chars): decode via utf16.DecodeRune
+//
+// Returns an error for empty or malformed input.
+func decodeUTF16BEHex(hexStr string) (rune, error) {
+	body := strings.TrimPrefix(hexStr, "<")
+	body = strings.TrimSuffix(body, ">")
+
+	if body == "" {
+		return 0, fmt.Errorf("empty hex string")
+	}
+
+	// Pad odd-length hex strings to even (shouldn't normally happen)
+	if len(body)%2 != 0 {
+		body = "0" + body
+	}
+
+	// Parse raw bytes
+	rawBytes, err := hexStringToBytes(body)
+	if err != nil {
+		return 0, err
+	}
+
+	switch len(rawBytes) {
+	case 1:
+		return rune(rawBytes[0]), nil
+	case 2:
+		// Single BMP code point
+		u16 := uint16(rawBytes[0])<<8 | uint16(rawBytes[1])
+		return rune(u16), nil
+	case 4:
+		// Possible UTF-16BE surrogate pair
+		high := uint16(rawBytes[0])<<8 | uint16(rawBytes[1])
+		low := uint16(rawBytes[2])<<8 | uint16(rawBytes[3])
+		if high >= 0xD800 && high <= 0xDBFF {
+			// Confirmed surrogate pair
+			return utf16.DecodeRune(rune(high), rune(low)), nil
+		}
+		// Not a surrogate — treat as 32-bit code point (rare)
+		cp := rune(rawBytes[0])<<24 | rune(rawBytes[1])<<16 | rune(rawBytes[2])<<8 | rune(rawBytes[3])
+		return cp, nil
+	default:
+		// For > 4 bytes, fall back to integer parsing
+		val, err2 := strconv.ParseInt(body, 16, 64)
+		if err2 != nil {
+			return 0, fmt.Errorf("invalid hex string %q: %w", hexStr, err2)
+		}
+		return rune(val), nil
+	}
+}
+
+// hexStringToBytes converts a hex string (no angle brackets) to a byte slice.
+func hexStringToBytes(hex string) ([]byte, error) {
+	if len(hex)%2 != 0 {
+		return nil, fmt.Errorf("odd-length hex string: %q", hex)
+	}
+	result := make([]byte, len(hex)/2)
+	for i := range result {
+		nibbles := hex[i*2 : i*2+2]
+		val, err := strconv.ParseUint(nibbles, 16, 8)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hex byte %q in %q: %w", nibbles, hex, err)
+		}
+		result[i] = byte(val)
+	}
+	return result, nil
 }
 
 // nextToken reads the next token from the stream.
