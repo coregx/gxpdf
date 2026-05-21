@@ -130,6 +130,14 @@ Page sizes, custom dimensions, landscape orientation, and text rotation:
 
 ## Current Development
 
+### v0.8.2
+
+**Released**: May 2026
+
+- **Per-glyph text merging** (#74) — wkhtmltopdf single-Tj-per-glyph output now merged into words via spatial gap detection
+- **Form XObject extraction** (#74) — TCPDF content inside `Do` Form XObjects now extracted with resource stack and recursion guard
+- Real-world CID TrueType test fixtures from @iv7dev
+
 ### v0.8.1
 
 **Released**: May 2026
