@@ -130,6 +130,13 @@ Page sizes, custom dimensions, landscape orientation, and text rotation:
 
 ## Current Development
 
+### v0.8.1
+
+**Released**: May 2026
+
+- **CID TrueType text extraction fix** (#74, @iv7dev) — `ExtractTextFromPage()` now correctly decodes CID TrueType fonts with Identity-H encoding (wkhtmltopdf, TCPDF, CJK generators)
+- Fixed: `beginbfrange` array format, `begincodespacerange` parsing, UTF-16BE surrogate pairs, composite font 2-byte detection
+
 ### v0.8.0 "Extraction & Access"
 
 **Released**: May 2026
