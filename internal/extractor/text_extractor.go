@@ -14,6 +14,34 @@ import (
 // filterFlateDecode is the PDF filter name for zlib/deflate compression.
 const filterFlateDecode = "FlateDecode"
 
+// glyphMergeGapFactor is the maximum gap between two adjacent TextElements,
+// expressed as a multiple of the font size, that is still treated as
+// intra-word spacing rather than a word boundary.
+//
+// wkhtmltopdf and similar generators emit one Tj per glyph with explicit Td
+// kerning moves. The per-glyph advance distances are typically in the range
+// 0.3–0.9 × fontSize. We use 1.5 × fontSize as the merge threshold so that
+// normal kerning and slight CID tracking are absorbed, while genuine inter-word
+// gaps (which are usually ≥ 2 × fontSize for body text) remain as separate
+// elements.
+const glyphMergeGapFactor = 1.5
+
+// wordSpaceGapFactor is the minimum gap between two adjacent TextElements,
+// expressed as a multiple of the font size, above which a space character is
+// inserted when assembling the final text string from a slice of TextElements.
+//
+// This constant is exported for use by the assembleText helper and is kept in
+// sync with the merge threshold: a gap that was too large to merge is treated
+// as a word boundary and receives a space.
+const wordSpaceGapFactor = 1.0
+
+// maxXObjectDepth limits Form XObject recursion to prevent infinite loops.
+//
+// The PDF specification does not forbid cyclic XObject references, so we
+// cap the recursion depth. In practice, shipping-label PDFs produced by
+// TCPDF use at most 2 levels of nesting.
+const maxXObjectDepth = 8
+
 // TextExtractor extracts text with positional information from PDF pages.
 //
 // The extractor processes PDF content streams and interprets text operators
@@ -27,14 +55,23 @@ const filterFlateDecode = "FlateDecode"
 //  4. Track text state (font, position, matrix)
 //  5. Extract text with coordinates when text showing operators are encountered
 //  6. Decode glyph bytes to Unicode using font CMap/encoding
+//  7. Recurse into Form XObjects (Do operator) for nested content
 //
-// Reference: PDF 1.7 specification, Section 9.4 (Text Objects).
+// Reference: PDF 1.7 specification, Sections 9.4 (Text Objects), 8.8.1 (Form XObjects).
 type TextExtractor struct {
 	reader        *parser.Reader
 	textState     *TextState
 	elements      []*TextElement
 	fontDecoders  map[string]*FontDecoder // fontName -> FontDecoder
 	pageResources *parser.Dictionary      // Current page resources
+
+	// resourceStack holds the saved resource context across Form XObject calls.
+	// Each Do operator pushes the current resources; on return they are restored.
+	resourceStack []*parser.Dictionary
+
+	// xobjectDepth is the current Form XObject recursion depth.
+	// It is incremented on every Do call and decremented on return.
+	xobjectDepth int
 }
 
 // NewTextExtractor creates a new TextExtractor for the given PDF reader.
@@ -90,7 +127,176 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 		te.processOperator(op)
 	}
 
+	// Merge per-glyph TextElements that belong to the same word.
+	//
+	// Generators such as wkhtmltopdf emit one Tj operator per glyph with
+	// explicit Td kerning moves between them. This produces one TextElement
+	// per character, which causes callers that concatenate elements with
+	// separating spaces to produce "D O M I C I L I O" instead of
+	// "DOMICILIO". mergeAdjacentElements collapses runs of same-line,
+	// positionally-adjacent elements into single word-level TextElements.
+	te.elements = mergeAdjacentElements(te.elements)
+
 	return te.elements, nil
+}
+
+// mergeAdjacentElements collapses per-glyph TextElements into word-level runs.
+//
+// PDF generators such as wkhtmltopdf (used by Andreani shipping labels) emit
+// each glyph as a separate Tj operator preceded by a Td kern move:
+//
+//	325.9 -63 Td <0001> Tj
+//	7.17  0   Td <0002> Tj   ← next glyph, ~7 pts to the right
+//	7.58  0   Td <0003> Tj
+//
+// This creates one TextElement per character. When callers concatenate
+// elements with a separating space they produce "D O M I C I L I O"
+// instead of "DOMICILIO".
+//
+// The function groups consecutive elements that:
+//   - Share the same font and approximate Y coordinate (same text line), and
+//   - Have a gap between the right edge of the previous element and the left
+//     edge of the current one that is at most glyphMergeGapFactor × fontSize.
+//
+// Merged elements receive the concatenated text, the X/Y of the first element,
+// and a combined width. Elements separated by a larger gap are kept distinct
+// (word boundary) so that word-spacing logic in callers remains correct.
+//
+// This operation is idempotent: running it on already-merged output is a no-op.
+func mergeAdjacentElements(elements []*TextElement) []*TextElement {
+	if len(elements) == 0 {
+		return elements
+	}
+
+	merged := make([]*TextElement, 0, len(elements))
+	current := elements[0]
+
+	for _, next := range elements[1:] {
+		// Determine whether 'next' should be merged into 'current'.
+		if canMerge(current, next) {
+			// Extend current element: append text and widen bounding box.
+			current = &TextElement{
+				Text:     current.Text + next.Text,
+				X:        current.X,
+				Y:        current.Y,
+				Width:    (next.X + next.Width) - current.X,
+				Height:   current.Height,
+				FontName: current.FontName,
+				FontSize: current.FontSize,
+			}
+		} else {
+			// Word boundary — commit the current run and start a new one.
+			merged = append(merged, current)
+			current = next
+		}
+	}
+
+	// Commit the last run.
+	merged = append(merged, current)
+	return merged
+}
+
+// canMerge reports whether two TextElements should be merged into one run.
+//
+// Two elements are merge-candidates when:
+//  1. They share the same font name.
+//  2. Their Y coordinates are within half a font-height of each other
+//     (same text line, tolerating minor baseline shifts from Ts).
+//  3. The gap from the right edge of 'a' to the left edge of 'b' is no wider
+//     than glyphMergeGapFactor × fontSize (intra-word kerning, not a word gap).
+//  4. 'b' starts to the right of 'a' (horizontal flow only; vertical moves
+//     like T* are excluded by the Y-coordinate check).
+func canMerge(a, b *TextElement) bool {
+	// Same font is required — different fonts signal a formatting change.
+	if a.FontName != b.FontName {
+		return false
+	}
+
+	// Same approximate font size (allow 0.5 pt tolerance for rounding).
+	const fontSizeTol = 0.5
+	if a.FontSize-b.FontSize > fontSizeTol || b.FontSize-a.FontSize > fontSizeTol {
+		return false
+	}
+
+	// Same line: Y coordinates must be within half the font height.
+	lineToleranceY := a.Height * 0.5
+	if lineToleranceY < 1.0 {
+		lineToleranceY = 1.0
+	}
+	dy := a.Y - b.Y
+	if dy < 0 {
+		dy = -dy
+	}
+	if dy > lineToleranceY {
+		return false
+	}
+
+	// 'b' must start to the right of 'a' (left-to-right flow).
+	if b.X < a.X {
+		return false
+	}
+
+	// Gap between right edge of 'a' and left edge of 'b'.
+	gap := b.X - (a.X + a.Width)
+
+	// Negative gap means the elements overlap — that is normal for CID fonts
+	// whose width estimate is a rough heuristic. Treat overlap as merge-eligible.
+	if gap <= 0 {
+		return true
+	}
+
+	// Positive gap: merge only if the gap is within the intra-word threshold.
+	threshold := a.FontSize * glyphMergeGapFactor
+	return gap <= threshold
+}
+
+// AssembleText converts a slice of TextElements into a readable string.
+//
+// Word boundaries are detected spatially: when the gap between the right
+// edge of one element and the left edge of the next exceeds
+// wordSpaceGapFactor × fontSize, a space is inserted. Elements on different
+// lines (Y change > half font-height) receive a newline.
+//
+// This function is used by the public API (document.go / page.go) and is
+// exported so that table-extraction consumers can apply the same logic.
+func AssembleText(elements []*TextElement) string {
+	if len(elements) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(elements) * 4) // rough pre-allocation
+
+	sb.WriteString(elements[0].Text)
+
+	for i := 1; i < len(elements); i++ {
+		prev := elements[i-1]
+		curr := elements[i]
+
+		// Detect line break (different Y).
+		lineToleranceY := prev.Height * 0.5
+		if lineToleranceY < 1.0 {
+			lineToleranceY = 1.0
+		}
+		dy := prev.Y - curr.Y
+		if dy < 0 {
+			dy = -dy
+		}
+		if dy > lineToleranceY {
+			sb.WriteByte('\n')
+			sb.WriteString(curr.Text)
+			continue
+		}
+
+		// Same line: decide whether a space is needed.
+		gap := curr.X - (prev.X + prev.Width)
+		if gap > prev.FontSize*wordSpaceGapFactor {
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(curr.Text)
+	}
+
+	return sb.String()
 }
 
 // getPageContent retrieves and decodes the content stream(s) for a page.
@@ -390,6 +596,16 @@ func (te *TextExtractor) processOperator(op *Operator) {
 				te.addTextBytes(str.Bytes())
 			}
 		}
+
+	case "Do": // Invoke named XObject (Section 8.8)
+		// Form XObjects may contain text. We recurse into them so that PDFs
+		// that place all page content inside XObjects (e.g. TCPDF shipping
+		// labels) are extracted correctly.
+		if len(op.Operands) >= 1 {
+			if name, ok := op.Operands[0].(*parser.Name); ok {
+				te.processFormXObject(name.Value())
+			}
+		}
 	}
 }
 
@@ -454,6 +670,146 @@ func (te *TextExtractor) processTextArray(arr *parser.Array) {
 			}
 		}
 	}
+}
+
+// processFormXObject processes a Form XObject referenced by a Do operator.
+//
+// TCPDF and similar PDF generators place all content (text, graphics) inside
+// Form XObjects rather than directly in the page content stream. The Do operator
+// invokes such objects by name. We recurse into them to extract their text.
+//
+// Execution model:
+//  1. Look up the named XObject in the current resource context (pageResources).
+//  2. Verify it is a Form XObject (/Subtype /Form).
+//  3. Push the current resources onto the stack and replace them with the
+//     XObject's own /Resources (if any), so font lookups use the correct context.
+//  4. Parse and process the XObject's content stream operators.
+//  5. Pop the saved resources to restore the caller's context.
+//
+// Infinite-recursion guard: recursion is capped at maxXObjectDepth levels.
+//
+// Reference: PDF 1.7 specification, Section 8.8.1 (Form XObjects).
+//
+//nolint:cyclop // XObject resolution requires several type-assertion branches
+func (te *TextExtractor) processFormXObject(xobjName string) {
+	// Guard against infinite recursion
+	if te.xobjectDepth >= maxXObjectDepth {
+		return
+	}
+
+	// Resolve the XObject dictionary from the current resource context
+	xobjectStream := te.resolveXObject(xobjName)
+	if xobjectStream == nil {
+		return
+	}
+
+	// Only handle Form XObjects (/Subtype /Form)
+	subtypeObj := xobjectStream.Dictionary().Get("Subtype")
+	if subtypeName, ok := subtypeObj.(*parser.Name); !ok || subtypeName.Value() != "Form" {
+		return
+	}
+
+	// Decode the XObject content stream
+	contentData, err := te.decodeStream(xobjectStream)
+	if err != nil || len(contentData) == 0 {
+		return
+	}
+
+	// Push current resources and switch to XObject's resources (if present)
+	savedResources := te.pageResources
+	te.resourceStack = append(te.resourceStack, savedResources)
+	te.xobjectDepth++
+
+	xobjResources := te.getXObjectResources(xobjectStream)
+	if xobjResources != nil {
+		te.pageResources = xobjResources
+	}
+
+	// Parse and process the XObject's content stream
+	contentParser := NewContentParser(contentData)
+	operators, err := contentParser.ParseOperators()
+	if err == nil {
+		for _, op := range operators {
+			te.processOperator(op)
+		}
+	}
+
+	// Restore saved resources and depth counter
+	te.xobjectDepth--
+	if len(te.resourceStack) > 0 {
+		te.pageResources = te.resourceStack[len(te.resourceStack)-1]
+		te.resourceStack = te.resourceStack[:len(te.resourceStack)-1]
+	} else {
+		te.pageResources = savedResources
+	}
+}
+
+// resolveXObject looks up a named XObject from the current pageResources and
+// returns the resolved Stream, or nil if not found or not a stream.
+func (te *TextExtractor) resolveXObject(name string) *parser.Stream {
+	if te.pageResources == nil {
+		return nil
+	}
+
+	xobjDictObj := te.pageResources.Get("XObject")
+	if xobjDictObj == nil {
+		return nil
+	}
+
+	// Resolve indirect reference
+	if ref, ok := xobjDictObj.(*parser.IndirectReference); ok {
+		resolved, err := te.reader.GetObject(ref.Number)
+		if err != nil {
+			return nil
+		}
+		xobjDictObj = resolved
+	}
+
+	xobjDict, ok := xobjDictObj.(*parser.Dictionary)
+	if !ok {
+		return nil
+	}
+
+	// Look up the specific XObject by name
+	xobj := xobjDict.Get(name)
+	if xobj == nil {
+		return nil
+	}
+
+	// Resolve indirect reference to the XObject itself
+	if ref, ok := xobj.(*parser.IndirectReference); ok {
+		resolved, err := te.reader.GetObject(ref.Number)
+		if err != nil {
+			return nil
+		}
+		xobj = resolved
+	}
+
+	stream, _ := xobj.(*parser.Stream)
+	return stream
+}
+
+// getXObjectResources extracts the /Resources dictionary from a Form XObject stream.
+//
+// Form XObjects may declare their own font and other resource dictionaries.
+// When they do, those resources take precedence for the duration of the XObject.
+// Returns nil when the XObject has no /Resources entry.
+func (te *TextExtractor) getXObjectResources(stream *parser.Stream) *parser.Dictionary {
+	resourcesObj := stream.Dictionary().Get("Resources")
+	if resourcesObj == nil {
+		return nil
+	}
+
+	if ref, ok := resourcesObj.(*parser.IndirectReference); ok {
+		resolved, err := te.reader.GetObject(ref.Number)
+		if err != nil {
+			return nil
+		}
+		resourcesObj = resolved
+	}
+
+	dict, _ := resourcesObj.(*parser.Dictionary)
+	return dict
 }
 
 // getNumber extracts a numeric value from a PDF object.

@@ -43,11 +43,7 @@ func (p *Page) ExtractText() string {
 		return ""
 	}
 
-	var result string
-	for _, elem := range elements {
-		result += elem.Text + " "
-	}
-	return result
+	return extractor.AssembleText(elements)
 }
 
 // ExtractTextElements extracts positioned text elements from the page.

@@ -306,11 +306,7 @@ func (d *Document) ExtractTextFromPage(pageNum int) (string, error) {
 		return "", fmt.Errorf("failed to extract text from page %d: %w", pageNum, err)
 	}
 
-	var result string
-	for _, elem := range elements {
-		result += elem.Text + " "
-	}
-	return result, nil
+	return extractor.AssembleText(elements), nil
 }
 
 // ExtractTextElementsFromPage extracts positioned text elements from a specific page.
