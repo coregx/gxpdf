@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.8.3] - 2026-07-22
+
 ### Fixed
 - **Unicode metadata encoding** — `SetTitle()`, `SetAuthor()`, `SetMetadata()` and Builder equivalents now correctly encode non-Latin text (Cyrillic, CJK, Arabic, Greek, emoji) as UTF-16BE hex strings with BOM per PDF spec §7.9.2.4 (#77)
   - Previously, non-ASCII characters in Info dictionary, annotations, form fields, and signature metadata rendered as mojibake in all PDF viewers
