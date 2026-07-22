@@ -106,6 +106,7 @@ fmt.Println(infos[0].SignedBy, infos[0].Valid) // "CN=Test" true
 - **Images** - JPEG and PNG with transparency support
 - **Fonts** - Standard 14 PDF fonts + TTF/OTF embedding with full Unicode support (Cyrillic, CJK, symbols)
 - **Document Structure** - Chapters, auto-generated Table of Contents
+- **Unicode Metadata** - Full Unicode support in PDF Info dictionary, annotations, form fields, and signatures (Cyrillic, CJK, Arabic, emoji)
 - **Annotations** - Sticky notes, highlights, underlines, stamps
 - **Interactive Forms** - Text fields, checkboxes, radio buttons, dropdowns
 - **Security** - RC4 (40/128-bit) and AES (128/256-bit) encryption
