@@ -269,14 +269,12 @@ func createTextAnnotationObject(objNum int, annot *document.TextAnnotation) *Ind
 
 	// Contents (pop-up text).
 	if annot.Contents != "" {
-		escapedContents := EscapePDFString(annot.Contents)
-		buf.WriteString(fmt.Sprintf(" /Contents (%s)", escapedContents))
+		buf.WriteString(fmt.Sprintf(" /Contents %s", EncodeTextString(annot.Contents)))
 	}
 
 	// Title (author).
 	if annot.Title != "" {
-		escapedTitle := EscapePDFString(annot.Title)
-		buf.WriteString(fmt.Sprintf(" /T (%s)", escapedTitle))
+		buf.WriteString(fmt.Sprintf(" /T %s", EncodeTextString(annot.Title)))
 	}
 
 	// Color.
@@ -350,14 +348,12 @@ func createMarkupAnnotationObject(objNum int, annot *document.MarkupAnnotation) 
 
 	// Title (author).
 	if annot.Title != "" {
-		escapedTitle := EscapePDFString(annot.Title)
-		buf.WriteString(fmt.Sprintf(" /T (%s)", escapedTitle))
+		buf.WriteString(fmt.Sprintf(" /T %s", EncodeTextString(annot.Title)))
 	}
 
 	// Contents (note).
 	if annot.Contents != "" {
-		escapedContents := EscapePDFString(annot.Contents)
-		buf.WriteString(fmt.Sprintf(" /Contents (%s)", escapedContents))
+		buf.WriteString(fmt.Sprintf(" /Contents %s", EncodeTextString(annot.Contents)))
 	}
 
 	buf.WriteString(" >>")
@@ -400,14 +396,12 @@ func createStampAnnotationObject(objNum int, annot *document.StampAnnotation) *I
 
 	// Title (author).
 	if annot.Title != "" {
-		escapedTitle := EscapePDFString(annot.Title)
-		buf.WriteString(fmt.Sprintf(" /T (%s)", escapedTitle))
+		buf.WriteString(fmt.Sprintf(" /T %s", EncodeTextString(annot.Title)))
 	}
 
 	// Contents (note).
 	if annot.Contents != "" {
-		escapedContents := EscapePDFString(annot.Contents)
-		buf.WriteString(fmt.Sprintf(" /Contents (%s)", escapedContents))
+		buf.WriteString(fmt.Sprintf(" /Contents %s", EncodeTextString(annot.Contents)))
 	}
 
 	buf.WriteString(" >>")

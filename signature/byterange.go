@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/coregx/gxpdf/internal/writer"
 )
 
 const (
@@ -76,13 +78,13 @@ func buildSignedPDF(pdfData []byte, cfg *signConfig) (*signResult, error) {
 	fmt.Fprintf(&appendBuf, " /M (D:%s)", signTimeStr)
 
 	if cfg.reason != "" {
-		fmt.Fprintf(&appendBuf, " /Reason (%s)", escapePDFString(cfg.reason))
+		fmt.Fprintf(&appendBuf, " /Reason %s", writer.EncodeTextString(cfg.reason))
 	}
 	if cfg.location != "" {
-		fmt.Fprintf(&appendBuf, " /Location (%s)", escapePDFString(cfg.location))
+		fmt.Fprintf(&appendBuf, " /Location %s", writer.EncodeTextString(cfg.location))
 	}
 	if cfg.contactInfo != "" {
-		fmt.Fprintf(&appendBuf, " /ContactInfo (%s)", escapePDFString(cfg.contactInfo))
+		fmt.Fprintf(&appendBuf, " /ContactInfo %s", writer.EncodeTextString(cfg.contactInfo))
 	}
 
 	// /ByteRange placeholder — fixed-width so patching does not shift offsets.
@@ -266,12 +268,4 @@ func parsePDFInt(s, key string) (int, error) {
 		return 0, fmt.Errorf("no value after %s", key)
 	}
 	return strconv.Atoi(parts[0])
-}
-
-// escapePDFString escapes backslash and parentheses for use inside PDF literal strings.
-func escapePDFString(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, "(", `\(`)
-	s = strings.ReplaceAll(s, ")", `\)`)
-	return s
 }

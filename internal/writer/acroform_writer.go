@@ -69,25 +69,21 @@ func createFormFieldObject(objNum int, field *document.FormField) *IndirectObjec
 	buf.WriteString(fmt.Sprintf(" /FT /%s", field.FieldType()))
 
 	// Field name (/T)
-	escapedName := EscapePDFString(field.Name())
-	buf.WriteString(fmt.Sprintf(" /T (%s)", escapedName))
+	buf.WriteString(fmt.Sprintf(" /T %s", EncodeTextString(field.Name())))
 
 	// Field value (/V)
 	if field.Value() != "" {
-		escapedValue := EscapePDFString(field.Value())
-		buf.WriteString(fmt.Sprintf(" /V (%s)", escapedValue))
+		buf.WriteString(fmt.Sprintf(" /V %s", EncodeTextString(field.Value())))
 	}
 
 	// Default value (/DV)
 	if field.DefaultValue() != "" {
-		escapedDefault := EscapePDFString(field.DefaultValue())
-		buf.WriteString(fmt.Sprintf(" /DV (%s)", escapedDefault))
+		buf.WriteString(fmt.Sprintf(" /DV %s", EncodeTextString(field.DefaultValue())))
 	}
 
 	// Alternate text for accessibility (/TU)
 	if field.AlternateText() != "" {
-		escapedAltText := EscapePDFString(field.AlternateText())
-		buf.WriteString(fmt.Sprintf(" /TU (%s)", escapedAltText))
+		buf.WriteString(fmt.Sprintf(" /TU %s", EncodeTextString(field.AlternateText())))
 	}
 
 	// Rectangle (/Rect)

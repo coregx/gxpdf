@@ -140,6 +140,7 @@ c.WriteToFile("output.pdf")
 - Headers and footers
 - Annotations (sticky notes, highlights, stamps)
 - Interactive forms (text fields, checkboxes, dropdowns)
+- Unicode metadata (Info dictionary, annotations, form fields, signatures — UTF-16BE per ISO 32000-1 §7.9.2)
 - RC4/AES encryption
 - Watermarks
 

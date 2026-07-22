@@ -130,6 +130,12 @@ Page sizes, custom dimensions, landscape orientation, and text rotation:
 
 ## Current Development
 
+### v0.8.3
+
+**Released**: July 2026
+
+- **Unicode text string encoding** (#77) — Info dictionary, annotations, form fields, and signature metadata now support full Unicode (Cyrillic, CJK, Arabic, Greek, emoji) per PDF spec §7.9.2.4. ASCII metadata unchanged for backward compatibility.
+
 ### v0.8.2
 
 **Released**: May 2026

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/coregx/gxpdf/internal/document"
@@ -577,19 +576,19 @@ func (w *PdfWriter) createInfo(objNum int, doc *document.Document) *IndirectObje
 	info.WriteString("<<")
 
 	if doc.Title() != "" {
-		info.WriteString(fmt.Sprintf(" /Title (%s)", escapePDFString(doc.Title())))
+		info.WriteString(fmt.Sprintf(" /Title %s", EncodeTextString(doc.Title())))
 	}
 	if doc.Author() != "" {
-		info.WriteString(fmt.Sprintf(" /Author (%s)", escapePDFString(doc.Author())))
+		info.WriteString(fmt.Sprintf(" /Author %s", EncodeTextString(doc.Author())))
 	}
 	if doc.Subject() != "" {
-		info.WriteString(fmt.Sprintf(" /Subject (%s)", escapePDFString(doc.Subject())))
+		info.WriteString(fmt.Sprintf(" /Subject %s", EncodeTextString(doc.Subject())))
 	}
 	if doc.Creator() != "" {
-		info.WriteString(fmt.Sprintf(" /Creator (%s)", escapePDFString(doc.Creator())))
+		info.WriteString(fmt.Sprintf(" /Creator %s", EncodeTextString(doc.Creator())))
 	}
 	if doc.Producer() != "" {
-		info.WriteString(fmt.Sprintf(" /Producer (%s)", escapePDFString(doc.Producer())))
+		info.WriteString(fmt.Sprintf(" /Producer %s", EncodeTextString(doc.Producer())))
 	}
 
 	// Creation date
@@ -601,18 +600,6 @@ func (w *PdfWriter) createInfo(objNum int, doc *document.Document) *IndirectObje
 	info.WriteString(" >>")
 
 	return NewIndirectObject(objNum, 0, info.Bytes())
-}
-
-// escapePDFString escapes special characters in PDF literal strings.
-// Per PDF spec (ISO 32000-1 §7.3.4.2), backslash, open-paren, and
-// close-paren must be escaped with a preceding backslash.
-func escapePDFString(s string) string {
-	r := strings.NewReplacer(
-		`\`, `\\`,
-		`(`, `\(`,
-		`)`, `\)`,
-	)
-	return r.Replace(s)
 }
 
 // formatPDFDate formats a time.Time as a PDF date string.
