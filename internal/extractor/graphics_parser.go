@@ -100,9 +100,10 @@ func (c Color) String() string {
 //
 // Reference: PDF 1.7 specification, Section 8 (Graphics).
 type GraphicsParser struct {
-	reader   *parser.Reader
-	elements []*GraphicsElement
-	state    *GraphicsState
+	reader     *parser.Reader
+	elements   []*GraphicsElement
+	state      *GraphicsState
+	stateStack []*GraphicsState // graphics state stack for q/Q operators
 }
 
 // GraphicsState tracks the current graphics state during parsing.
@@ -111,6 +112,10 @@ type GraphicsState struct {
 	LineWidth   float64 // Current line width
 	StrokeColor Color   // Current stroke color
 	FillColor   Color   // Current fill color
+	// CTM is the Current Transformation Matrix in page space.
+	// Initialized to identity; updated by the cm operator.
+	// Format: [a b c d e f] as in PDF spec Section 8.3.3.
+	CTM Matrix
 }
 
 // NewGraphicsState creates a new graphics state with defaults.
@@ -120,6 +125,7 @@ func NewGraphicsState() *GraphicsState {
 		LineWidth:   1.0,
 		StrokeColor: NewColor(0, 0, 0), // Black
 		FillColor:   NewColor(0, 0, 0), // Black
+		CTM:         Identity(),         // identity matrix
 	}
 }
 
@@ -141,6 +147,7 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 	// Reset state
 	gp.elements = []*GraphicsElement{}
 	gp.state = NewGraphicsState()
+	gp.stateStack = nil
 
 	// Get page
 	page, err := gp.reader.GetPage(pageNum)
@@ -295,14 +302,36 @@ func (gp *GraphicsParser) decodeStream(stream *parser.Stream) ([]byte, error) {
 //nolint:cyclop,funlen // Graphics operator processing requires many cases
 func (gp *GraphicsParser) processOperator(op *Operator) {
 	switch op.Name {
+	// Graphics state save/restore and CTM (Section 8.4.4)
+	case "q": // Save graphics state
+		gp.saveState()
+
+	case "Q": // Restore graphics state
+		gp.restoreState()
+
+	case "cm": // Modify CTM: new CTM = operand × old CTM
+		if len(op.Operands) >= 6 {
+			a := getNumber(op.Operands[0])
+			b := getNumber(op.Operands[1])
+			c := getNumber(op.Operands[2])
+			d := getNumber(op.Operands[3])
+			e := getNumber(op.Operands[4])
+			f := getNumber(op.Operands[5])
+			if a != nil && b != nil && c != nil && d != nil && e != nil && f != nil {
+				operand := NewMatrix(*a, *b, *c, *d, *e, *f)
+				// PDF spec Section 8.3.4: new CTM = operand × old CTM
+				gp.state.CTM = operand.Multiply(gp.state.CTM)
+			}
+		}
+
 	// Path construction operators (Section 8.5.2)
 	case "m": // moveto - start new subpath
 		if len(op.Operands) >= 2 {
 			x := getNumber(op.Operands[0])
 			y := getNumber(op.Operands[1])
 			if x != nil && y != nil {
-				// Start new path
-				gp.state.CurrentPath = []Point{NewPoint(*x, *y)}
+				// Start new path, transform point through CTM
+				gp.state.CurrentPath = []Point{gp.transformPoint(*x, *y)}
 			}
 		}
 
@@ -311,7 +340,7 @@ func (gp *GraphicsParser) processOperator(op *Operator) {
 			x := getNumber(op.Operands[0])
 			y := getNumber(op.Operands[1])
 			if x != nil && y != nil {
-				gp.state.CurrentPath = append(gp.state.CurrentPath, NewPoint(*x, *y))
+				gp.state.CurrentPath = append(gp.state.CurrentPath, gp.transformPoint(*x, *y))
 			}
 		}
 
@@ -323,12 +352,13 @@ func (gp *GraphicsParser) processOperator(op *Operator) {
 			h := getNumber(op.Operands[3])
 			if x != nil && y != nil && w != nil && h != nil {
 				// Rectangle as path: bottom-left, bottom-right, top-right, top-left, close
+				// All four corners are transformed through CTM
 				gp.state.CurrentPath = []Point{
-					NewPoint(*x, *y),
-					NewPoint(*x+*w, *y),
-					NewPoint(*x+*w, *y+*h),
-					NewPoint(*x, *y+*h),
-					NewPoint(*x, *y), // Close path
+					gp.transformPoint(*x, *y),
+					gp.transformPoint(*x+*w, *y),
+					gp.transformPoint(*x+*w, *y+*h),
+					gp.transformPoint(*x, *y+*h),
+					gp.transformPoint(*x, *y), // Close path
 				}
 			}
 		}
@@ -497,6 +527,49 @@ func (gp *GraphicsParser) isRectangle(points []Point) bool {
 	verticalFirst := (p0.X == p1.X) && (p1.Y == p2.Y) && (p2.X == p3.X) && (p3.Y == p0.Y)
 
 	return horizontalFirst || verticalFirst
+}
+
+// transformPoint applies the current CTM to a point in user space and returns
+// the resulting point in page space.
+//
+// The transformation formula follows PDF spec Section 8.3.2:
+//
+//	x' = a*x + c*y + e
+//	y' = b*x + d*y + f
+func (gp *GraphicsParser) transformPoint(x, y float64) Point {
+	tx, ty := gp.state.CTM.Transform(x, y)
+	return NewPoint(tx, ty)
+}
+
+// saveState pushes a deep copy of the current graphics state onto the stack.
+// This implements the PDF "q" (save graphics state) operator.
+//
+// Reference: PDF 1.7 specification, Section 8.4.4 (Graphics State Operators).
+func (gp *GraphicsParser) saveState() {
+	saved := *gp.state
+	// Deep copy the CurrentPath slice so the saved state is independent.
+	if len(gp.state.CurrentPath) > 0 {
+		saved.CurrentPath = make([]Point, len(gp.state.CurrentPath))
+		copy(saved.CurrentPath, gp.state.CurrentPath)
+	} else {
+		saved.CurrentPath = []Point{}
+	}
+	gp.stateStack = append(gp.stateStack, &saved)
+}
+
+// restoreState pops the top of the graphics state stack and restores it as the
+// current state. This implements the PDF "Q" (restore graphics state) operator.
+//
+// A Q without a matching q (malformed PDF) is silently ignored.
+//
+// Reference: PDF 1.7 specification, Section 8.4.4 (Graphics State Operators).
+func (gp *GraphicsParser) restoreState() {
+	n := len(gp.stateStack)
+	if n == 0 {
+		return
+	}
+	gp.state = gp.stateStack[n-1]
+	gp.stateStack = gp.stateStack[:n-1]
 }
 
 // String returns a string representation of the graphics element.
