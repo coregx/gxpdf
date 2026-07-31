@@ -214,6 +214,8 @@ func DetectMergedCells(grid *Grid, lines []*RulingLine, tolerance float64) []Mer
 
 	var merged []MergedCellInfo
 
+	avgRowHeight := computeAverageRowHeight(grid)
+
 	for r := 0; r < rowCount; r++ {
 		for c := 0; c < colCount; c++ {
 			if covered[r][c] {
@@ -222,6 +224,16 @@ func DetectMergedCells(grid *Grid, lines []*RulingLine, tolerance float64) []Mer
 
 			rowSpan := computeRowSpan(grid, hIdx, r, c, tolerance)
 			colSpan := computeColSpan(grid, vIdx, r, c, rowSpan, tolerance)
+
+			// Sanity check: if a single-row cell is abnormally tall
+			// (> 5× average row height), it's likely a header/footer artifact.
+			// Don't allow colSpan expansion for such cells.
+			if rowSpan == 1 && colSpan > 1 {
+				cellHeight := cellRowHeight(grid, r)
+				if cellHeight > avgRowHeight*5 {
+					colSpan = 1
+				}
+			}
 
 			if rowSpan > 1 || colSpan > 1 {
 				merged = append(merged, MergedCellInfo{
@@ -283,4 +295,35 @@ func buildCoveredMap(infos []MergedCellInfo) map[mergedKey]bool {
 		}
 	}
 	return covered
+}
+
+// computeAverageRowHeight returns the average height of grid rows,
+// excluding outliers (rows with height > 10× the median).
+func computeAverageRowHeight(grid *Grid) float64 {
+	if len(grid.Rows) < 2 {
+		return 0
+	}
+	var heights []float64
+	for i := 0; i < len(grid.Rows)-1; i++ {
+		h := grid.Rows[i+1] - grid.Rows[i]
+		if h > 0 {
+			heights = append(heights, h)
+		}
+	}
+	if len(heights) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, h := range heights {
+		sum += h
+	}
+	return sum / float64(len(heights))
+}
+
+// cellRowHeight returns the height of grid row r.
+func cellRowHeight(grid *Grid, r int) float64 {
+	if r+1 >= len(grid.Rows) {
+		return 0
+	}
+	return grid.Rows[r+1] - grid.Rows[r]
 }

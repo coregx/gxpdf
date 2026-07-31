@@ -34,6 +34,13 @@
       "colSpan": 1
     },
     {
+      "row": 3,
+      "col": 1,
+      "text": "Day 1 : Jul 19, 2026 ( Sunday )",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 4,
       "col": 1,
       "text": "COURSE TITLE",
@@ -43,7 +50,7 @@
     {
       "row": 4,
       "col": 2,
-      "text": "SECTIONS",
+      "text": "SECTIONS\nA,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -237,6 +244,13 @@
       "colSpan": 1
     },
     {
+      "row": 17,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 18,
       "col": 1,
       "text": "CONTEMPORARY ISSUES",
@@ -267,7 +281,7 @@
     {
       "row": 20,
       "col": 1,
-      "text": "BUILDING SERVICES - III : ELECTRICAL INSTALLATIONS",
+      "text": "BUILDING SERVICES - III : ELECTRICAL INSTALLATIONS \nIN BUILDINGS",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -295,35 +309,42 @@
     {
       "row": 22,
       "col": 1,
-      "text": "COST ACCOUNTING",
+      "text": "CARBOHYDRATE METABOLISM\nCOST ACCOUNTING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 22,
       "col": 2,
-      "text": "B",
+      "text": "A\nB",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 23,
       "col": 1,
-      "text": "DIGITAL LOGIC \u0026 ELECTRONICS",
+      "text": "COST ACCOUNTING\nDIGITAL LOGIC \u0026 ELECTRONICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 23,
       "col": 2,
-      "text": "A",
+      "text": "B\nA",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 24,
+      "col": 1,
+      "text": "DIGITAL LOGIC \u0026 ELECTRONICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 24,
       "col": 2,
-      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3",
+      "text": "A\nB1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -358,56 +379,56 @@
     {
       "row": 28,
       "col": 1,
-      "text": "MONETARY ECONOMICS",
+      "text": "INTRODUCTION TO MACROECONOMICS\nMONETARY ECONOMICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 28,
       "col": 2,
-      "text": "A",
+      "text": "A\nA",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 29,
       "col": 1,
-      "text": "OBJECT ORIENTED ANALYSIS AND DESIGN",
+      "text": "MONETARY ECONOMICS\nOBJECT ORIENTED ANALYSIS AND DESIGN",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 29,
       "col": 2,
-      "text": "A,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T",
+      "text": "A\nA,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 30,
       "col": 1,
-      "text": "PHONETICS \u0026 PHONOLOGY",
+      "text": "OBJECT ORIENTED ANALYSIS AND DESIGN\nPHONETICS \u0026 PHONOLOGY",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 30,
       "col": 2,
-      "text": "A",
+      "text": "A,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T\nA",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 31,
       "col": 1,
-      "text": "POWER STATIONS AND SUBSTATIONS",
+      "text": "PHONETICS \u0026 PHONOLOGY\nPOWER STATIONS AND SUBSTATIONS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 31,
       "col": 2,
-      "text": "A,B,C,D",
+      "text": "A\nA,B,C,D",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -624,14 +645,14 @@
     {
       "row": 47,
       "col": 1,
-      "text": "MANAGERIAL ACCOUNTING",
+      "text": "MANAGERIAL ACCOUNTING\nSEMANTICS AND PRAGMATICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 47,
       "col": 2,
-      "text": "A,B,C,D,E,G",
+      "text": "A,B,C,D,E,G\nA,B",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -640,7 +661,28 @@
       "col": 0,
       "text": "Date: 09-Jul-2026 2:52 PM",
       "rowSpan": 1,
-      "colSpan": 4
+      "colSpan": 1
+    },
+    {
+      "row": 48,
+      "col": 1,
+      "text": "SEMANTICS AND PRAGMATICS\nSTRUCTURE III : STEEL AND TIMBER STRUCTURES\nTEACHING GRAMMAR AND VOCABULARY",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 48,
+      "col": 2,
+      "text": "A,B\nA,B\nA",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 48,
+      "col": 3,
+      "text": "Page: 1 of 8",
+      "rowSpan": 1,
+      "colSpan": 1
     },
     {
       "row": 49,
