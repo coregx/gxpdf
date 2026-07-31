@@ -1,0 +1,489 @@
+{
+  "schedule": [
+    {
+      "day": 1,
+      "date": "2026-07-19",
+      "slots": [
+        {
+          "time": "9:00 AM - 11:00 AM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ARTIFICIAL INTELLIGENCE AND EXPERT SYSTEM", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y"] },
+            { "title": "CONSUMER BEHAVIOR", "sections": ["A"] },
+            { "title": "CORPORATE FINANCE", "sections": ["A","C"] },
+            { "title": "DATA AND WEB ANALYTICS", "sections": ["A"] },
+            { "title": "DISCRETE MATHEMATICS", "sections": ["A","B","C","D","E","F","G","H","I"] },
+            { "title": "ELECTRICAL POWER TRANSMISSION & DIST.", "sections": ["A","B","C","D"] },
+            { "title": "FOUNDATION COURSE", "sections": ["A","B","C","D","E"] },
+            { "title": "HUMAN RESOURCE PLANNING & FORECASTING", "sections": ["A"] },
+            { "title": "MARKETING RESEARCH [BBA]", "sections": ["A"] },
+            { "title": "POWER SYSTEMS ANALYSIS", "sections": ["A","B","C","D","F"] },
+            { "title": "QUALITY MANAGEMENT [IPE]", "sections": ["A","B"] }
+          ]
+        },
+        {
+          "time": "12:00 PM - 2:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "APPRECIATION OF POETRY", "sections": ["A","B"] },
+            { "title": "BANGLADESH ECONOMIC STUDIES AND CONTEMPORARY ISSUES", "sections": ["A"] },
+            { "title": "BASIC MECHANICAL ENGINEERING", "sections": ["A","B","C","D","E","F"] },
+            { "title": "BUILDING SERVICES - III : ELECTRICAL INSTALLATIONS IN BUILDINGS", "sections": ["A"] },
+            { "title": "CARBOHYDRATE METABOLISM", "sections": ["A"] },
+            { "title": "COST ACCOUNTING", "sections": ["B"] },
+            { "title": "DIGITAL LOGIC & ELECTRONICS", "sections": ["A"] },
+            { "title": "ENGLISH READING SKILLS & PUBLIC SPEAKING", "sections": ["B1","B2","B3","B4","B5","B6","B7","B8","C1","C10","C2","C3","C4","C5","C6","C7","C8","C9","D1","E1","E2","H1","H2","J1","P1"] },
+            { "title": "ENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN", "sections": ["A"] },
+            { "title": "GAME THEORY", "sections": ["A"] },
+            { "title": "INTRODUCTION TO MACROECONOMICS", "sections": ["A"] },
+            { "title": "MONETARY ECONOMICS", "sections": ["A"] },
+            { "title": "OBJECT ORIENTED ANALYSIS AND DESIGN", "sections": ["A","B","C","D","E","F","G","H","I","K","L","M","N","O","P","S","T"] },
+            { "title": "PHONETICS & PHONOLOGY", "sections": ["A"] },
+            { "title": "POWER STATIONS AND SUBSTATIONS", "sections": ["A","B","C","D"] },
+            { "title": "PRINCIPLES OF FINANCE", "sections": ["B","C","D","E","F","H"] },
+            { "title": "PUBLIC RELATIONS", "sections": ["A","B"] },
+            { "title": "ROMANTIC POETRY", "sections": ["A"] },
+            { "title": "STRATEGIC MANAGEMENT", "sections": ["A","B","C","D"] }
+          ]
+        },
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "BEHAVIORAL ECONOMICS", "sections": ["A"] },
+            { "title": "COMMUNICATIONS FOR ARCHITECTS", "sections": ["A","B"] },
+            { "title": "COMPREHENSIVE FINANCIAL CASE ANALYSIS", "sections": ["B"] },
+            { "title": "ENGINEERING MANAGEMENT", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R"] },
+            { "title": "ENGINEERING MANAGEMENT [IPE]", "sections": ["A"] },
+            { "title": "FINANCIAL ACCOUNTING", "sections": ["A","A1","A2","A3","A4","A5","A6","A7"] },
+            { "title": "FINANCIAL MANAGEMENT", "sections": ["A","B","D","E","F","G"] },
+            { "title": "HISTORY OF ENGLISH LANGUAGE", "sections": ["B"] },
+            { "title": "INVESTIGATIVE JOURNALISM", "sections": ["A"] },
+            { "title": "LOGISTICS AND DISTRIBUTION MANAGEMENT", "sections": ["A"] },
+            { "title": "MACHINE TOOLS", "sections": ["A","B"] },
+            { "title": "MANAGERIAL ACCOUNTING", "sections": ["A","B","C","D","E","G"] },
+            { "title": "SEMANTICS AND PRAGMATICS", "sections": ["A","B"] },
+            { "title": "STRUCTURE III : STEEL AND TIMBER STRUCTURES", "sections": ["A","B"] },
+            { "title": "TEACHING GRAMMAR AND VOCABULARY", "sections": ["A"] }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "date": null,
+      "slots": [
+        {
+          "time": "9:00 AM - 11:00 AM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ADVANCE DATABASE MANAGEMENT SYSTEM", "sections": ["A","B","C","D"] },
+            { "title": "APPRECIATION OF PROSE", "sections": ["A","B"] },
+            { "title": "ENGINEERING ECONOMY [IPE]", "sections": ["A"] },
+            { "title": "MANAGERIAL FORECASTING", "sections": ["A"] },
+            { "title": "MARKETING STRATEGY", "sections": ["A"] },
+            { "title": "POLITICS, PHILOSOPHY AND PUBLIC AFFAIRS", "sections": ["A","B","C","D","E","F"] },
+            { "title": "PRINCIPLES OF ECONOMICS [FST/FE]", "sections": ["A","A","A[ARCH]","B","B","B"] },
+            { "title": "PROGRAMMING LANGUAGE 2 [EEE]", "sections": ["[ARCH]","C","C","C1","C10","C2","C3","C4","C5","C6","C7","C8","C9","D","D","E","E","F","F","G","H"] },
+            { "title": "SOCIOLINGUISTICS", "sections": ["A","B","C","D","E"] }
+          ]
+        },
+        {
+          "time": "12:00 PM - 2:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ADVERTISING AS SOCIAL COMMUNICATION", "sections": ["A"] },
+            { "title": "BANGLA LANGUAGE & LITERATURE", "sections": ["E1","E2"] },
+            { "title": "BANGLA LANGUAGE AND LITERATURE", "sections": ["J1"] },
+            { "title": "BUILDING AND FINISH MATERIALS", "sections": ["A"] },
+            { "title": "COMPARATIVE ECONOMIC ANALYSIS", "sections": ["A"] },
+            { "title": "COMPUTATIONAL STATISTICS AND PROBABILITY", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X"] },
+            { "title": "ECONOMICS OF POVERTY, INEQUALITY AND GENDER", "sections": ["A"] },
+            { "title": "ENTREPRENEURSHIP DEVELOPMENT", "sections": ["A"] },
+            { "title": "ETHICS, SUSTAINABILITY, AND COMMUNICATION FOR DEVELOPMENT", "sections": ["A","B","C","D","E"] },
+            { "title": "HISTORY OF EMERGENCE OF BANGLADESH", "sections": ["A","B"] }
+          ]
+        },
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "INTRODUCTION TO BUSINESS", "sections": ["A","A1","A2","A3","A4","A5","A6","A7"] },
+            { "title": "INTRODUCTION TO DIGITAL TOOLS OF COMMUNICATION", "sections": ["J1"] },
+            { "title": "INTRODUCTION TO PUBLIC HEALTH & NUTRITION [BMB]", "sections": ["A"] },
+            { "title": "LITERARY THEORY AND CRITICISM", "sections": ["A","B"] },
+            { "title": "OPERATING SYSTEM", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V"] },
+            { "title": "PROGRAMMING LANGUAGE 1 [EEE]", "sections": ["A","B","C","D","E","F","G"] },
+            { "title": "PROJECT ANALYSIS AND EVALUATION", "sections": ["A"] },
+            { "title": "STATISTICS FOR ECONOMICS", "sections": ["A"] },
+            { "title": "VISUAL ENVIRONMENT", "sections": ["A","B"] }
+          ]
+        },
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ARCHITECTURAL SPECIFICATIONS", "sections": ["B"] },
+            { "title": "BANGLADESH STUDIES", "sections": ["A","A","B","B","C","C","D","E","F","G","H","I","J","K","L","P1"] },
+            { "title": "BANGLADESH STUDIES [BBA]", "sections": ["A","A1","A2","A3","A4","A5","A6","A7","B"] },
+            { "title": "COMPUTER INTEGRATED MANUFACTURING", "sections": ["A"] },
+            { "title": "ENTERPRISE RESOURCE PLANNING", "sections": ["A"] },
+            { "title": "ENVIRONMENT AND DESIGN - II : DESIGN IN THE TROPICS", "sections": ["A"] },
+            { "title": "GLOBAL FINANCE", "sections": ["A"] },
+            { "title": "INTEGRATED MARKETING COMMUNICATION", "sections": ["A"] },
+            { "title": "MARKETING MANAGEMENT", "sections": ["A","B","C","D","E","F","H"] },
+            { "title": "MARKETING MANAGEMENT [IPE]", "sections": ["A","B"] },
+            { "title": "MATHEMATICS FOR ARCHITECTS", "sections": ["D1"] },
+            { "title": "MICROPROCESSOR AND EMBEDDED SYSTEMS", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X"] },
+            { "title": "PRINCIPLES OF MARKETING", "sections": ["A","B","C","E","F","G","H"] },
+            { "title": "SELECTION AND STAFFING", "sections": ["A"] },
+            { "title": "STRUCTURE I: BASIC MECHANICS OF SOLIDS", "sections": ["A"] }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "date": null,
+      "slots": [
+        {
+          "time": "9:00 AM - 11:00 AM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "CHEMISTRY", "sections": ["A","B","C","C1","C10","C2","C3","C4","C5","C6","C7","C8","C9","D","E","F","G","H","I","J","K","L","M","O"] },
+            { "title": "COGNITIVE AND SOCIAL PSYCHOLOGY", "sections": ["A","B"] },
+            { "title": "ENGLISH READING", "sections": ["A1","A2","A3","A4","A5","A6","A7","B"] },
+            { "title": "ENGLISH WRITING [FBA/FASS]", "sections": ["A","B","C","D","E","F","G","H","J","M","O"] },
+            { "title": "INTERMEDIATE MACROECONOMICS", "sections": ["A"] },
+            { "title": "MANAGEMENT INFORMATION SYSTEMS", "sections": ["A","B","C","D","E","F","G","H","I"] },
+            { "title": "MECHANICS OF SOLIDS", "sections": ["A","B"] },
+            { "title": "NUCLEAR POWER ENGINEERING [EEE]", "sections": ["A","B"] },
+            { "title": "POPULATION AND ECONOMIC GROWTH", "sections": ["A"] },
+            { "title": "TRAINING AND DEVELOPMENT", "sections": ["A"] }
+          ]
+        },
+        {
+          "time": "12:00 PM - 2:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "3-D CHARACTER ANIMATION", "sections": ["A"] },
+            { "title": "ART AND ARCHITECTURE", "sections": ["A","D1"] },
+            { "title": "ART AND ARCHITECTURE 2", "sections": ["A"] },
+            { "title": "COMPUTER FUNDAMENTALS", "sections": ["P1"] },
+            { "title": "COMPUTER FUNDAMENTALS", "sections": ["E1","E2","H1","H2"] },
+            { "title": "COMPUTER ORGANIZATION AND ARCHITECTURE", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","X"] },
+            { "title": "CORPORATE GOVERNANCE AND SOCIAL RESPONSIBILITY", "sections": ["A","B","C","E"] },
+            { "title": "DESIGN AND SIMULATION IN IEA", "sections": ["D"] },
+            { "title": "DEVELOPMENT ECONOMICS", "sections": ["A"] },
+            { "title": "DIGITAL SIGNAL PROCESSING", "sections": ["A","B","C","E","F"] },
+            { "title": "ENVIRONMENT AND DESIGN III: LANDSCAPE DESIGN", "sections": ["A"] },
+            { "title": "GLOBAL LANGUAGES", "sections": ["A","B","C","D","F"] },
+            { "title": "INTELLIGENT ROBOTICS AND AUTOMATION", "sections": ["A"] },
+            { "title": "MATHEMATICS 1 (ECO)", "sections": ["H1","H2"] },
+            { "title": "OFFICE MANAGEMENT TECHNOLOGY", "sections": ["A","B","C","D","E","G","H"] },
+            { "title": "PRINCIPLES OF ACCOUNTING", "sections": ["A","A[ARCH]","AA","B","BB","CC","D","E","EE","FF","G","I","J","K","N","Q","S","X"] },
+            { "title": "REPORTING AND EDITING [PRINT MEDIA]", "sections": ["A"] },
+            { "title": "SURVEY TECHNIQUES AND ANALYTICAL METHODS TRANSFORMS", "sections": ["A"] },
+            { "title": "WRITING FOR ARTS AND SOCIAL SCIENCES", "sections": ["A","B"] }
+          ]
+        },
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "BUSINESS COMMUNICATION", "sections": ["A","B","C","D","E"] },
+            { "title": "BUSINESS COMMUNICATION [FST/FE]", "sections": ["A","AA","B","BB","C","CC","D","D","D","E","EE","F","FF","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W"] },
+            { "title": "ELEMENTARY ACCOUNTING", "sections": ["A"] },
+            { "title": "ENGLISH WRITING SKILLS & COMMUNICATIONS [FST/FE]", "sections": ["AA","BB","C","D","E","EE","F","G","H","I","J","O","P","Q","S"] },
+            { "title": "FINANCIAL AND CORPORATE REPORTING", "sections": ["A"] },
+            { "title": "INNOVATION AND ENTREPRENEURSHIP DEVELOPMENT", "sections": ["A","B","C","D","F"] },
+            { "title": "INTERNATIONAL BUSINESS", "sections": ["A","B","C","D","E"] },
+            { "title": "INTRODUCTION TO ANIMATION", "sections": ["A"] },
+            { "title": "NETWORK SECURITY INFRASTRUCTURE AND CYBERSECURITY", "sections": ["A"] },
+            { "title": "SHAKESPEARE", "sections": ["A","B"] }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "date": null,
+      "slots": [
+        {
+          "time": "9:00 AM - 11:00 AM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ARTS AND AESTHETICS", "sections": ["A","J1"] },
+            { "title": "BUSINESS MANAGEMENT", "sections": ["A","B","C","D","E","F"] },
+            { "title": "CONSTRUCTION METHODS AND DETAILS", "sections": ["A"] },
+            { "title": "DATA WAREHOUSE AND DATA MINING [MIS]", "sections": ["A"] },
+            { "title": "DATA WAREHOUSING AND DATA MINING [CS]", "sections": ["A","B","C","D","E","F"] },
+            { "title": "DIFF CALCULUS AND COORDINATE GEOMETRY", "sections": ["A","B","B1","B2","B3","B4","B5","B6","B7","B8","C1","C10","C2","C3","C4","C5","C6","C7","C8","C9","D","F"] },
+            { "title": "INTRODUCTION TO TOURISM & HOSPITALITY INDUSTRY", "sections": ["A"] },
+            { "title": "MATRICES, VECTORS, FOURIER ANALYSIS", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W"] },
+            { "title": "NUMERICAL METHODS FOR SCIENCE AND ENGINEERING", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V"] },
+            { "title": "TECHNOLOGY IN LANGUAGE LEARNING", "sections": ["A","B"] }
+          ]
+        },
+        {
+          "time": "12:00 PM - 2:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "COMPLEX VARIABLE,LAPLACE & Z-TRANSFORMATION", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W"] },
+            { "title": "DISTRIBUTION AND CHANNEL MANAGEMENT", "sections": ["A"] },
+            { "title": "ECONOMICS OF MONEY, BANKING AND FINANCE", "sections": ["A"] },
+            { "title": "ELECTROMAGNETICS FIELDS AND WAVES", "sections": ["A","B","C","E"] },
+            { "title": "ENVIRONMENTAL ECONOMICS AND SUSTAINABILITY", "sections": ["A"] },
+            { "title": "HUMAN RESOURCE MANAGEMENT", "sections": ["A","B","C","D","E","F","G"] },
+            { "title": "INTERIOR DESIGN", "sections": ["A"] },
+            { "title": "INTERMEDIATE MICROECONOMICS", "sections": ["A"] },
+            { "title": "INTRODUCTION TO MASS COMMUNICATION", "sections": ["A"] },
+            { "title": "MACROECONOMICS OF DEVELOPING COUNTRIES", "sections": ["A"] },
+            { "title": "REMEDIAL MATHEMATICS (NON-CREDIT)", "sections": ["A","B"] },
+            { "title": "SOCIAL SCIENCE RESEARCH METHODOLOGY", "sections": ["A","B"] },
+            { "title": "TELECOMMUNICATIONS ENGINEERING [FE]", "sections": ["A","B","C","D"] }
+          ]
+        },
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ARCHITECTURAL ACOUSTICS", "sections": ["A","B"] },
+            { "title": "AUDITING", "sections": ["A"] },
+            { "title": "BUILDING SERVICES 1:Plumbing and fire fighting system", "sections": ["A"] },
+            { "title": "COMPUTER GRAPHICS", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y"] },
+            { "title": "INTEGRAL CALCULUS & ORD. DIFF EQUATION", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U"] },
+            { "title": "INTERNATIONAL TRADE", "sections": ["A"] },
+            { "title": "INTRODUCTION TO ENGLISH LITERATURE", "sections": ["A","E1","E2"] },
+            { "title": "INTRODUCTION TO MICROECONOMICS", "sections": ["H1","H2"] },
+            { "title": "ORGANIZATIONAL BEHAVIOUR", "sections": ["A","B","C","D"] },
+            { "title": "PHILOSOPHY AND ETHICS", "sections": ["A","B"] },
+            { "title": "PROJECT MANAGEMENT", "sections": ["A","B","C","E"] },
+            { "title": "SOUTH ASIAN HISTORY AND DEVELOPMENT", "sections": ["A"] },
+            { "title": "SPECIAL AND VISUAL EFFECTS", "sections": ["A"] }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "date": null,
+      "slots": [
+        {
+          "time": "9:00 AM - 11:00 AM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ACCOUNTING INFORMATION SYSTEM", "sections": ["A"] },
+            { "title": "ADVANCED COMPUTER NETWORKS", "sections": ["A"] },
+            { "title": "ASIAN MEDIA SYSTEM", "sections": ["A"] },
+            { "title": "BRAND AND PRODUCT MANAGEMENT", "sections": ["A"] },
+            { "title": "COMPILER DESIGN", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X"] },
+            { "title": "DATA STRUCTURE", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q"] },
+            { "title": "ENGINEERING MECHANICS", "sections": ["A"] },
+            { "title": "FOUNDATIONS OF SOCIOLOGY", "sections": ["E1","E2"] },
+            { "title": "INDUSTRIAL ELECTRONICS AND DRIVES", "sections": ["A","B","C","E"] },
+            { "title": "INTRODUCTION TO PROGRAMMING", "sections": ["A","B","B1","B2","B3","B4","B5","B6","B7","B8","C","D"] },
+            { "title": "INTRODUCTION TO PROGRAMMING [ECO]", "sections": ["A"] },
+            { "title": "MACRO ECONOMICS", "sections": ["A","B","C","D","E","F"] },
+            { "title": "MICRO ECONOMICS", "sections": ["A","B","C","D","E","F"] },
+            { "title": "NATURAL SCIENCE", "sections": ["A","B"] },
+            { "title": "NETWORK RESOURCE MANAGEMENT", "sections": ["A"] },
+            { "title": "STRATEGIC MANAGEMENT ACCOUNTING", "sections": ["A"] },
+            { "title": "VALUE CHAIN MANAGEMENT", "sections": ["A"] },
+            { "title": "ART AND ARCHITECTURE - V", "sections": ["A"] },
+            { "title": "ARTIFICIAL INTELLIGENCE IN BUSINESS [BBA]", "sections": ["A"] },
+            { "title": "BASIC PLANNING", "sections": ["A"] },
+            { "title": "BIO-ORGANIC CHEMISTRY", "sections": ["P1"] },
+            { "title": "CREATIVE WRITING", "sections": ["A"] },
+            { "title": "DATA VISUALIZATION", "sections": ["A"] },
+            { "title": "DESIGN THEORY I", "sections": ["D1"] },
+            { "title": "ELECTRICAL CIRCUITS -1 (DC)", "sections": ["A","B","C","D"] },
+            { "title": "ELECTRICAL MACHINES 2", "sections": ["A","B","C","E"] },
+            { "title": "ENERGY ECONOMICS", "sections": ["A"] },
+            { "title": "ENGLISH FOR SPECIFIC PURPOSES", "sections": ["A","B","C"] },
+            { "title": "HISTORY OF ECONOMIC THOUGHT", "sections": ["A"] },
+            { "title": "HUMAN NUTRITION", "sections": ["A"] },
+            { "title": "INTRODUCTION TO INFORMATION TECHNOLOGY", "sections": ["A","B","C","D","F"] },
+            { "title": "INVESTMENT ANALYSIS AND PORTFOLIO MANAGEMENT", "sections": ["A","B"] },
+            { "title": "MATHEMATICS 2 (ECO)", "sections": ["A"] },
+            { "title": "OPERATIONS MANAGEMENT [IPE]", "sections": ["A","B"] },
+            { "title": "OPERATIONS RESEARCH [IPE]", "sections": ["A"] },
+            { "title": "PERFORMANCE APPRAISAL MANAGEMENT", "sections": ["A"] },
+            { "title": "PRODUCT STRATEGY MANAGEMENT", "sections": ["A"] },
+            { "title": "REMEDIAL ENGLISH (NON-CREDIT)", "sections": ["A","B"] },
+            { "title": "RENEWABLE ENERGY TECHNOLOGY", "sections": ["A","B","C"] },
+            { "title": "SERVICE MARKETING", "sections": ["A"] },
+            { "title": "SOFTWARE QUALITY AND TESTING", "sections": ["A","B","C","D","E","F"] },
+            { "title": "STRUCTURE - II : Reinforced Concrete Design", "sections": ["A"] },
+            { "title": "THEORY OF COMPUTATION", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","V","W","X"] },
+            { "title": "VIDEO EDITING", "sections": ["A"] }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "date": "2026-07-25",
+      "slots": [
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ALGORITHMS", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","Y"] },
+            { "title": "ART AND ARCHITECTURE III", "sections": ["A"] },
+            { "title": "ART AND ARCHITECTURE VI; MODERN ART AND ARCHITECTURE", "sections": ["A"] },
+            { "title": "CLASSROOM MANAGEMENT TECHNIQUES IN ELT", "sections": ["A","B"] },
+            { "title": "DIGITAL ASIC DESIGN", "sections": ["A"] },
+            { "title": "ELECTRICAL MACHINES 1", "sections": ["A","B","C","D","E","F"] },
+            { "title": "HEALTH ECONOMICS", "sections": ["A"] },
+            { "title": "HOUSING", "sections": ["A"] },
+            { "title": "HUMAN FACTORS ENGINEERING", "sections": ["A"] },
+            { "title": "OPERATIONS AND SUPPLY CHAIN MANAGEMENT", "sections": ["A","B","C","D","E","F","G"] },
+            { "title": "SOFTWARE REQUIREMENT ENGINEERING", "sections": ["A","B","C","D","E"] },
+            { "title": "SUPPLY CHAIN ANALYTICS", "sections": ["A"] },
+            { "title": "VLSI CIRCUIT DESIGN", "sections": ["A","C","E"] }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "date": null,
+      "slots": [
+        {
+          "time": "9:00 AM - 11:00 AM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ADVANCE FINANCIAL ACCOUNTING", "sections": ["A"] },
+            { "title": "ADVANCED PROGRAMMING WITH .NET", "sections": ["A","B","C","D"] },
+            { "title": "APPLIED ECONOMETRICS", "sections": ["A"] },
+            { "title": "APPRECIATION OF DRAMA", "sections": ["A","B"] },
+            { "title": "BUILDING SERVICES II: MECHANICAL EQUIPMENT FOR BUILDINGS", "sections": ["A"] },
+            { "title": "CLASSICAL LITERATURE", "sections": ["A","B"] },
+            { "title": "DIGITAL PHOTOGRAPHY", "sections": ["A"] },
+            { "title": "ECONOMETRICS (ECO)", "sections": ["A"] },
+            { "title": "FLUID MECHANICS AND MACHINERY", "sections": ["A","B"] },
+            { "title": "MODERN CONTROL SYSTEMS", "sections": ["A","B","C","D","F"] },
+            { "title": "OCCUPATIONAL HEALTH AND SAFETY MANAGEMENT", "sections": ["A"] },
+            { "title": "PRINCIPLES AND PRACTICES OF TAXATION", "sections": ["A","B","C","D"] },
+            { "title": "SIGNAL & LINEAR SYSTEM", "sections": ["A","B","C","D","E"] },
+            { "title": "SOFTWARE ENGINEERING", "sections": ["A","AA","B","B","B","C","C","D","D","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"] },
+            { "title": "TRAVEL AGENCY & TOUR OPERATION MANAGEMENT", "sections": ["A"] }
+          ]
+        },
+        {
+          "time": "12:00 PM - 2:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ADVANCED BUSINESS STATISTICS", "sections": ["A","B","C","D","E","F"] },
+            { "title": "AGRICULTURAL ECONOMICS (ECO)", "sections": ["A"] },
+            { "title": "ART APPRECIATION", "sections": ["A"] },
+            { "title": "BUSINESS STATISTICS", "sections": ["A","B","C","D","E","F","G"] },
+            { "title": "CELLS AND BIOMOLECULES", "sections": ["P1"] },
+            { "title": "ELECTRICAL PROPERTIES OF MATERIALS", "sections": ["A","B","C","E","F"] },
+            { "title": "ELT APPROACHES AND METHODS", "sections": ["A","B"] },
+            { "title": "FINANCIAL STATEMENT ANALYSIS", "sections": ["A"] },
+            { "title": "HISTORY OF JOURNALISM AND MASS COMMUNICATION IN BANGLADESH", "sections": ["A","B"] },
+            { "title": "INDUSTRIAL, ERGONOMICS AND PRODUCTION SAFETY", "sections": ["B"] },
+            { "title": "INTRODUCTION TO LINGUISTICS", "sections": ["A"] },
+            { "title": "LABOR ECONOMICS", "sections": ["A"] },
+            { "title": "MANUFACTURING AND PRODUCTION PROCESS I", "sections": ["A","B"] },
+            { "title": "MICROBIOLOGY I", "sections": ["A"] },
+            { "title": "MOBILE APPLICATION DEVELOPMENT", "sections": ["A"] },
+            { "title": "MODERN PHYSICS", "sections": ["A","B","C","D","E","F"] },
+            { "title": "NANOTECHNOLOGY FOR ENGINEERS", "sections": ["A"] },
+            { "title": "OBJECT ORIENTED PROGRAMMING 1 (JAVA)", "sections": ["A","B","C","D","E","F","G","H","I","J","K"] },
+            { "title": "OBJECT ORIENTED PROGRAMMING 2", "sections": ["A","AA","B","B","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"] },
+            { "title": "PROFESSIONAL PRACTICE AND ETHICS", "sections": ["A"] },
+            { "title": "SOCIETY AND ARCHITECTURE OF BENGAL", "sections": ["A","B"] }
+          ]
+        },
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ANALYTICS FOR TALENT MANAGEMENT", "sections": ["A"] },
+            { "title": "BUSINESS MATHEMATICS-1", "sections": ["A","A1","A2","A3","A4","A5","A6","A7","B"] },
+            { "title": "BUSINESS MATHEMATICS-2", "sections": ["A","B","C","D","E","F"] },
+            { "title": "DIGITAL MARKETING", "sections": ["A"] },
+            { "title": "FINANCIAL INSTITUTIONS AND MARKETS", "sections": ["A"] },
+            { "title": "INTERMEDIATE ACCOUNTING", "sections": ["B"] },
+            { "title": "INTRODUCTION TO DATABASE", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q"] },
+            { "title": "MEASUREMENT AND INSTRUMENTATION", "sections": ["A","C","D"] },
+            { "title": "MORPHOLOGY", "sections": ["A","B"] },
+            { "title": "PRINCIPLES OF MANAGEMENT", "sections": ["A","B"] },
+            { "title": "PROFESSIONAL DEVELOPMENT", "sections": ["A"] },
+            { "title": "SERVICE OPERATIONS MANAGEMENT", "sections": ["A"] },
+            { "title": "WEB TECHNOLOGIES", "sections": ["A","AA","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"] }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 8,
+      "date": "2026-07-27",
+      "slots": [
+        {
+          "time": "9:00 AM - 11:00 AM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "BANK FUND MANAGEMENT", "sections": ["A"] },
+            { "title": "COMPUTER NETWORKS", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"] },
+            { "title": "FIRST LANGUAGE DEVELOPMENT", "sections": ["A","B"] },
+            { "title": "PHYSICS 2", "sections": ["A","AA","B","BB","C","CC","D","E","F","FF","G","H","H","H","I","M"] },
+            { "title": "PRINCIPLES OF COMMUNICATIONS", "sections": ["B","C","D","E"] },
+            { "title": "PROFESSIONAL DEVELOPMENT COURSE", "sections": ["A","B","C","D","E","F"] },
+            { "title": "STATISTICAL DECISION MAKING FOR ENGINEERS", "sections": ["A"] }
+          ]
+        },
+        {
+          "time": "12:00 PM - 2:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ANALOG ELECTRONICS", "sections": ["A","B","C","D","E"] },
+            { "title": "BIG DATA AND BUSINESS DECISION", "sections": ["A"] },
+            { "title": "BIOPHYSICAL CHEMISTRY", "sections": ["P1"] },
+            { "title": "BUSINESS ECONOMICS", "sections": ["A"] },
+            { "title": "BUSINESS LAW", "sections": ["A","B","C","D"] },
+            { "title": "BUSINESS RESEARCH", "sections": ["A","B","C","D","F"] },
+            { "title": "CONCEPTS OF COMMUNICATION", "sections": ["J1"] },
+            { "title": "CONTEMPORARY SOUTH ASIAN LITERATURE IN ENGLISH", "sections": ["A","B"] },
+            { "title": "DATA COMMUNICATION", "sections": ["A"] },
+            { "title": "DATA COMMUNICATION", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O"] },
+            { "title": "DATA PRIVACY, SECURITY AND PROTECTION", "sections": ["A"] },
+            { "title": "DATA PROCESSING", "sections": ["A"] },
+            { "title": "ELECTRONIC DEVICES", "sections": ["A","AA","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"] },
+            { "title": "FUNDAMENTALS OF ECONOMICS", "sections": ["A"] },
+            { "title": "HISTORY OF ANIMATION", "sections": ["A"] },
+            { "title": "INTRODUCTION TO ELECTRICAL CIRCUITS", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O"] },
+            { "title": "MATHEMATICAL ECONOMICS", "sections": ["A"] },
+            { "title": "NETWORK SECURITY", "sections": ["A","B","C","D"] },
+            { "title": "PHYSICS 1 FOR ARCHITECTS", "sections": ["D1"] },
+            { "title": "PUBLIC ECONOMICS", "sections": ["A"] },
+            { "title": "URBAN DESIGN I", "sections": ["A"] },
+            { "title": "URBAN DESIGN II", "sections": ["A","B"] }
+          ]
+        },
+        {
+          "time": "3:00 PM - 5:00 PM",
+          "venue": "All Annexes & Building D",
+          "courses": [
+            { "title": "ADVANCE MATERIAL AND PROCESS", "sections": ["A"] },
+            { "title": "BASICS IN NATURAL SCIENCE", "sections": ["A","B","C","E"] },
+            { "title": "BASICS IN SOCIAL SCIENCE", "sections": ["A","A[ARCH]","B","B"] },
+            { "title": "DESIGN THEORY II", "sections": ["[ARCH]","C","D","E","F","G","H","H1","H2","I","J"] },
+            { "title": "DIGITAL LOGIC AND CIRCUITS", "sections": ["A"] },
+            { "title": "ELECTRICAL CIRCUITS 2 (AC)", "sections": ["A","B","D","E","F","G","H","I","J","K","L","N","O","P","Q","R","S","T","U"] },
+            { "title": "PHYSICS 1", "sections": ["B1","B2","B3","B4","B5","B6","B7","B8","C","C1","C10","C2","C3","C4","C5","C6","C7","C8","C9","D"] },
+            { "title": "POWER SYSTEM PROTECTION", "sections": ["A","C"] },
+            { "title": "PRODUCT DESIGN AND DEVELOPMENT", "sections": ["A"] },
+            { "title": "PRODUCT INNOVATION AND MANAGEMENT", "sections": ["A"] },
+            { "title": "PROFESSIONAL ENGLISH", "sections": ["A"] },
+            { "title": "STATISTICS FOR SOCIAL SCIENCE", "sections": ["A","B"] },
+            { "title": "STRUCTURE IV: LONG SPAN STRUCTURES", "sections": ["A"] }
+          ]
+        }
+      ]
+    }
+  ]
+}
