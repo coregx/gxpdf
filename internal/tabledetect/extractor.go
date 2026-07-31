@@ -77,7 +77,7 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	}
 
 	// Set metadata
-	tbl.Method = "Lattice"
+	tbl.Method = MethodLattice.String()
 	// Convert extractor.Rectangle to domaintable.Rectangle
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
@@ -128,7 +128,7 @@ func (te *TableExtractor) extractStreamTable(region *TableRegion) (*domaintable.
 	}
 
 	// Set metadata
-	tbl.Method = "Stream"
+	tbl.Method = MethodStream.String()
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
 	// Extract content from each cell

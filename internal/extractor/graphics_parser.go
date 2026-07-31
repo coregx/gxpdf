@@ -126,7 +126,7 @@ func NewGraphicsState() *GraphicsState {
 		LineWidth:   1.0,
 		StrokeColor: NewColor(0, 0, 0), // Black
 		FillColor:   NewColor(0, 0, 0), // Black
-		CTM:         Identity(),         // identity matrix
+		CTM:         Identity(),        // identity matrix
 	}
 }
 
