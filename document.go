@@ -185,8 +185,25 @@ func (d *Document) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, 
 			return nil, fmt.Errorf("gxpdf: failed to detect tables on page %d: %w", pageIndex, err)
 		}
 
-		// Extract table data
-		tableExtractor := tabledetect.NewTableExtractor(textElements)
+		// Normalize text coordinates to match grid space for Lattice tables.
+		normalizedText := textElements
+		if opts.Method != MethodStream && len(detectedTables) > 0 {
+			pageHeight := extractor.ReadPageHeight(d.reader, pageIndex)
+			if pageHeight > 0 {
+				for _, region := range detectedTables {
+					if region.Grid != nil {
+						bounds := region.Grid.Bounds()
+						cn := extractor.NewCoordinateNormalizer(pageHeight)
+						normalizedText = cn.NormalizeTextToGridSpace(
+							normalizedText, bounds.Y, bounds.Y+bounds.Height,
+						)
+						break
+					}
+				}
+			}
+		}
+
+		tableExtractor := tabledetect.NewTableExtractor(normalizedText)
 		for _, region := range detectedTables {
 			extracted, err := tableExtractor.ExtractTable(region)
 			if err != nil {
