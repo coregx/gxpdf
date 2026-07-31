@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.1] - 2026-07-31
+
+### Fixed
+- **Lattice table extraction quality** — 100% course extraction accuracy on 8-page exam schedule PDF (311/311 courses, verified against DeepSeek ground truth)
+  - Per-row V-line detection prevents false column merges in multi-slot tables
+  - `CoordinateNormalizer` aligns text and graphics coordinate spaces via hit-count detection
+  - Grid edge extension (2×avgH) captures text beyond last ruling line
+  - Merged cell bounds expansion extracts text from entire merged area
+  - Outlier row height detection prevents false colSpan in header/footer rows
+  - Stateful `CellExtractor` prevents text bleeding between adjacent grid cells
+
+### Added
+- **Golden snapshot tests** — cell-level JSON snapshots for regression detection (`go test -run TestGolden -update-golden` to regenerate)
+- **Ground truth tests** — 311-course DeepSeek reference validates extraction quality with 80% thresholds for course titles, sections, and counts
+
+---
+
 ## [0.9.0] - 2026-07-31
 
 ### Added
