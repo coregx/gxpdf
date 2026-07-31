@@ -21,15 +21,20 @@ const (
 	MethodHybrid
 )
 
+const (
+	methodNameLattice = "Lattice"
+	methodNameStream  = "Stream"
+)
+
 // String returns the name of the extraction method.
 func (m ExtractionMethod) String() string {
 	switch m {
 	case MethodAuto:
 		return "Auto"
 	case MethodLattice:
-		return "Lattice"
+		return methodNameLattice
 	case MethodStream:
-		return "Stream"
+		return methodNameStream
 	case MethodHybrid:
 		return "Hybrid"
 	default:

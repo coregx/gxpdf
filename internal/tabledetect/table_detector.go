@@ -19,13 +19,18 @@ const (
 	MethodAuto
 )
 
+const (
+	methodNameLattice = "Lattice" //nolint:goconst // enum definition, not duplication
+	methodNameStream  = "Stream"  //nolint:goconst // enum definition, not duplication
+)
+
 // String returns a string representation of the extraction method.
 func (em ExtractionMethod) String() string {
 	switch em {
 	case MethodLattice:
-		return "Lattice"
+		return methodNameLattice
 	case MethodStream:
-		return "Stream"
+		return methodNameStream
 	case MethodAuto:
 		return "Auto"
 	default:

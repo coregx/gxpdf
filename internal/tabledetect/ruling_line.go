@@ -126,58 +126,129 @@ func (d *DefaultRulingLineDetector) WithTolerance(tol float64) *DefaultRulingLin
 	return d
 }
 
+// maxRulingThickness is the maximum dimension (width or height) for a filled
+// rectangle to be treated as a ruling line. Thin rectangles below this
+// threshold are common table borders in PDFs from wkhtmltopdf, Chrome, LibreOffice.
+const maxRulingThickness = 5.0
+
 // DetectRulingLines extracts horizontal and vertical lines from graphics.
+//
+// Handles two element types:
+//   - GraphicsTypeLine: explicit stroked lines (m ... l ... S)
+//   - GraphicsTypeRectangle: thin filled rectangles decomposed into ruling lines
 //
 // Returns a slice of RulingLines sorted by position.
 func (d *DefaultRulingLineDetector) DetectRulingLines(graphics []*extractor.GraphicsElement) ([]*RulingLine, error) {
 	var lines []*RulingLine
 
-	// Extract lines from graphics elements
 	for _, elem := range graphics {
-		// Only process line elements
-		if elem.Type != extractor.GraphicsTypeLine {
-			continue
+		switch elem.Type {
+		case extractor.GraphicsTypeLine:
+			if line := d.lineFromSegment(elem); line != nil {
+				lines = append(lines, line)
+			}
+
+		case extractor.GraphicsTypeRectangle:
+			lines = append(lines, d.linesFromRectangle(elem)...)
 		}
-
-		// Must have exactly 2 points
-		if len(elem.Points) != 2 {
-			continue
-		}
-
-		start := elem.Points[0]
-		end := elem.Points[1]
-
-		// Check if horizontal or vertical (within tolerance)
-		isHorizontal := math.Abs(start.Y-end.Y) <= d.tolerance
-		isVertical := math.Abs(start.X-end.X) <= d.tolerance
-
-		if !isHorizontal && !isVertical {
-			// Oblique line - skip
-			continue
-		}
-
-		// Normalize line to make horizontal/vertical exact
-		if isHorizontal {
-			end.Y = start.Y // Make exactly horizontal
-		} else if isVertical {
-			end.X = start.X // Make exactly vertical
-		}
-
-		// Create ruling line
-		line := NewRulingLine(start, end)
-
-		// Check minimum length
-		if line.Length() < d.minLineLength {
-			continue
-		}
-
-		lines = append(lines, line)
 	}
 
-	// Merge collinear lines
 	lines = d.mergeCollinearLines(lines)
 
 	return lines, nil
+}
+
+// lineFromSegment converts a 2-point line element to a RulingLine if it is
+// horizontal or vertical and meets the minimum length.
+func (d *DefaultRulingLineDetector) lineFromSegment(elem *extractor.GraphicsElement) *RulingLine {
+	if len(elem.Points) != 2 {
+		return nil
+	}
+
+	start := elem.Points[0]
+	end := elem.Points[1]
+
+	isHorizontal := math.Abs(start.Y-end.Y) <= d.tolerance
+	isVertical := math.Abs(start.X-end.X) <= d.tolerance
+
+	if !isHorizontal && !isVertical {
+		return nil
+	}
+
+	if isHorizontal {
+		end.Y = start.Y
+	} else {
+		end.X = start.X
+	}
+
+	line := NewRulingLine(start, end)
+	if line.Length() < d.minLineLength {
+		return nil
+	}
+
+	return line
+}
+
+// linesFromRectangle decomposes a thin filled rectangle into ruling lines.
+//
+// A rectangle with height ≤ maxRulingThickness is treated as a horizontal line
+// (midpoint Y). A rectangle with width ≤ maxRulingThickness is treated as a
+// vertical line (midpoint X). If both dimensions exceed the threshold, the
+// rectangle is decomposed into 4 edge lines (top, bottom, left, right).
+func (d *DefaultRulingLineDetector) linesFromRectangle(elem *extractor.GraphicsElement) []*RulingLine {
+	if len(elem.Points) < 4 {
+		return nil
+	}
+
+	// Compute bounding box from rectangle points.
+	minX, minY := elem.Points[0].X, elem.Points[0].Y
+	maxX, maxY := minX, minY
+	for _, p := range elem.Points {
+		if p.X < minX {
+			minX = p.X
+		}
+		if p.X > maxX {
+			maxX = p.X
+		}
+		if p.Y < minY {
+			minY = p.Y
+		}
+		if p.Y > maxY {
+			maxY = p.Y
+		}
+	}
+
+	w := maxX - minX
+	h := maxY - minY
+
+	var result []*RulingLine
+
+	if h <= maxRulingThickness && w > d.minLineLength {
+		// Thin horizontal rectangle → single horizontal ruling line at midpoint Y
+		midY := (minY + maxY) / 2
+		line := NewRulingLine(
+			extractor.NewPoint(minX, midY),
+			extractor.NewPoint(maxX, midY),
+		)
+		result = append(result, line)
+	} else if w <= maxRulingThickness && h > d.minLineLength {
+		// Thin vertical rectangle → single vertical ruling line at midpoint X
+		midX := (minX + maxX) / 2
+		line := NewRulingLine(
+			extractor.NewPoint(midX, minY),
+			extractor.NewPoint(midX, maxY),
+		)
+		result = append(result, line)
+	} else if w > d.minLineLength && h > d.minLineLength {
+		// Large rectangle → decompose into 4 edge lines
+		top := NewRulingLine(extractor.NewPoint(minX, maxY), extractor.NewPoint(maxX, maxY))
+		bottom := NewRulingLine(extractor.NewPoint(minX, minY), extractor.NewPoint(maxX, minY))
+		left := NewRulingLine(extractor.NewPoint(minX, minY), extractor.NewPoint(minX, maxY))
+		right := NewRulingLine(extractor.NewPoint(maxX, minY), extractor.NewPoint(maxX, maxY))
+		result = append(result, top, bottom, left, right)
+	}
+
+	return result
 }
 
 // mergeCollinearLines merges lines that are on the same axis.

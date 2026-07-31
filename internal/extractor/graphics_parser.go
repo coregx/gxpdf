@@ -100,9 +100,11 @@ func (c Color) String() string {
 //
 // Reference: PDF 1.7 specification, Section 8 (Graphics).
 type GraphicsParser struct {
-	reader   *parser.Reader
-	elements []*GraphicsElement
-	state    *GraphicsState
+	reader     *parser.Reader
+	elements   []*GraphicsElement
+	state      *GraphicsState
+	stateStack []*GraphicsState // graphics state stack for q/Q operators
+	pageHeight float64          // page height for Y-coordinate normalization
 }
 
 // GraphicsState tracks the current graphics state during parsing.
@@ -111,6 +113,10 @@ type GraphicsState struct {
 	LineWidth   float64 // Current line width
 	StrokeColor Color   // Current stroke color
 	FillColor   Color   // Current fill color
+	// CTM is the Current Transformation Matrix in page space.
+	// Initialized to identity; updated by the cm operator.
+	// Format: [a b c d e f] as in PDF spec Section 8.3.3.
+	CTM Matrix
 }
 
 // NewGraphicsState creates a new graphics state with defaults.
@@ -120,6 +126,7 @@ func NewGraphicsState() *GraphicsState {
 		LineWidth:   1.0,
 		StrokeColor: NewColor(0, 0, 0), // Black
 		FillColor:   NewColor(0, 0, 0), // Black
+		CTM:         Identity(),        // identity matrix
 	}
 }
 
@@ -141,12 +148,19 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 	// Reset state
 	gp.elements = []*GraphicsElement{}
 	gp.state = NewGraphicsState()
+	gp.stateStack = nil
 
 	// Get page
 	page, err := gp.reader.GetPage(pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
+
+	// Read page height from MediaBox for Y-coordinate normalization.
+	// PDFs often use a top-left CTM (1 0 0 -1 0 pageHeight cm) which
+	// produces Y values outside the normal page range. We detect this
+	// after extraction and flip Y coordinates back to bottom-left origin.
+	gp.pageHeight = gp.readPageHeight(page)
 
 	// Get content stream(s)
 	contentData, err := gp.getPageContent(page)
@@ -170,6 +184,13 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 	for _, op := range operators {
 		gp.processOperator(op)
 	}
+
+	// Normalize coordinates: align graphics Y-space with text Y-space.
+	// TextExtractor does not apply CTM, so text elements use raw PDF coords
+	// (bottom-left origin). GraphicsParser applies CTM, which can offset Y
+	// by the page height (common in wkhtmltopdf, Chrome, etc.). We detect
+	// the offset and correct it.
+	gp.normalizeCoordinates()
 
 	return gp.elements, nil
 }
@@ -295,14 +316,36 @@ func (gp *GraphicsParser) decodeStream(stream *parser.Stream) ([]byte, error) {
 //nolint:cyclop,funlen // Graphics operator processing requires many cases
 func (gp *GraphicsParser) processOperator(op *Operator) {
 	switch op.Name {
+	// Graphics state save/restore and CTM (Section 8.4.4)
+	case "q": // Save graphics state
+		gp.saveState()
+
+	case "Q": // Restore graphics state
+		gp.restoreState()
+
+	case "cm": // Modify CTM: new CTM = operand × old CTM
+		if len(op.Operands) >= 6 {
+			a := getNumber(op.Operands[0])
+			b := getNumber(op.Operands[1])
+			c := getNumber(op.Operands[2])
+			d := getNumber(op.Operands[3])
+			e := getNumber(op.Operands[4])
+			f := getNumber(op.Operands[5])
+			if a != nil && b != nil && c != nil && d != nil && e != nil && f != nil {
+				operand := NewMatrix(*a, *b, *c, *d, *e, *f)
+				// PDF spec Section 8.3.4: new CTM = operand × old CTM
+				gp.state.CTM = operand.Multiply(gp.state.CTM)
+			}
+		}
+
 	// Path construction operators (Section 8.5.2)
 	case "m": // moveto - start new subpath
 		if len(op.Operands) >= 2 {
 			x := getNumber(op.Operands[0])
 			y := getNumber(op.Operands[1])
 			if x != nil && y != nil {
-				// Start new path
-				gp.state.CurrentPath = []Point{NewPoint(*x, *y)}
+				// Start new path, transform point through CTM
+				gp.state.CurrentPath = []Point{gp.transformPoint(*x, *y)}
 			}
 		}
 
@@ -311,7 +354,7 @@ func (gp *GraphicsParser) processOperator(op *Operator) {
 			x := getNumber(op.Operands[0])
 			y := getNumber(op.Operands[1])
 			if x != nil && y != nil {
-				gp.state.CurrentPath = append(gp.state.CurrentPath, NewPoint(*x, *y))
+				gp.state.CurrentPath = append(gp.state.CurrentPath, gp.transformPoint(*x, *y))
 			}
 		}
 
@@ -323,12 +366,13 @@ func (gp *GraphicsParser) processOperator(op *Operator) {
 			h := getNumber(op.Operands[3])
 			if x != nil && y != nil && w != nil && h != nil {
 				// Rectangle as path: bottom-left, bottom-right, top-right, top-left, close
+				// All four corners are transformed through CTM
 				gp.state.CurrentPath = []Point{
-					NewPoint(*x, *y),
-					NewPoint(*x+*w, *y),
-					NewPoint(*x+*w, *y+*h),
-					NewPoint(*x, *y+*h),
-					NewPoint(*x, *y), // Close path
+					gp.transformPoint(*x, *y),
+					gp.transformPoint(*x+*w, *y),
+					gp.transformPoint(*x+*w, *y+*h),
+					gp.transformPoint(*x, *y+*h),
+					gp.transformPoint(*x, *y), // Close path
 				}
 			}
 		}
@@ -341,10 +385,15 @@ func (gp *GraphicsParser) processOperator(op *Operator) {
 		gp.closePath()
 		gp.strokePath()
 
-	case "f", "F": // Fill path (non-zero winding)
-		// For table detection, we mainly care about stroked paths (lines)
-		// Fill operations are less relevant
-		gp.clearPath()
+	case "f", "F", "f*": // Fill path
+		gp.fillPath()
+
+	case "B", "B*": // Fill and stroke path
+		gp.fillPath()
+
+	case "b", "b*": // Close, fill, and stroke path
+		gp.closePath()
+		gp.fillPath()
 
 	case "h": // Close subpath
 		gp.closePath()
@@ -434,6 +483,28 @@ func (gp *GraphicsParser) strokePath() {
 	gp.clearPath()
 }
 
+// fillPath creates graphics elements from filled paths.
+// Filled rectangles are common table borders in PDFs generated by
+// wkhtmltopdf, Chrome print, LibreOffice, and similar tools.
+func (gp *GraphicsParser) fillPath() {
+	if len(gp.state.CurrentPath) < 3 {
+		gp.clearPath()
+		return
+	}
+
+	if gp.isRectangle(gp.state.CurrentPath) {
+		elem := &GraphicsElement{
+			Type:   GraphicsTypeRectangle,
+			Points: gp.state.CurrentPath,
+			Color:  gp.state.FillColor,
+			Width:  gp.state.LineWidth,
+		}
+		gp.elements = append(gp.elements, elem)
+	}
+
+	gp.clearPath()
+}
+
 // closePath closes the current path by adding a line to the start point.
 func (gp *GraphicsParser) closePath() {
 	if len(gp.state.CurrentPath) > 0 {
@@ -470,6 +541,128 @@ func (gp *GraphicsParser) isRectangle(points []Point) bool {
 	verticalFirst := (p0.X == p1.X) && (p1.Y == p2.Y) && (p2.X == p3.X) && (p3.Y == p0.Y)
 
 	return horizontalFirst || verticalFirst
+}
+
+// transformPoint applies the current CTM to a point in user space and returns
+// the resulting point in page space.
+//
+// The transformation formula follows PDF spec Section 8.3.2:
+//
+//	x' = a*x + c*y + e
+//	y' = b*x + d*y + f
+func (gp *GraphicsParser) transformPoint(x, y float64) Point {
+	tx, ty := gp.state.CTM.Transform(x, y)
+	return NewPoint(tx, ty)
+}
+
+// saveState pushes a deep copy of the current graphics state onto the stack.
+// This implements the PDF "q" (save graphics state) operator.
+//
+// Reference: PDF 1.7 specification, Section 8.4.4 (Graphics State Operators).
+func (gp *GraphicsParser) saveState() {
+	saved := *gp.state
+	// Deep copy the CurrentPath slice so the saved state is independent.
+	if len(gp.state.CurrentPath) > 0 {
+		saved.CurrentPath = make([]Point, len(gp.state.CurrentPath))
+		copy(saved.CurrentPath, gp.state.CurrentPath)
+	} else {
+		saved.CurrentPath = []Point{}
+	}
+	gp.stateStack = append(gp.stateStack, &saved)
+}
+
+// restoreState pops the top of the graphics state stack and restores it as the
+// current state. This implements the PDF "Q" (restore graphics state) operator.
+//
+// A Q without a matching q (malformed PDF) is silently ignored.
+//
+// Reference: PDF 1.7 specification, Section 8.4.4 (Graphics State Operators).
+func (gp *GraphicsParser) restoreState() {
+	n := len(gp.stateStack)
+	if n == 0 {
+		return
+	}
+	gp.state = gp.stateStack[n-1]
+	gp.stateStack = gp.stateStack[:n-1]
+}
+
+// readPageHeight extracts the page height from MediaBox.
+func (gp *GraphicsParser) readPageHeight(page *parser.Dictionary) float64 {
+	mb := page.Get("MediaBox")
+	if mb == nil {
+		return 0
+	}
+
+	// Resolve indirect reference
+	if ref, ok := mb.(*parser.IndirectReference); ok {
+		resolved, err := gp.reader.GetObject(ref.Number)
+		if err != nil {
+			return 0
+		}
+		mb = resolved
+	}
+
+	arr, ok := mb.(*parser.Array)
+	if !ok || arr.Len() < 4 {
+		return 0
+	}
+
+	// MediaBox = [llx lly urx ury]
+	if ury := getNumber(arr.Get(3)); ury != nil {
+		if lly := getNumber(arr.Get(1)); lly != nil {
+			return *ury - *lly
+		}
+		return *ury
+	}
+	return 0
+}
+
+// normalizeCoordinates aligns graphics Y-coordinates with the text coordinate
+// space (bottom-left origin, Y increasing upward).
+//
+// TextExtractor uses raw Tm/Td positions without CTM. GraphicsParser applies
+// CTM which often includes a page-height translation. This produces a
+// systematic Y-offset between text and graphics elements.
+//
+// Detection: compute the Y centroid of all graphics points. If it lies outside
+// the page bounds [0, pageHeight], subtract the nearest whole multiple of
+// pageHeight to bring it inside.
+func (gp *GraphicsParser) normalizeCoordinates() {
+	if gp.pageHeight <= 0 || len(gp.elements) == 0 {
+		return
+	}
+
+	var sumY float64
+	var count int
+	for _, elem := range gp.elements {
+		for _, p := range elem.Points {
+			sumY += p.Y
+			count++
+		}
+	}
+	if count == 0 {
+		return
+	}
+	centroidY := sumY / float64(count)
+
+	if centroidY >= 0 && centroidY <= gp.pageHeight {
+		return
+	}
+
+	var offset float64
+	if centroidY > gp.pageHeight {
+		n := int(centroidY / gp.pageHeight)
+		offset = -float64(n) * gp.pageHeight
+	} else {
+		n := int(-centroidY/gp.pageHeight) + 1
+		offset = float64(n) * gp.pageHeight
+	}
+
+	for _, elem := range gp.elements {
+		for i := range elem.Points {
+			elem.Points[i].Y += offset
+		}
+	}
 }
 
 // String returns a string representation of the graphics element.

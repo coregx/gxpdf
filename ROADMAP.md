@@ -130,11 +130,17 @@ Page sizes, custom dimensions, landscape orientation, and text rotation:
 
 ## Current Development
 
+### v0.8.5
+
+**Released**: July 2026
+
+- **Lattice table detection for filled rectangles** (#79, @AtifChy) — PDFs using filled rectangles (`re f`) for table borders now correctly produce Lattice results. Added CTM tracking, Y-coordinate normalization, rectangle-to-ruling-line decomposition, and top-to-bottom row ordering.
+
 ### v0.8.4
 
 **Released**: July 2026
 
-- **Lattice table extraction fix** (#79, @AtifChy) — `MethodLattice` and `MethodAuto` now correctly extract ruling lines from PDF graphics; previously `graphicsElements` was always nil, causing silent fallback to Stream detection.
+- **Lattice table extraction fix** (#79) — `MethodLattice` and `MethodAuto` now extract ruling lines from PDF graphics via `GraphicsParser`.
 
 ### v0.8.3
 

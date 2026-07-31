@@ -77,32 +77,29 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	}
 
 	// Set metadata
-	tbl.Method = "Lattice"
+	tbl.Method = MethodLattice.String()
 	// Convert extractor.Rectangle to domaintable.Rectangle
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
-	// Extract content from each cell
+	// Extract content from each cell.
+	// Grid rows are sorted ascending by Y (bottom-to-top in PDF space).
+	// Reverse the iteration so output rows follow natural reading order
+	// (top-to-bottom: header first, data rows next, footer last).
 	for r := 0; r < rowCount; r++ {
+		gridRow := rowCount - 1 - r
 		for c := 0; c < colCount; c++ {
-			// Get cell from grid
-			gridCell := grid.GetCell(r, c)
+			gridCell := grid.GetCell(gridRow, c)
 			if gridCell == nil {
 				continue
 			}
 
-			// Extract text content
 			content := te.cellExtractor.ExtractCellContent(gridCell.Bounds)
 
-			// Convert to domain rectangle
 			domainBounds := domaintable.NewRectangle(gridCell.Bounds.X, gridCell.Bounds.Y, gridCell.Bounds.Width, gridCell.Bounds.Height)
 
-			// Create cell
 			cell := domaintable.NewCellWithBounds(content, r, c, domainBounds)
-
-			// Detect alignment (simple heuristic)
 			cell = cell.WithAlignment(te.detectAlignment(content, gridCell.Bounds))
 
-			// Set cell in table
 			if err := tbl.SetCell(r, c, cell); err != nil {
 				return nil, fmt.Errorf("failed to set cell (%d,%d): %w", r, c, err)
 			}
@@ -131,7 +128,7 @@ func (te *TableExtractor) extractStreamTable(region *TableRegion) (*domaintable.
 	}
 
 	// Set metadata
-	tbl.Method = "Stream"
+	tbl.Method = MethodStream.String()
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
 	// Extract content from each cell
