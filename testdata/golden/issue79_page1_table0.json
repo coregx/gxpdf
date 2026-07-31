@@ -35,13 +35,6 @@
     },
     {
       "row": 3,
-      "col": 1,
-      "text": "Day 2 : Jul 21, 2026 ( Tuesday )",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 3,
       "col": 3,
       "text": "",
       "rowSpan": 9,
@@ -127,7 +120,7 @@
     {
       "row": 9,
       "col": 2,
-      "text": "Annexes \nA\n\u0026 \nA,B,C,D,E,F\nBuilding \nA,A,A[ARCH],B,B,B\nD",
+      "text": "A\n\u0026 \nA,B,C,D,E,F\nBuilding \nA,A,A[ARCH],B,B,B\nD",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -141,7 +134,7 @@
     {
       "row": 10,
       "col": 2,
-      "text": "D\n[ARCH],C,C,C1,C10,C2,C3,C4,C5,C6,C7,",
+      "text": "[ARCH],C,C,C1,C10,C2,C3,C4,C5,C6,C7,",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -266,13 +259,6 @@
     },
     {
       "row": 19,
-      "col": 1,
-      "text": "COMPUTATIONAL STATISTICS AND PROBABILITY",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 19,
       "col": 2,
       "text": "U,V,W,X",
       "rowSpan": 1,
@@ -309,7 +295,7 @@
     {
       "row": 22,
       "col": 2,
-      "text": "All \nA,B,C,D,E\nAnnexes",
+      "text": "Annexes",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -365,7 +351,7 @@
     {
       "row": 26,
       "col": 2,
-      "text": "A\nA,B",
+      "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -380,13 +366,6 @@
       "row": 27,
       "col": 2,
       "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 28,
-      "col": 1,
-      "text": "OPERATING SYSTEM",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -540,14 +519,7 @@
     {
       "row": 38,
       "col": 2,
-      "text": "A\nAll",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 39,
-      "col": 1,
-      "text": "GLOBAL FINANCE",
+      "text": "All",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -582,7 +554,7 @@
     {
       "row": 41,
       "col": 2,
-      "text": "Building \nA,B,C,D,E,F,H\nD",
+      "text": "A,B,C,D,E,F,H\nD",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -611,13 +583,6 @@
       "row": 43,
       "col": 2,
       "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 44,
-      "col": 1,
-      "text": "MICROPROCESSOR AND EMBEDDED SYSTEMS",
       "rowSpan": 1,
       "colSpan": 1
     },

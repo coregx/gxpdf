@@ -34,13 +34,6 @@
       "colSpan": 1
     },
     {
-      "row": 3,
-      "col": 1,
-      "text": "Day 1 : Jul 19, 2026 ( Sunday )",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
       "row": 4,
       "col": 1,
       "text": "COURSE TITLE",
@@ -64,7 +57,7 @@
     {
       "row": 5,
       "col": 2,
-      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,\nU,V,W,X,Y",
+      "text": "U,V,W,X,Y",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -258,13 +251,6 @@
       "colSpan": 1
     },
     {
-      "row": 18,
-      "col": 2,
-      "text": "A",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
       "row": 19,
       "col": 1,
       "text": "BASIC MECHANICAL ENGINEERING",
@@ -295,7 +281,7 @@
     {
       "row": 21,
       "col": 1,
-      "text": "IN BUILDINGS\nCARBOHYDRATE METABOLISM",
+      "text": "CARBOHYDRATE METABOLISM",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -309,42 +295,35 @@
     {
       "row": 22,
       "col": 1,
-      "text": "CARBOHYDRATE METABOLISM\nCOST ACCOUNTING",
+      "text": "COST ACCOUNTING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 22,
       "col": 2,
-      "text": "A\nB",
+      "text": "B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 23,
-      "col": 1,
-      "text": "COST ACCOUNTING\nDIGITAL LOGIC \u0026 ELECTRONICS",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 23,
-      "col": 2,
-      "text": "B\nA",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 24,
       "col": 1,
       "text": "DIGITAL LOGIC \u0026 ELECTRONICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 23,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 24,
       "col": 2,
-      "text": "A\nB1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3",
+      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -372,63 +351,63 @@
     {
       "row": 27,
       "col": 1,
-      "text": "\u0026 \nENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN\nA\nBuilding \nGAME THEORY\nA\nD\nINTRODUCTION TO MACROECONOMICS\nA",
+      "text": "ENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN\nA\nGAME THEORY\nA\nINTRODUCTION TO MACROECONOMICS\nA",
       "rowSpan": 1,
       "colSpan": 3
     },
     {
       "row": 28,
       "col": 1,
-      "text": "INTRODUCTION TO MACROECONOMICS\nMONETARY ECONOMICS",
+      "text": "MONETARY ECONOMICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 28,
       "col": 2,
-      "text": "A\nA",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 29,
       "col": 1,
-      "text": "MONETARY ECONOMICS\nOBJECT ORIENTED ANALYSIS AND DESIGN",
+      "text": "OBJECT ORIENTED ANALYSIS AND DESIGN",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 29,
       "col": 2,
-      "text": "A\nA,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T",
+      "text": "A,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 30,
       "col": 1,
-      "text": "OBJECT ORIENTED ANALYSIS AND DESIGN\nPHONETICS \u0026 PHONOLOGY",
+      "text": "PHONETICS \u0026 PHONOLOGY",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 30,
       "col": 2,
-      "text": "A,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T\nA",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 31,
       "col": 1,
-      "text": "PHONETICS \u0026 PHONOLOGY\nPOWER STATIONS AND SUBSTATIONS",
+      "text": "POWER STATIONS AND SUBSTATIONS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 31,
       "col": 2,
-      "text": "A\nA,B,C,D",
+      "text": "A,B,C,D",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -666,14 +645,14 @@
     {
       "row": 48,
       "col": 1,
-      "text": "SEMANTICS AND PRAGMATICS\nSTRUCTURE III : STEEL AND TIMBER STRUCTURES\nTEACHING GRAMMAR AND VOCABULARY",
+      "text": "STRUCTURE III : STEEL AND TIMBER STRUCTURES\nTEACHING GRAMMAR AND VOCABULARY",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 48,
       "col": 2,
-      "text": "A,B\nA,B\nA",
+      "text": "A,B\nA",
       "rowSpan": 1,
       "colSpan": 1
     },

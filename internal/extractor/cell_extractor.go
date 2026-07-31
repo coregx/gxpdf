@@ -8,21 +8,22 @@ import (
 
 // CellExtractor extracts text content from a rectangular cell region.
 //
-// The extractor:
-//   - Finds all text elements within cell bounds
-//   - Sorts text by position (top to bottom, left to right)
-//   - Joins text with proper spacing and line breaks
-//   - Handles multi-line content
+// The extractor is stateful: it tracks which text elements have been
+// assigned to a cell. Each element is assigned to at most one cell
+// (first-come-first-served based on extraction order). This prevents
+// multi-line text from bleeding into adjacent grid cells.
 //
 // This is a critical component for table extraction (Phase 2.7).
 type CellExtractor struct {
 	textElements []*TextElement
+	assigned     map[*TextElement]bool
 }
 
 // NewCellExtractor creates a new CellExtractor with the given text elements.
 func NewCellExtractor(textElements []*TextElement) *CellExtractor {
 	return &CellExtractor{
 		textElements: textElements,
+		assigned:     make(map[*TextElement]bool),
 	}
 }
 
@@ -40,19 +41,16 @@ func NewCellExtractor(textElements []*TextElement) *CellExtractor {
 //
 // Returns the extracted text, or empty string if no text is found.
 func (ce *CellExtractor) ExtractCellContent(bounds Rectangle) string {
-	// Find text elements within bounds
 	elementsInCell := ce.FindElementsInBounds(bounds)
 	if len(elementsInCell) == 0 {
 		return ""
 	}
 
-	// Group elements by line
+	// Mark elements as assigned so they won't appear in adjacent cells.
+	ce.MarkAssigned(elementsInCell)
+
 	lines := ce.groupByLine(elementsInCell)
-
-	// Sort lines top to bottom
 	ce.sortLines(lines)
-
-	// Build text from lines
 	return ce.buildTextFromLines(lines)
 }
 
@@ -82,6 +80,9 @@ func (ce *CellExtractor) FindElementsInBounds(bounds Rectangle) []*TextElement {
 	)
 
 	for _, elem := range ce.textElements {
+		if ce.assigned[elem] {
+			continue
+		}
 		centerX := elem.CenterX()
 		centerY := elem.CenterY()
 
@@ -91,6 +92,14 @@ func (ce *CellExtractor) FindElementsInBounds(bounds Rectangle) []*TextElement {
 	}
 
 	return result
+}
+
+// MarkAssigned marks the given text elements as assigned to a cell.
+// Once assigned, elements will not appear in subsequent FindElementsInBounds calls.
+func (ce *CellExtractor) MarkAssigned(elements []*TextElement) {
+	for _, e := range elements {
+		ce.assigned[e] = true
+	}
 }
 
 // textLine represents a line of text elements at the same Y position.
