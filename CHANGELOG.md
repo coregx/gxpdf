@@ -8,9 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Lattice table detection for filled rectangles** — PDFs that draw table borders as filled rectangles (`re f` operator, common in wkhtmltopdf, Chrome print, and LibreOffice) now correctly produce Lattice mode results; previously only stroked lines (`S`) were recognized as ruling lines (#79)
-  - `GraphicsParser.fillPath()` now creates `GraphicsTypeRectangle` elements from filled closed-rectangle paths; previously `f`, `F`, `f*`, `B`, `B*`, `b`, `b*` operators discarded the path without recording any element
-  - `DefaultRulingLineDetector.DetectRulingLines()` now decomposes `GraphicsTypeRectangle` elements into ruling lines: thin rectangles (height or width ≤ 5pt) become a single horizontal or vertical line at the midpoint; large rectangles become 4 edge lines
+- **Lattice table detection for filled rectangles** — PDFs that draw table borders as filled rectangles (`re f` operator, common in wkhtmltopdf, Chrome print, and LibreOffice) now correctly produce Lattice mode results; previously only stroked lines (`S`) were recognized as ruling lines (#79, @AtifChy)
+  - `GraphicsParser.fillPath()` creates `GraphicsTypeRectangle` elements from filled paths; previously `f`, `F`, `f*`, `B`, `B*`, `b`, `b*` operators discarded the path
+  - `GraphicsParser` CTM tracking (`cm`, `q`, `Q` operators) — rectangle coordinates are now correctly transformed to page space
+  - Y-coordinate normalization aligns graphics and text coordinate spaces (handles top-left-origin CTM pattern)
+  - `DefaultRulingLineDetector.DetectRulingLines()` decomposes rectangles into ruling lines: thin rectangles (≤ 5pt) become a single line at midpoint; large rectangles become 4 edge lines
+  - Lattice row order corrected: tables now output rows top-to-bottom (natural reading order)
 
 ---
 

@@ -49,8 +49,9 @@ type Grid struct {
 
 // NewGrid creates a new Grid.
 func NewGrid(rows, columns []float64) *Grid {
-	// Sort rows (top to bottom in PDF coordinates means descending Y)
-	// Actually, in PDF coordinates Y increases upward, so top means higher Y
+	// Sort rows ascending by Y coordinate (bottom to top in PDF space).
+	// The final reading-order reversal (top-to-bottom) happens in
+	// TableExtractor.ExtractTable when building the output rows.
 	sortedRows := make([]float64, len(rows))
 	copy(sortedRows, rows)
 	sort.Float64s(sortedRows)
