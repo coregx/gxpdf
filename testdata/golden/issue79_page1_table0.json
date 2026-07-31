@@ -1,0 +1,478 @@
+{
+  "pdf": "testdata/pdfs/issue79/sample.pdf",
+  "page": 1,
+  "method": "Lattice",
+  "rows": 46,
+  "cols": 4,
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "text": "",
+      "rowSpan": 1,
+      "colSpan": 4
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "text": "",
+      "rowSpan": 1,
+      "colSpan": 4
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "text": "",
+      "rowSpan": 9,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "text": "",
+      "rowSpan": 9,
+      "colSpan": 1
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "text": "Page: 2 of 8",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 12,
+      "col": 0,
+      "text": "",
+      "rowSpan": 19,
+      "colSpan": 1
+    },
+    {
+      "row": 12,
+      "col": 3,
+      "text": "",
+      "rowSpan": 19,
+      "colSpan": 1
+    },
+    {
+      "row": 14,
+      "col": 1,
+      "text": "STRUCTURE I: BASIC MECHANICS OF SOLIDS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 14,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 15,
+      "col": 1,
+      "text": "SELECTION AND STAFFING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 15,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 16,
+      "col": 1,
+      "text": "PRINCIPLES OF MARKETING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 16,
+      "col": 2,
+      "text": "A,B,C,E,F,G,H\nU,V,W,X",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 17,
+      "col": 1,
+      "text": "MICROPROCESSOR AND EMBEDDED SYSTEMS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 17,
+      "col": 2,
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 18,
+      "col": 1,
+      "text": "MATHEMATICS FOR ARCHITECTS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 18,
+      "col": 2,
+      "text": "D1",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 19,
+      "col": 1,
+      "text": "MARKETING MANAGEMENT [IPE]",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 19,
+      "col": 2,
+      "text": "A,B\nD",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 20,
+      "col": 1,
+      "text": "MARKETING MANAGEMENT\nINTEGRATED MARKETING COMMUNICATION",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 20,
+      "col": 2,
+      "text": "A,B,C,D,E,F,H\nBuilding \nA\n\u0026",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 21,
+      "col": 1,
+      "text": "GLOBAL FINANCE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 21,
+      "col": 2,
+      "text": "Annexes \nA",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 22,
+      "col": 2,
+      "text": "All \nA",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 23,
+      "col": 1,
+      "text": "ENVIRONMENT AND DESIGN - II : DESIGN IN THE \nENTERPRISE RESOURCE PLANNING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 23,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 24,
+      "col": 1,
+      "text": "COMPUTER INTEGRATED MANUFACTURING\nBANGLADESH STUDIES [BBA]",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 24,
+      "col": 2,
+      "text": "A\nA,A1,A2,A3,A4,A5,A6,A7,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 25,
+      "col": 1,
+      "text": "BANGLADESH STUDIES",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 25,
+      "col": 2,
+      "text": "A,A,B,B,C,C,D,E,F,G,H,I,J,K,L,P1",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 26,
+      "col": 1,
+      "text": "ARCHITECTURAL SPECIFICATIONS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 26,
+      "col": 2,
+      "text": "B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 27,
+      "col": 1,
+      "text": "VISUAL ENVIRONMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 27,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 28,
+      "col": 1,
+      "text": "STATISTICS FOR ECONOMICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 28,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 29,
+      "col": 1,
+      "text": "PROJECT ANALYSIS AND EVALUATION",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 29,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 30,
+      "col": 1,
+      "text": "PROGRAMMING LANGUAGE 1 [EEE]",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 30,
+      "col": 2,
+      "text": "A,B,C,D,E,F,G",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 31,
+      "col": 0,
+      "text": "",
+      "rowSpan": 15,
+      "colSpan": 1
+    },
+    {
+      "row": 31,
+      "col": 1,
+      "text": "OPERATING SYSTEM",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 31,
+      "col": 2,
+      "text": "U,V\nA,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 31,
+      "col": 3,
+      "text": "",
+      "rowSpan": 15,
+      "colSpan": 1
+    },
+    {
+      "row": 32,
+      "col": 1,
+      "text": "LITERARY THEORY AND CRITICISM",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 32,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 34,
+      "col": 1,
+      "text": "INTRODUCTION TO PUBLIC HEALTH \u0026 NUTRITION",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 34,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 35,
+      "col": 2,
+      "text": "J1",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 36,
+      "col": 1,
+      "text": "INTRODUCTION TO DIGITAL TOOLS  OF \nINTRODUCTION TO BUSINESS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 36,
+      "col": 2,
+      "text": "D\nBuilding \nA,A1,A2,A3,A4,A5,A6,A7",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 37,
+      "col": 1,
+      "text": "HISTORY OF EMERGENCE OF BANGLADESH",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 37,
+      "col": 2,
+      "text": "\u0026 \nA,B\nAnnexes",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 38,
+      "col": 2,
+      "text": "A,B,C,D,E\nAll",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 39,
+      "col": 1,
+      "text": "ETHICS, SUSTAINABILITY, AND COMMUNICATION FOR",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 40,
+      "col": 1,
+      "text": "ENTREPRENEURSHIP DEVELOPMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 40,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 41,
+      "col": 1,
+      "text": "ECONOMICS OF POVERTY, INEQUALITY AND GENDER",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 41,
+      "col": 2,
+      "text": "A\nU,V,W,X",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 42,
+      "col": 1,
+      "text": "COMPUTATIONAL STATISTICS AND PROBABILITY",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 42,
+      "col": 2,
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 43,
+      "col": 1,
+      "text": "COMPARATIVE ECONOMIC ANALYSIS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 43,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 44,
+      "col": 1,
+      "text": "BUILDING AND FINISH MATERIALS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 44,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 45,
+      "col": 1,
+      "text": "BANGLA LANGUAGE AND LITERATURE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 45,
+      "col": 2,
+      "text": "J1",
+      "rowSpan": 1,
+      "colSpan": 1
+    }
+  ]
+}

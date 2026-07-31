@@ -1,0 +1,408 @@
+{
+  "pdf": "testdata/pdfs/issue79/sample.pdf",
+  "page": 0,
+  "method": "Lattice",
+  "rows": 50,
+  "cols": 4,
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "text": "",
+      "rowSpan": 16,
+      "colSpan": 1
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "text": "",
+      "rowSpan": 1,
+      "colSpan": 3
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "text": "",
+      "rowSpan": 1,
+      "colSpan": 3
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "text": "Day 1 : Jul 19, 2026 ( Sunday )",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "text": "COURSE TITLE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "text": "SECTIONS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "text": "ARTIFICIAL INTELLIGENCE AND EXPERT SYSTEM",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,\nU,V,W,X,Y",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 6,
+      "col": 1,
+      "text": "CONSUMER BEHAVIOR",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 6,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "text": "CORPORATE FINANCE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 7,
+      "col": 2,
+      "text": "A,C",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 8,
+      "col": 1,
+      "text": "DATA AND WEB ANALYTICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 8,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 9,
+      "col": 1,
+      "text": "DISCRETE MATHEMATICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 9,
+      "col": 2,
+      "text": "A,B,C,D,E,F,G,H,I",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 10,
+      "col": 1,
+      "text": "ELECTRICAL POWER TRANSMISSION \u0026 DIST.",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 10,
+      "col": 2,
+      "text": "A,B,C,D",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 11,
+      "col": 1,
+      "text": "FOUNDATION COURSE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 11,
+      "col": 2,
+      "text": "A,B,C,D,E",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 12,
+      "col": 1,
+      "text": "HUMAN RESOURCE PLANNING \u0026 FORECASTING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 12,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 13,
+      "col": 1,
+      "text": "MARKETING RESEARCH [BBA]",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 13,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 14,
+      "col": 1,
+      "text": "POWER SYSTEMS ANALYSIS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 14,
+      "col": 2,
+      "text": "A,B,C,D,F",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 15,
+      "col": 1,
+      "text": "QUALITY MANAGEMENT [IPE]",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 15,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 16,
+      "col": 0,
+      "text": "",
+      "rowSpan": 19,
+      "colSpan": 4
+    },
+    {
+      "row": 35,
+      "col": 0,
+      "text": "",
+      "rowSpan": 12,
+      "colSpan": 1
+    },
+    {
+      "row": 35,
+      "col": 3,
+      "text": "",
+      "rowSpan": 12,
+      "colSpan": 1
+    },
+    {
+      "row": 36,
+      "col": 1,
+      "text": "BEHAVIORAL ECONOMICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 36,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 37,
+      "col": 1,
+      "text": "COMMUNICATIONS FOR ARCHITECTS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 37,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 38,
+      "col": 1,
+      "text": "COMPREHENSIVE FINANCIAL CASE ANALYSIS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 38,
+      "col": 2,
+      "text": "B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 39,
+      "col": 1,
+      "text": "ENGINEERING MANAGEMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 39,
+      "col": 2,
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 40,
+      "col": 1,
+      "text": "ENGINEERING MANAGEMENT [IPE]",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 40,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 41,
+      "col": 1,
+      "text": "FINANCIAL ACCOUNTING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 41,
+      "col": 2,
+      "text": "A,A1,A2,A3,A4,A5,A6,A7",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 42,
+      "col": 1,
+      "text": "FINANCIAL MANAGEMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 42,
+      "col": 2,
+      "text": "A,B,D,E,F,G",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 43,
+      "col": 1,
+      "text": "HISTORY OF ENGLISH LANGUAGE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 43,
+      "col": 2,
+      "text": "B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 44,
+      "col": 1,
+      "text": "INVESTIGATIVE JOURNALISM",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 44,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 45,
+      "col": 1,
+      "text": "LOGISTICS AND DISTRIBUTION MANAGEMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 45,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 46,
+      "col": 1,
+      "text": "MACHINE TOOLS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 46,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 47,
+      "col": 1,
+      "text": "MANAGERIAL ACCOUNTING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 47,
+      "col": 2,
+      "text": "A,B,C,D,E,G",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 48,
+      "col": 0,
+      "text": "Date: 09-Jul-2026 2:52 PM",
+      "rowSpan": 1,
+      "colSpan": 4
+    },
+    {
+      "row": 49,
+      "col": 0,
+      "text": "",
+      "rowSpan": 1,
+      "colSpan": 4
+    }
+  ]
+}
