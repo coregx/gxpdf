@@ -123,14 +123,23 @@ func (p *Page) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, erro
 	tableDetector := tabledetect.NewDefaultTableDetector()
 
 	var detectedTables []*tabledetect.TableRegion
-	var graphicsElements []*extractor.GraphicsElement
 
 	switch opts.Method {
 	case MethodLattice:
+		graphicsParser := extractor.NewGraphicsParser(p.doc.reader)
+		graphicsElements, gErr := graphicsParser.ParseFromPage(p.index)
+		if gErr != nil {
+			return nil, fmt.Errorf("gxpdf: failed to extract graphics from page %d: %w", p.index, gErr)
+		}
 		detectedTables, err = tableDetector.DetectTablesLattice(textElements, graphicsElements)
 	case MethodStream:
 		detectedTables, err = tableDetector.DetectTablesStream(textElements)
 	default:
+		graphicsParser := extractor.NewGraphicsParser(p.doc.reader)
+		graphicsElements, gErr := graphicsParser.ParseFromPage(p.index)
+		if gErr != nil {
+			return nil, fmt.Errorf("gxpdf: failed to extract graphics from page %d: %w", p.index, gErr)
+		}
 		detectedTables, err = tableDetector.DetectTables(textElements, graphicsElements)
 	}
 
