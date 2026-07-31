@@ -137,20 +137,30 @@ func computeRowSpan(grid *Grid, hIdx HLineIndex, r, c int, tolerance float64) in
 
 // computeColSpan determines how many grid columns cell (r, c) spans rightward.
 //
-// The rowSpan is already known and used to bound the Y range for V-line checks:
-// from grid.Rows[r] to grid.Rows[r+rowSpan] (clamped to grid boundaries).
+// For each candidate column boundary, we check V-lines per individual row
+// segment rather than across the full rowSpan height. V-lines in PDFs are
+// typically drawn per-row (not as a single line spanning the entire table),
+// so requiring a single V-line to cover 70% of a large rowSpan would cause
+// false column merges. If a V-line exists at ANY row boundary within the
+// span, the column separation is considered present.
 func computeColSpan(grid *Grid, vIdx VLineIndex, r, c, rowSpan int, tolerance float64) int {
 	colSpan := 1
-	y1 := grid.Rows[r]
-	y2Idx := r + rowSpan
-	if y2Idx >= len(grid.Rows) {
-		y2Idx = len(grid.Rows) - 1
-	}
-	y2 := grid.Rows[y2Idx]
 
 	for nextC := c + 1; nextC < grid.ColumnCount(); nextC++ {
 		separatorX := grid.Columns[nextC]
-		if vIdx.HasLineAt(separatorX, y1, y2, tolerance) {
+		found := false
+		for dr := 0; dr < rowSpan && !found; dr++ {
+			segY1 := grid.Rows[r+dr]
+			segY2Idx := r + dr + 1
+			if segY2Idx >= len(grid.Rows) {
+				segY2Idx = len(grid.Rows) - 1
+			}
+			segY2 := grid.Rows[segY2Idx]
+			if vIdx.HasLineAt(separatorX, segY1, segY2, tolerance) {
+				found = true
+			}
+		}
+		if found {
 			break
 		}
 		colSpan++

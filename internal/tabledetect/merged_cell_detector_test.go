@@ -624,3 +624,62 @@ func TestIssue79_MergedCells(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// computeColSpan — per-row V-line detection (regression test for over-merge)
+// ---------------------------------------------------------------------------
+
+func TestDetectMergedCells_ColSpan_PerRowVLines(t *testing.T) {
+	// Scenario: exam schedule with 3 slots × 4 columns.
+	// TIME (col 0) and VENUE (col 3) merge vertically within each slot.
+	// V-lines at X=50 and X=100 exist per-row (not as single tall lines).
+	// Before the fix, computeColSpan checked V-lines over the full rowSpan
+	// Y-range, so short per-row V-lines didn't meet the 70% coverage
+	// threshold → false colSpan=4 (all columns merged).
+	//
+	// Grid: 6 rows × 4 cols (Y ascending)
+	//   Row boundaries: [100, 110, 120, 130, 140, 150, 160]
+	//   Col boundaries: [0, 50, 100, 150]
+	//   Slot 1: rows 0-2 (Y=100..130)
+	//   Slot 2: rows 3-5 (Y=130..160)
+
+	rows := []float64{100, 110, 120, 130, 140, 150, 160}
+	cols := []float64{0, 50, 100, 150}
+	grid := makeGrid(rows, cols)
+
+	lines := []*RulingLine{
+		// Full-width H-lines at slot boundaries
+		hLine(0, 100, 150), hLine(0, 130, 150), hLine(0, 160, 150),
+		// Interior H-lines only for cols 1,2 (course/sections separators)
+		hLine(50, 110, 100), hLine(50, 120, 100),
+		hLine(50, 140, 100), hLine(50, 150, 100),
+		// Outer V-lines (full height)
+		vLine(0, 100, 160), vLine(150, 100, 160),
+		// Interior V-lines at X=50 and X=100 — per-row segments, NOT full height
+		vLine(50, 100, 110), vLine(50, 110, 120), vLine(50, 120, 130),
+		vLine(50, 130, 140), vLine(50, 140, 150), vLine(50, 150, 160),
+		vLine(100, 100, 110), vLine(100, 110, 120), vLine(100, 120, 130),
+		vLine(100, 130, 140), vLine(100, 140, 150), vLine(100, 150, 160),
+	}
+
+	result := DetectMergedCells(grid, lines, defaultMergeTolerance)
+
+	// Expect: col 0 and col 3 each merge 3 rows per slot.
+	// No cell should have colSpan > 1 (V-lines exist at every row segment).
+	for _, m := range result {
+		if m.ColSpan > 1 {
+			t.Errorf("cell (%d,%d): colSpan=%d, want 1 — per-row V-lines should prevent column merge",
+				m.Row, m.Col, m.ColSpan)
+		}
+	}
+
+	// Col 0 should have merged cells with rowSpan=3 (slot 1) and rowSpan=3 (slot 2)
+	col0Merges := 0
+	for _, m := range result {
+		if m.Col == 0 && m.RowSpan > 1 {
+			col0Merges++
+			assert.Equal(t, 3, m.RowSpan, "col 0 merge at row %d should span 3 rows", m.Row)
+		}
+	}
+	assert.Equal(t, 2, col0Merges, "col 0 should have 2 merged regions (slot 1 + slot 2)")
+}
