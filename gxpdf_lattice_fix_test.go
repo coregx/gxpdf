@@ -325,7 +325,7 @@ func TestTable_Method_LatticeString(t *testing.T) {
 	}
 }
 
-// ---------- Multipage behaviour ----------
+// ---------- Multipage behavior ----------
 
 // TestExtractTablesWithOptions_MultiPageLattice verifies that Lattice mode
 // iterates through multiple pages of a PDF. The test confirms that the
