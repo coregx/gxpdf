@@ -42,12 +42,12 @@ var updateGolden = flag.Bool("update-golden", false, "regenerate golden test fil
 // Only cells that carry information (non-empty text, or a span > 1) are
 // included to keep the JSON file compact and human-readable.
 type GoldenTable struct {
-	PDF    string        `json:"pdf"`
-	Page   int           `json:"page"`
-	Method string        `json:"method"`
-	Rows   int           `json:"rows"`
-	Cols   int           `json:"cols"`
-	Cells  []GoldenCell  `json:"cells"`
+	PDF    string       `json:"pdf"`
+	Page   int          `json:"page"`
+	Method string       `json:"method"`
+	Rows   int          `json:"rows"`
+	Cols   int          `json:"cols"`
+	Cells  []GoldenCell `json:"cells"`
 }
 
 // GoldenCell captures the text content and merge metadata of one cell.
@@ -106,7 +106,7 @@ func tableToGolden(pdfPath string, pageNum int, tbl *Table) GoldenTable {
 	return g
 }
 
-// writeGolden serialises gt to path using indented JSON.
+// writeGolden serializes gt to path using indented JSON.
 func writeGolden(path string, gt GoldenTable) error {
 	data, err := json.MarshalIndent(gt, "", "  ")
 	if err != nil {
@@ -118,7 +118,7 @@ func writeGolden(path string, gt GoldenTable) error {
 	return nil
 }
 
-// readGolden deserialises the golden file at path.
+// readGolden deserializes the golden file at path.
 func readGolden(path string) (GoldenTable, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
