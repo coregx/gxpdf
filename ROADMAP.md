@@ -130,6 +130,10 @@ Page sizes, custom dimensions, landscape orientation, and text rotation:
 
 ## Current Development
 
+### Unreleased (on main)
+
+- **Lattice table extraction fix** (#79) — `MethodLattice` and `MethodAuto` now correctly extract ruling lines from PDF graphics; previously `graphicsElements` was always nil, causing silent fallback to Stream detection.
+
 ### v0.8.3
 
 **Released**: July 2026

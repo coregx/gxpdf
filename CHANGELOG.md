@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Lattice table extraction** — `MethodLattice` now correctly extracts ruling lines from PDF graphics for grid-based table detection; previously `graphicsElements` was always nil, causing silent fallback to Stream method (#79)
+
 ---
 
 ## [0.8.3] - 2026-07-22
