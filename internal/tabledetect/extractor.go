@@ -369,11 +369,14 @@ func extendGridEdgeBounds(grid *Grid) {
 	}
 	avgH := totalH / float64(count)
 
-	// Extend bottom edge (grid.Rows[0]) downward by avgH.
-	grid.Rows[0] -= avgH
+	// Extend bottom edge (grid.Rows[0]) downward by 2×avgH.
+	// 2× because text may be positioned one full row below the last
+	// detected ruling line (the ruling line IS the cell boundary, but
+	// text sits inside the cell below it).
+	grid.Rows[0] -= 2 * avgH
 
-	// Extend top edge (grid.Rows[last]) upward by avgH.
-	grid.Rows[len(grid.Rows)-1] += avgH
+	// Extend top edge (grid.Rows[last]) upward by 2×avgH.
+	grid.Rows[len(grid.Rows)-1] += 2 * avgH
 
 	// Rebuild cells with new bounds.
 	gb := NewDefaultGridBuilder()
