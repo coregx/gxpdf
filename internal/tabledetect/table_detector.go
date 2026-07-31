@@ -45,6 +45,7 @@ func (em ExtractionMethod) String() string {
 //   - Detection method used
 //   - Grid structure (for lattice mode)
 //   - Row/column coordinates (for stream mode)
+//   - Ruling lines (for merged cell analysis in lattice mode)
 //
 // This represents the output of Phase 2.6 (Table Detection).
 // Phase 2.7 will use this to extract actual cell content.
@@ -55,6 +56,7 @@ type TableRegion struct {
 	Grid           *Grid               // Grid structure (lattice mode)
 	Rows           []float64           // Row coordinates (stream mode)
 	Columns        []float64           // Column coordinates (stream mode)
+	RulingLines    []*RulingLine       // Ruling lines used to build the grid (lattice mode, for merged cell detection)
 }
 
 // NewTableRegion creates a new TableRegion.
@@ -267,6 +269,8 @@ func (td *DefaultTableDetector) detectLattice(
 	// This makes region.Columns available for easy access
 	region.Columns = grid.Columns
 	region.Rows = grid.Rows
+	// Store ruling lines for merged cell detection in Phase 2.7
+	region.RulingLines = rulingLines
 
 	return []*TableRegion{region}, nil
 }
