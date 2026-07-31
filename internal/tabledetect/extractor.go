@@ -86,13 +86,13 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	// Convert extractor.Rectangle to domaintable.Rectangle
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
+	// Extend edge cell bounds BEFORE merged cell detection and extraction.
+	// Ruling lines for the very first/last table row may be missing,
+	// leaving text outside the grid. The extension must happen first so
+	// that merged cell detection and text extraction see the full bounds.
+	extendGridEdgeBounds(grid)
+
 	// Detect merged cells when ruling lines are available.
-	//
-	// DetectMergedCells works in GRID space where rows are sorted ascending
-	// (bottom-to-top PDF space, i.e. grid row 0 = visual bottom row).
-	// extractLatticeTable iterates with gridRow = rowCount-1-r so that output
-	// row 0 corresponds to the visual top row. We must convert grid-space merge
-	// coordinates to output-space coordinates before building the lookup maps.
 	var mergedOwners map[mergedKey]MergedCellInfo
 	var coveredCells map[mergedKey]bool
 
@@ -104,11 +104,6 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 			outputMerges := make([]MergedCellInfo, len(gridMerges))
 			for i, m := range gridMerges {
 				outputRow := rowCount - 1 - m.Row
-				// When a cell spans multiple grid rows (ascending), it occupies
-				// grid rows [m.Row, m.Row+m.RowSpan). In output space (descending)
-				// those rows become [outputRow-m.RowSpan+1, outputRow].
-				// The owner in output space is the smallest output row index,
-				// which is outputRow - (m.RowSpan - 1).
 				outputMerges[i] = MergedCellInfo{
 					Row:     outputRow - (m.RowSpan - 1),
 					Col:     m.Col,
@@ -140,14 +135,21 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 				continue
 			}
 
-			content := te.cellExtractor.ExtractCellContent(gridCell.Bounds)
+			// For merged cell owners, expand bounds to cover the entire
+			// merged area. Text in covered cells (TIME slot labels, etc.)
+			// would otherwise be lost because covered cells are skipped.
+			extractBounds := gridCell.Bounds
+			if info, ok := mergedOwners[mergedKey{r, c}]; ok && (info.RowSpan > 1 || info.ColSpan > 1) {
+				extractBounds = computeMergedBounds(grid, gridRow, c, info)
+			}
 
-			domainBounds := domaintable.NewRectangle(gridCell.Bounds.X, gridCell.Bounds.Y, gridCell.Bounds.Width, gridCell.Bounds.Height)
+			content := te.cellExtractor.ExtractCellContent(extractBounds)
+
+			domainBounds := domaintable.NewRectangle(extractBounds.X, extractBounds.Y, extractBounds.Width, extractBounds.Height)
 
 			cell := domaintable.NewCellWithBounds(content, r, c, domainBounds)
 			cell = cell.WithAlignment(te.detectAlignment(content, gridCell.Bounds))
 
-			// Apply span information if this cell is a merge owner.
 			if info, ok := mergedOwners[mergedKey{r, c}]; ok {
 				cell = cell.WithRowSpan(info.RowSpan).WithColSpan(info.ColSpan)
 			}
@@ -291,4 +293,92 @@ func (te *TableExtractor) ExtractTables(regions []*TableRegion) ([]*domaintable.
 	}
 
 	return tables, nil
+}
+
+// computeMergedBounds calculates the bounding rectangle that covers
+// all grid cells in a merged region. Used to extract text from the
+// entire merged area, not just the owner cell.
+func computeMergedBounds(grid *Grid, gridRow, col int, info MergedCellInfo) extractor.Rectangle {
+	// Start from the owner cell's bounds.
+	topLeft := grid.GetCell(gridRow, col)
+	if topLeft == nil {
+		return extractor.Rectangle{}
+	}
+
+	minX := topLeft.Bounds.X
+	minY := topLeft.Bounds.Y
+	maxX := topLeft.Bounds.X + topLeft.Bounds.Width
+	maxY := topLeft.Bounds.Y + topLeft.Bounds.Height
+
+	// Expand to cover all cells in the merged region.
+	for dr := 0; dr < info.RowSpan; dr++ {
+		for dc := 0; dc < info.ColSpan; dc++ {
+			gr := gridRow - dr // grid rows descend (gridRow is top in grid space)
+			gc := col + dc
+			if gr < 0 || gr >= grid.RowCount() || gc >= grid.ColumnCount() {
+				continue
+			}
+			c := grid.GetCell(gr, gc)
+			if c == nil {
+				continue
+			}
+			if c.Bounds.X < minX {
+				minX = c.Bounds.X
+			}
+			if c.Bounds.Y < minY {
+				minY = c.Bounds.Y
+			}
+			if c.Bounds.X+c.Bounds.Width > maxX {
+				maxX = c.Bounds.X + c.Bounds.Width
+			}
+			if c.Bounds.Y+c.Bounds.Height > maxY {
+				maxY = c.Bounds.Y + c.Bounds.Height
+			}
+		}
+	}
+
+	return extractor.NewRectangle(minX, minY, maxX-minX, maxY-minY)
+}
+
+// extendGridEdgeBounds extends the first and last grid rows by the average
+// row height. This captures text that falls just outside the detected grid
+// because the outermost ruling lines were not found by the graphics parser.
+//
+// Only edge rows are extended — interior rows remain at their exact positions.
+// Cell bounds are recalculated after the extension via Grid.Cells rebuild.
+//
+// Inspired by camelot-py's _extend_table_areas_with_textlines which extends
+// table areas based on overlapping text lines.
+func extendGridEdgeBounds(grid *Grid) {
+	if grid == nil || len(grid.Rows) < 3 {
+		return
+	}
+
+	// Compute average row height (excluding outliers).
+	var totalH float64
+	var count int
+	for i := 0; i < len(grid.Rows)-1; i++ {
+		h := grid.Rows[i+1] - grid.Rows[i]
+		if h > 0 && h < 100 {
+			totalH += h
+			count++
+		}
+	}
+	if count == 0 {
+		return
+	}
+	avgH := totalH / float64(count)
+
+	// Extend bottom edge (grid.Rows[0]) downward by 2×avgH.
+	// 2× because text may be positioned one full row below the last
+	// detected ruling line (the ruling line IS the cell boundary, but
+	// text sits inside the cell below it).
+	grid.Rows[0] -= 2 * avgH
+
+	// Extend top edge (grid.Rows[last]) upward by 2×avgH.
+	grid.Rows[len(grid.Rows)-1] += 2 * avgH
+
+	// Rebuild cells with new bounds.
+	gb := NewDefaultGridBuilder()
+	grid.Cells = gb.createCells(grid.Rows, grid.Columns)
 }

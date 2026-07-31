@@ -8,21 +8,22 @@ import (
 
 // CellExtractor extracts text content from a rectangular cell region.
 //
-// The extractor:
-//   - Finds all text elements within cell bounds
-//   - Sorts text by position (top to bottom, left to right)
-//   - Joins text with proper spacing and line breaks
-//   - Handles multi-line content
+// The extractor is stateful: it tracks which text elements have been
+// assigned to a cell. Each element is assigned to at most one cell
+// (first-come-first-served based on extraction order). This prevents
+// multi-line text from bleeding into adjacent grid cells.
 //
 // This is a critical component for table extraction (Phase 2.7).
 type CellExtractor struct {
 	textElements []*TextElement
+	assigned     map[*TextElement]bool
 }
 
 // NewCellExtractor creates a new CellExtractor with the given text elements.
 func NewCellExtractor(textElements []*TextElement) *CellExtractor {
 	return &CellExtractor{
 		textElements: textElements,
+		assigned:     make(map[*TextElement]bool),
 	}
 }
 
@@ -40,42 +41,65 @@ func NewCellExtractor(textElements []*TextElement) *CellExtractor {
 //
 // Returns the extracted text, or empty string if no text is found.
 func (ce *CellExtractor) ExtractCellContent(bounds Rectangle) string {
-	// Find text elements within bounds
 	elementsInCell := ce.FindElementsInBounds(bounds)
 	if len(elementsInCell) == 0 {
 		return ""
 	}
 
-	// Group elements by line
+	// Mark elements as assigned so they won't appear in adjacent cells.
+	ce.MarkAssigned(elementsInCell)
+
 	lines := ce.groupByLine(elementsInCell)
-
-	// Sort lines top to bottom
 	ce.sortLines(lines)
-
-	// Build text from lines
 	return ce.buildTextFromLines(lines)
 }
 
+// cellBoundsPadding is added to cell bounds when checking text element
+// containment. Text positioned near grid lines (within a few points) may
+// have its center point outside the strict cell rectangle due to coordinate
+// transformation precision, font metrics, or baseline vs bounding-box
+// differences. A 2pt padding matches the grid builder tolerance.
+const cellBoundsPadding = 2.0
+
 // FindElementsInBounds returns all text elements that are within the bounds.
 //
-// An element is considered "within" if its center point is inside the bounds.
-// This handles cases where text might slightly overlap cell boundaries.
+// An element is considered "within" if its center point is inside the bounds
+// expanded by cellBoundsPadding on all sides. This handles coordinate
+// precision issues at grid boundaries without pulling in text from adjacent cells
+// (grid rows are typically 10-15pt apart).
 //
 // This method is exported for use by other extractors (e.g., table alignment detection).
 func (ce *CellExtractor) FindElementsInBounds(bounds Rectangle) []*TextElement {
 	var result []*TextElement
 
+	expanded := NewRectangle(
+		bounds.X-cellBoundsPadding,
+		bounds.Y-cellBoundsPadding,
+		bounds.Width+2*cellBoundsPadding,
+		bounds.Height+2*cellBoundsPadding,
+	)
+
 	for _, elem := range ce.textElements {
-		// Check if element center is within bounds
+		if ce.assigned[elem] {
+			continue
+		}
 		centerX := elem.CenterX()
 		centerY := elem.CenterY()
 
-		if bounds.Contains(centerX, centerY) {
+		if expanded.Contains(centerX, centerY) {
 			result = append(result, elem)
 		}
 	}
 
 	return result
+}
+
+// MarkAssigned marks the given text elements as assigned to a cell.
+// Once assigned, elements will not appear in subsequent FindElementsInBounds calls.
+func (ce *CellExtractor) MarkAssigned(elements []*TextElement) {
+	for _, e := range elements {
+		ce.assigned[e] = true
+	}
 }
 
 // textLine represents a line of text elements at the same Y position.

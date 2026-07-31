@@ -137,20 +137,30 @@ func computeRowSpan(grid *Grid, hIdx HLineIndex, r, c int, tolerance float64) in
 
 // computeColSpan determines how many grid columns cell (r, c) spans rightward.
 //
-// The rowSpan is already known and used to bound the Y range for V-line checks:
-// from grid.Rows[r] to grid.Rows[r+rowSpan] (clamped to grid boundaries).
+// For each candidate column boundary, we check V-lines per individual row
+// segment rather than across the full rowSpan height. V-lines in PDFs are
+// typically drawn per-row (not as a single line spanning the entire table),
+// so requiring a single V-line to cover 70% of a large rowSpan would cause
+// false column merges. If a V-line exists at ANY row boundary within the
+// span, the column separation is considered present.
 func computeColSpan(grid *Grid, vIdx VLineIndex, r, c, rowSpan int, tolerance float64) int {
 	colSpan := 1
-	y1 := grid.Rows[r]
-	y2Idx := r + rowSpan
-	if y2Idx >= len(grid.Rows) {
-		y2Idx = len(grid.Rows) - 1
-	}
-	y2 := grid.Rows[y2Idx]
 
 	for nextC := c + 1; nextC < grid.ColumnCount(); nextC++ {
 		separatorX := grid.Columns[nextC]
-		if vIdx.HasLineAt(separatorX, y1, y2, tolerance) {
+		found := false
+		for dr := 0; dr < rowSpan && !found; dr++ {
+			segY1 := grid.Rows[r+dr]
+			segY2Idx := r + dr + 1
+			if segY2Idx >= len(grid.Rows) {
+				segY2Idx = len(grid.Rows) - 1
+			}
+			segY2 := grid.Rows[segY2Idx]
+			if vIdx.HasLineAt(separatorX, segY1, segY2, tolerance) {
+				found = true
+			}
+		}
+		if found {
 			break
 		}
 		colSpan++
@@ -204,6 +214,8 @@ func DetectMergedCells(grid *Grid, lines []*RulingLine, tolerance float64) []Mer
 
 	var merged []MergedCellInfo
 
+	avgRowHeight := computeAverageRowHeight(grid)
+
 	for r := 0; r < rowCount; r++ {
 		for c := 0; c < colCount; c++ {
 			if covered[r][c] {
@@ -212,6 +224,16 @@ func DetectMergedCells(grid *Grid, lines []*RulingLine, tolerance float64) []Mer
 
 			rowSpan := computeRowSpan(grid, hIdx, r, c, tolerance)
 			colSpan := computeColSpan(grid, vIdx, r, c, rowSpan, tolerance)
+
+			// Sanity check: if a single-row cell is abnormally tall
+			// (> 5× average row height), it's likely a header/footer artifact.
+			// Don't allow colSpan expansion for such cells.
+			if rowSpan == 1 && colSpan > 1 {
+				cellHeight := cellRowHeight(grid, r)
+				if cellHeight > avgRowHeight*5 {
+					colSpan = 1
+				}
+			}
 
 			if rowSpan > 1 || colSpan > 1 {
 				merged = append(merged, MergedCellInfo{
@@ -273,4 +295,35 @@ func buildCoveredMap(infos []MergedCellInfo) map[mergedKey]bool {
 		}
 	}
 	return covered
+}
+
+// computeAverageRowHeight returns the average height of grid rows,
+// excluding outliers (rows with height > 10× the median).
+func computeAverageRowHeight(grid *Grid) float64 {
+	if len(grid.Rows) < 2 {
+		return 0
+	}
+	var heights []float64
+	for i := 0; i < len(grid.Rows)-1; i++ {
+		h := grid.Rows[i+1] - grid.Rows[i]
+		if h > 0 {
+			heights = append(heights, h)
+		}
+	}
+	if len(heights) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, h := range heights {
+		sum += h
+	}
+	return sum / float64(len(heights))
+}
+
+// cellRowHeight returns the height of grid row r.
+func cellRowHeight(grid *Grid, r int) float64 {
+	if r+1 >= len(grid.Rows) {
+		return 0
+	}
+	return grid.Rows[r+1] - grid.Rows[r]
 }

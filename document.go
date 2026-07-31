@@ -185,8 +185,9 @@ func (d *Document) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, 
 			return nil, fmt.Errorf("gxpdf: failed to detect tables on page %d: %w", pageIndex, err)
 		}
 
-		// Extract table data
-		tableExtractor := tabledetect.NewTableExtractor(textElements)
+		normalizedText := d.normalizeTextForLattice(textElements, detectedTables, opts.Method, pageIndex)
+
+		tableExtractor := tabledetect.NewTableExtractor(normalizedText)
 		for _, region := range detectedTables {
 			extracted, err := tableExtractor.ExtractTable(region)
 			if err != nil {
@@ -199,6 +200,33 @@ func (d *Document) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, 
 	}
 
 	return allTables, nil
+}
+
+// normalizeTextForLattice detects and corrects coordinate space mismatches
+// between text elements and grid cells for Lattice table extraction.
+func (d *Document) normalizeTextForLattice(
+	textElements []*extractor.TextElement,
+	regions []*tabledetect.TableRegion,
+	method ExtractionMethod,
+	pageIndex int,
+) []*extractor.TextElement {
+	if method == MethodStream || len(regions) == 0 {
+		return textElements
+	}
+	pageHeight := extractor.ReadPageHeight(d.reader, pageIndex)
+	if pageHeight <= 0 {
+		return textElements
+	}
+	for _, region := range regions {
+		if region.Grid != nil {
+			bounds := region.Grid.Bounds()
+			cn := extractor.NewCoordinateNormalizer(pageHeight)
+			return cn.NormalizeTextToGridSpace(
+				textElements, bounds.Y, bounds.Y+bounds.Height,
+			)
+		}
+	}
+	return textElements
 }
 
 // GetImages extracts all images from all pages in the document.

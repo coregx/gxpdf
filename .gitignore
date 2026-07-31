@@ -37,6 +37,8 @@ Thumbs.db
 # Test artifacts
 # Note: testdata/pdfs/*.pdf files ARE committed (needed for CI tests)
 !/testdata/pdfs/.gitkeep
+# Note: testdata/golden/*.json files ARE committed (golden snapshot fixtures, NOT generated output)
+# To regenerate: go test -run TestGolden -update-golden
 coverage.out
 coverage.html
 

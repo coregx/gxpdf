@@ -148,7 +148,28 @@ func (p *Page) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, erro
 	}
 
 	var tables []*Table
-	tableExtractor := tabledetect.NewTableExtractor(textElements)
+
+	// For Lattice tables, text and graphics may be in different coordinate
+	// spaces (text: raw Tm/Td, graphics: CTM-normalised). Detect mismatch
+	// and transform text coordinates to match the grid.
+	normalizedText := textElements
+	if opts.Method != MethodStream && len(detectedTables) > 0 {
+		pageHeight := extractor.ReadPageHeight(p.doc.reader, p.index)
+		if pageHeight > 0 {
+			for _, region := range detectedTables {
+				if region.Grid != nil {
+					bounds := region.Grid.Bounds()
+					cn := extractor.NewCoordinateNormalizer(pageHeight)
+					normalizedText = cn.NormalizeTextToGridSpace(
+						normalizedText, bounds.Y, bounds.Y+bounds.Height,
+					)
+					break
+				}
+			}
+		}
+	}
+
+	tableExtractor := tabledetect.NewTableExtractor(normalizedText)
 
 	for _, region := range detectedTables {
 		extracted, err := tableExtractor.ExtractTable(region)
