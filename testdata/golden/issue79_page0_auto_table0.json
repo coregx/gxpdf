@@ -8,7 +8,7 @@
     {
       "row": 0,
       "col": 0,
-      "text": "",
+      "text": "TIME\nSlot 1: \n9:00 AM\n - \n11:00 AM",
       "rowSpan": 16,
       "colSpan": 1
     },
@@ -211,7 +211,7 @@
     {
       "row": 16,
       "col": 0,
-      "text": "",
+      "text": "Slot 2: \n12:00 PM\n - \n2:00 PM",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -232,7 +232,7 @@
     {
       "row": 16,
       "col": 3,
-      "text": "",
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -372,7 +372,7 @@
     {
       "row": 27,
       "col": 1,
-      "text": "ENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN\nGAME THEORY\nINTRODUCTION TO MACROECONOMICS",
+      "text": "\u0026 \nENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN\nA\nBuilding \nGAME THEORY\nA\nD\nINTRODUCTION TO MACROECONOMICS\nA",
       "rowSpan": 1,
       "colSpan": 3
     },
@@ -477,14 +477,14 @@
     {
       "row": 35,
       "col": 0,
-      "text": "",
+      "text": "Slot 3: \n3:00 PM\n - \n5:00 PM",
       "rowSpan": 12,
       "colSpan": 1
     },
     {
       "row": 35,
       "col": 3,
-      "text": "",
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
       "rowSpan": 12,
       "colSpan": 1
     },

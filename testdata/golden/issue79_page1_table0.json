@@ -155,7 +155,7 @@
     {
       "row": 12,
       "col": 0,
-      "text": "",
+      "text": "DEVELOPMENT\nCOMMUNICATION\n[BMB]",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -428,7 +428,7 @@
     {
       "row": 31,
       "col": 0,
-      "text": "",
+      "text": "TROPICS\nGLOBAL FINANCE",
       "rowSpan": 15,
       "colSpan": 1
     },
@@ -450,7 +450,7 @@
       "row": 31,
       "col": 3,
       "text": "",
-      "rowSpan": 15,
+      "rowSpan": 14,
       "colSpan": 1
     },
     {
@@ -631,16 +631,9 @@
     {
       "row": 45,
       "col": 1,
-      "text": "PRINCIPLES OF MARKETING",
+      "text": "PRINCIPLES OF MARKETING\nA,B,C,E,F,G,H\nSELECTION AND STAFFING\nA\nSTRUCTURE I: BASIC MECHANICS OF SOLIDS\nA",
       "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 45,
-      "col": 2,
-      "text": "A,B,C,E,F,G,H",
-      "rowSpan": 1,
-      "colSpan": 1
+      "colSpan": 3
     }
   ]
 }
