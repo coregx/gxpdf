@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-07-31
+
+### Added
+- **Merged cell detection for Lattice tables** — cells that visually span multiple rows or columns in grid-based PDFs (exam schedules, timetables, financial reports) are now correctly detected and reported with `RowSpan`/`ColSpan` values instead of appearing as multiple empty cells (#79)
+  - New `DetectMergedCells()` function implements the Grid Gap Analysis algorithm: scans for absent interior ruling lines within each column/row range
+  - `HLineIndex` / `VLineIndex` spatial indexes for O(1) line lookup during analysis
+  - 70% minimum coverage ratio threshold for partial ruling lines (handles PDFs where borders don't span the full cell width)
+  - `TableRegion.RulingLines` field stores ruling lines from detection phase for use in extraction
+  - Owner cells receive correct `RowSpan`/`ColSpan`; covered cells remain as empty placeholders (backward compatible)
+  - `Cell.IsMerged()` correctly returns `true` for spanning cells
+- **`CellAt()` public API** — new `Table.CellAt(row, col)` method returns `*CellInfo` with `Text`, `Row`, `Col`, `RowSpan`, `ColSpan` fields and `IsMerged()` method; enables programmatic detection of merged cells in extracted tables
+  - Existing `Cell(row, col)` method remains unchanged (returns plain text string)
+
+---
+
 ## [0.8.5] - 2026-07-31
 
 ### Fixed

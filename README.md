@@ -121,6 +121,7 @@ fmt.Println(infos[0].SignedBy, infos[0].Valid) // "CN=Test" true
 ### PDF Reading & Extraction
 - **Encrypted PDF Reading** - Open password-protected PDFs (RC4-40/128, AES-128)
 - **Table Extraction** - Industry-leading accuracy (100% on bank statements)
+  - Merged cell detection via Grid Gap Analysis (Lattice mode) — `CellAt()` returns `RowSpan`/`ColSpan` metadata
 - **Text Extraction** - Full text with positions and Unicode support
 - **Image Extraction** - Extract embedded images
 - **Export Formats** - CSV, JSON, Excel
@@ -410,9 +411,38 @@ tables := doc.ExtractTables()
 for _, table := range tables {
     fmt.Printf("Table: %d rows x %d cols\n", table.RowCount(), table.ColumnCount())
 
+    // Access cell text (simple API, backward compatible)
+    val := table.Cell(0, 0)
+    fmt.Println("Header:", val)
+
     // Export to CSV
     csv, _ := table.ToCSV()
     fmt.Println(csv)
+}
+```
+
+### Merged Cell Detection
+
+Lattice tables with merged cells (exam schedules, timetables, financial reports) are detected automatically. Use `CellAt()` to inspect span metadata:
+
+```go
+doc, _ := gxpdf.Open("timetable.pdf")
+defer doc.Close()
+
+tables := doc.ExtractTables()
+for _, table := range tables {
+    for r := 0; r < table.RowCount(); r++ {
+        for c := 0; c < table.ColumnCount(); c++ {
+            cell := table.CellAt(r, c)
+            if cell == nil {
+                continue
+            }
+            if cell.IsMerged() {
+                fmt.Printf("[%d,%d] %q spans %dx%d\n",
+                    r, c, cell.Text, cell.RowSpan, cell.ColSpan)
+            }
+        }
+    }
 }
 ```
 

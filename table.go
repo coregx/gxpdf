@@ -56,6 +56,20 @@ func (t *Table) IsEmpty() bool {
 	return t.internal.IsEmpty()
 }
 
+// CellInfo holds the text content and span metadata of a table cell.
+type CellInfo struct {
+	Text    string
+	Row     int
+	Col     int
+	RowSpan int
+	ColSpan int
+}
+
+// IsMerged returns true if this cell spans multiple rows or columns.
+func (c *CellInfo) IsMerged() bool {
+	return c.RowSpan > 1 || c.ColSpan > 1
+}
+
 // Cell returns the text content of a cell at the given row and column.
 //
 // Returns empty string if the position is out of bounds.
@@ -65,6 +79,23 @@ func (t *Table) Cell(row, col int) string {
 		return ""
 	}
 	return cell.Text
+}
+
+// CellAt returns the full cell information including span metadata.
+//
+// Returns nil if the position is out of bounds.
+func (t *Table) CellAt(row, col int) *CellInfo {
+	cell := t.internal.GetCell(row, col)
+	if cell == nil {
+		return nil
+	}
+	return &CellInfo{
+		Text:    cell.Text,
+		Row:     cell.Row,
+		Col:     cell.Column,
+		RowSpan: cell.RowSpan,
+		ColSpan: cell.ColSpan,
+	}
 }
 
 // String returns a string representation of the table.

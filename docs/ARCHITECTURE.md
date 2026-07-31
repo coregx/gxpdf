@@ -323,6 +323,10 @@ PDF encryption support:
 3. **Pass 3: Alignment Detection** - Geometric column clustering
 4. **Pass 4: Multi-line Cell Merger** - Amount-based row discrimination
 
+**Merged Cell Detection** (Lattice mode):
+
+Grid Gap Analysis algorithm detects cells spanning multiple rows or columns by scanning for absent interior ruling lines within each column/row range. `HLineIndex`/`VLineIndex` spatial indexes provide O(1) line lookup. Owner cells receive correct `RowSpan`/`ColSpan`; covered cells remain as empty placeholders (backward compatible). Public API: `Table.CellAt(row, col)` returns `*CellInfo` with span metadata.
+
 **Key Innovation**: Amount-based discrimination
 ```go
 // Works universally across all bank formats

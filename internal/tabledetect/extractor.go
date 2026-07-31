@@ -61,6 +61,11 @@ func (te *TableExtractor) ExtractTable(region *TableRegion) (*domaintable.Table,
 //
 // In lattice mode, the table has a well-defined grid from ruling lines.
 // We extract text from each cell in the grid.
+//
+// When ruling lines are available in the region, merged cell detection is
+// performed via DetectMergedCells. Owner cells receive RowSpan/ColSpan values
+// greater than 1, while covered cells are skipped (left as empty placeholders
+// initialized by NewTable).
 func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable.Table, error) {
 	if region.Grid == nil {
 		return nil, fmt.Errorf("lattice mode requires grid structure")
@@ -70,7 +75,7 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	rowCount := grid.RowCount()
 	colCount := grid.ColumnCount()
 
-	// Create table
+	// Create table (all cells initialized to empty by NewTable).
 	tbl, err := domaintable.NewTable(rowCount, colCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create table: %w", err)
@@ -81,6 +86,41 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	// Convert extractor.Rectangle to domaintable.Rectangle
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
+	// Detect merged cells when ruling lines are available.
+	//
+	// DetectMergedCells works in GRID space where rows are sorted ascending
+	// (bottom-to-top PDF space, i.e. grid row 0 = visual bottom row).
+	// extractLatticeTable iterates with gridRow = rowCount-1-r so that output
+	// row 0 corresponds to the visual top row. We must convert grid-space merge
+	// coordinates to output-space coordinates before building the lookup maps.
+	var mergedOwners map[mergedKey]MergedCellInfo
+	var coveredCells map[mergedKey]bool
+
+	if len(region.RulingLines) > 0 {
+		gridMerges := DetectMergedCells(grid, region.RulingLines, defaultMergeTolerance)
+		if len(gridMerges) > 0 {
+			// Convert grid-space row indices to output-space row indices.
+			// output row = rowCount - 1 - gridRow
+			outputMerges := make([]MergedCellInfo, len(gridMerges))
+			for i, m := range gridMerges {
+				outputRow := rowCount - 1 - m.Row
+				// When a cell spans multiple grid rows (ascending), it occupies
+				// grid rows [m.Row, m.Row+m.RowSpan). In output space (descending)
+				// those rows become [outputRow-m.RowSpan+1, outputRow].
+				// The owner in output space is the smallest output row index,
+				// which is outputRow - (m.RowSpan - 1).
+				outputMerges[i] = MergedCellInfo{
+					Row:     outputRow - (m.RowSpan - 1),
+					Col:     m.Col,
+					RowSpan: m.RowSpan,
+					ColSpan: m.ColSpan,
+				}
+			}
+			mergedOwners = buildMergedMap(outputMerges)
+			coveredCells = buildCoveredMap(outputMerges)
+		}
+	}
+
 	// Extract content from each cell.
 	// Grid rows are sorted ascending by Y (bottom-to-top in PDF space).
 	// Reverse the iteration so output rows follow natural reading order
@@ -88,6 +128,13 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	for r := 0; r < rowCount; r++ {
 		gridRow := rowCount - 1 - r
 		for c := 0; c < colCount; c++ {
+			// Skip cells that are covered by a merge from an earlier owner cell.
+			// These positions are left as empty placeholder cells (already
+			// initialized by NewTable), which is the Variant A approach from ADR-004.
+			if coveredCells[mergedKey{r, c}] {
+				continue
+			}
+
 			gridCell := grid.GetCell(gridRow, c)
 			if gridCell == nil {
 				continue
@@ -99,6 +146,11 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 
 			cell := domaintable.NewCellWithBounds(content, r, c, domainBounds)
 			cell = cell.WithAlignment(te.detectAlignment(content, gridCell.Bounds))
+
+			// Apply span information if this cell is a merge owner.
+			if info, ok := mergedOwners[mergedKey{r, c}]; ok {
+				cell = cell.WithRowSpan(info.RowSpan).WithColSpan(info.ColSpan)
+			}
 
 			if err := tbl.SetCell(r, c, cell); err != nil {
 				return nil, fmt.Errorf("failed to set cell (%d,%d): %w", r, c, err)
