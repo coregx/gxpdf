@@ -43,7 +43,7 @@
     {
       "row": 4,
       "col": 2,
-      "text": "SECTIONS\nA,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
+      "text": "SECTIONS",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -57,7 +57,7 @@
     {
       "row": 5,
       "col": 2,
-      "text": "U,V,W,X,Y",
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -321,13 +321,6 @@
       "colSpan": 1
     },
     {
-      "row": 24,
-      "col": 2,
-      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
       "row": 25,
       "col": 1,
       "text": "ENGLISH READING SKILLS \u0026 PUBLIC SPEAKING",
@@ -337,14 +330,7 @@
     {
       "row": 25,
       "col": 2,
-      "text": ",C4,C5,C6,C7,C8,C9,D1,E1,E2,H1,H2,J1,",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 26,
-      "col": 2,
-      "text": "P1",
+      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D1,E1,E2,H1,H2,J1,P1",
       "rowSpan": 1,
       "colSpan": 1
     },

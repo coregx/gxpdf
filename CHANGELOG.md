@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Lattice table sections extraction** — multi-line cell text caused truncated or missing section codes in exam schedule PDFs; four repair patterns now recover the correct complete list (#79)
+  - Pattern A: header cell contamination — `SECTIONS\nA,B,C,` splits into header text + continuation for the next data row
+  - Pattern B: orphan prefix — empty-title row followed by a row starting with comma correctly prepends its sections
+  - Pattern C: trailing comma continuation — cells ending with comma chain-merge with following empty-title rows; venue contamination (`\nBUILDING`, `\nD`, `\nAnnexes`) stripped before comma detection
+  - Pattern C partial harvest: when chain stops at a titled row, pre-newline section codes from that row's cell are harvested without consuming the row
+  - Pattern D: orphan-before-title — empty-title row whose sections belong to the next titled row are reassigned
+  - `stripTrailingVenueContamination()` removes trailing venue text embedded after a newline in section cells
+  - `sectionsPrefixBeforeNewline()` extracts section codes from mixed content cells before the first newline
+  - Sections accuracy improved from 263/306 (85.9%) to 277/306 (90.5%) on the 311-course exam schedule PDF
+
 ---
 
 ## [0.9.1] - 2026-07-31
