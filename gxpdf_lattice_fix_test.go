@@ -370,3 +370,103 @@ func TestExtractTablesWithOptions_SpecificPagesLattice(t *testing.T) {
 		t.Errorf("single-page Lattice extraction unexpected error: %v", err)
 	}
 }
+
+// ---------- Integration test with real-world fixture from @AtifChy (#79) ----------
+
+const issue79PDF = "testdata/pdfs/issue79/sample.pdf"
+
+// TestIssue79_LatticeWithFilledRectangles is the primary regression test for
+// the follow-up to issue #79. The sample PDF from @AtifChy uses filled
+// rectangles ("re f" operator) for all table borders — a pattern produced by
+// wkhtmltopdf, Chrome print, and LibreOffice. Before this fix:
+//   - GraphicsParser ignored f/F/f* operators (called clearPath, not fillPath)
+//   - RulingLineDetector only handled GraphicsTypeLine, not GraphicsTypeRectangle
+//   - All tables fell back to MethodStream even when MethodLattice was requested
+//
+// After this fix, the PDF must return at least one table with Method == "Lattice"
+// and at least 4 columns (TIME, COURSE TITLE, SECTIONS, VENUE).
+func TestIssue79_LatticeWithFilledRectangles(t *testing.T) {
+	doc := openTestDoc(t, issue79PDF)
+	defer doc.Close()
+
+	opts := DefaultExtractionOptions().WithMethod(MethodLattice)
+	tables, err := doc.ExtractTablesWithOptions(opts)
+	if err != nil {
+		t.Fatalf("ExtractTablesWithOptions(MethodLattice) on issue79 sample: %v", err)
+	}
+
+	if len(tables) == 0 {
+		t.Fatal("issue79 sample PDF must produce at least 1 table in Lattice mode; got 0")
+	}
+
+	// Every table returned in Lattice mode must report "Lattice" as its method.
+	for i, tbl := range tables {
+		method := tbl.Method()
+		if method != "Lattice" {
+			t.Errorf("table[%d].Method() = %q, want %q — filled-rectangle tables must use Lattice detection", i, method, "Lattice")
+		}
+	}
+
+	// The sample schedule PDF has a 4-column structure (TIME / COURSE TITLE / SECTIONS / VENUE).
+	// At least one table must have exactly 4 columns.
+	found4Col := false
+	for _, tbl := range tables {
+		if tbl.ColumnCount() == 4 {
+			found4Col = true
+			break
+		}
+	}
+	if !found4Col {
+		t.Errorf("expected at least one 4-column table (TIME, COURSE TITLE, SECTIONS, VENUE); got column counts: %v",
+			columnCounts(tables))
+	}
+}
+
+// TestIssue79_MethodAutoPicksLattice verifies that in Auto mode, the sample
+// PDF's filled-rectangle grid is detected as Lattice, not Stream. Auto mode
+// must prefer Lattice when ruling lines are present.
+func TestIssue79_MethodAutoPicksLattice(t *testing.T) {
+	doc := openTestDoc(t, issue79PDF)
+	defer doc.Close()
+
+	opts := DefaultExtractionOptions().WithMethod(MethodAuto)
+	tables, err := doc.ExtractTablesWithOptions(opts)
+	if err != nil {
+		t.Fatalf("ExtractTablesWithOptions(MethodAuto) on issue79 sample: %v", err)
+	}
+
+	if len(tables) == 0 {
+		t.Skip("issue79 sample produced 0 tables in Auto mode — skipping method assertion")
+	}
+
+	// At least one table must be Lattice — the PDF has unambiguous ruling lines.
+	hasLattice := false
+	for _, tbl := range tables {
+		if tbl.Method() == "Lattice" {
+			hasLattice = true
+			break
+		}
+	}
+	if !hasLattice {
+		t.Errorf("Auto mode on filled-rectangle PDF must pick Lattice for at least one table; methods: %v",
+			methods(tables))
+	}
+}
+
+// columnCounts returns the column counts of all tables for diagnostic output.
+func columnCounts(tables []*Table) []int {
+	counts := make([]int, len(tables))
+	for i, tbl := range tables {
+		counts[i] = tbl.ColumnCount()
+	}
+	return counts
+}
+
+// methods returns the Method() strings of all tables for diagnostic output.
+func methods(tables []*Table) []string {
+	ms := make([]string, len(tables))
+	for i, tbl := range tables {
+		ms[i] = tbl.Method()
+	}
+	return ms
+}

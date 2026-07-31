@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Lattice table detection for filled rectangles** — PDFs that draw table borders as filled rectangles (`re f` operator, common in wkhtmltopdf, Chrome print, and LibreOffice) now correctly produce Lattice mode results; previously only stroked lines (`S`) were recognized as ruling lines (#79)
+  - `GraphicsParser.fillPath()` now creates `GraphicsTypeRectangle` elements from filled closed-rectangle paths; previously `f`, `F`, `f*`, `B`, `B*`, `b`, `b*` operators discarded the path without recording any element
+  - `DefaultRulingLineDetector.DetectRulingLines()` now decomposes `GraphicsTypeRectangle` elements into ruling lines: thin rectangles (height or width ≤ 5pt) become a single horizontal or vertical line at the midpoint; large rectangles become 4 edge lines
+
 ---
 
 ## [0.8.4] - 2026-07-31
