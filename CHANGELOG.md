@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `TableRegion.RulingLines` field stores ruling lines from detection phase for use in extraction
   - Owner cells receive correct `RowSpan`/`ColSpan`; covered cells remain as empty placeholders (backward compatible)
   - `Cell.IsMerged()` correctly returns `true` for spanning cells
+- **`CellAt()` public API** — new `Table.CellAt(row, col)` method returns `*CellInfo` with `Text`, `Row`, `Col`, `RowSpan`, `ColSpan` fields and `IsMerged()` method; enables programmatic detection of merged cells in extracted tables
+  - Existing `Cell(row, col)` method remains unchanged (returns plain text string)
 
 ---
 

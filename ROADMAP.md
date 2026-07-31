@@ -130,6 +130,10 @@ Page sizes, custom dimensions, landscape orientation, and text rotation:
 
 ## Current Development
 
+### Unreleased (on feat/merged-cell-detection)
+
+- **Merged cell detection for Lattice tables** (#79) — Grid Gap Analysis algorithm detects cells spanning multiple rows/columns via absent interior ruling lines. New `CellAt()` public API returns `*CellInfo` with `RowSpan`/`ColSpan` metadata.
+
 ### v0.8.5
 
 **Released**: July 2026
@@ -276,6 +280,7 @@ Community-driven release — all three extraction features requested by @joa23:
 | In-Memory PDF Opening | Done | v0.8.0 |
 | Embedded Font Extraction | Done | v0.8.0 |
 | Vector Graphics Extraction | Done | v0.8.0 |
+| Merged Cell Detection (Lattice) | Done | Unreleased |
 | Scientific Paper Text Extraction | Planned | v0.9.0 |
 | HTML to PDF | Planned | v1.0.0 |
 | PDF/A Compliance | Planned | v0.9.0 |
