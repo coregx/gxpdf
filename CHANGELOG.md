@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.8.5] - 2026-07-31
+
 ### Fixed
 - **Lattice table detection for filled rectangles** — PDFs that draw table borders as filled rectangles (`re f` operator, common in wkhtmltopdf, Chrome print, and LibreOffice) now correctly produce Lattice mode results; previously only stroked lines (`S`) were recognized as ruling lines (#79, @AtifChy)
   - `GraphicsParser.fillPath()` creates `GraphicsTypeRectangle` elements from filled paths; previously `f`, `F`, `f*`, `B`, `B*`, `b`, `b*` operators discarded the path
