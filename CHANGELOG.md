@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.9.0] - 2026-07-31
+
 ### Added
 - **Merged cell detection for Lattice tables** — cells that visually span multiple rows or columns in grid-based PDFs (exam schedules, timetables, financial reports) are now correctly detected and reported with `RowSpan`/`ColSpan` values instead of appearing as multiple empty cells (#79)
   - New `DetectMergedCells()` function implements the Grid Gap Analysis algorithm: scans for absent interior ruling lines within each column/row range
