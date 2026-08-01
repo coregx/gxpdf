@@ -173,7 +173,7 @@
             { "title": "COMPUTER FUNDAMENTALS", "sections": ["E1","E2","H1","H2"] },
             { "title": "COMPUTER ORGANIZATION AND ARCHITECTURE", "sections": ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","X"] },
             { "title": "CORPORATE GOVERNANCE AND SOCIAL RESPONSIBILITY", "sections": ["A","B","C","E"] },
-            { "title": "DESIGN AND SIMULATION IN IEA", "sections": ["D"] },
+            { "title": "DESIGN AND SIMULATION IN IE", "sections": ["A"] },
             { "title": "DEVELOPMENT ECONOMICS", "sections": ["A"] },
             { "title": "DIGITAL SIGNAL PROCESSING", "sections": ["A","B","C","E","F"] },
             { "title": "ENVIRONMENT AND DESIGN III: LANDSCAPE DESIGN", "sections": ["A"] },
