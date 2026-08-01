@@ -22,7 +22,7 @@
     {
       "row": 2,
       "col": 2,
-      "text": "Day 2 : Jul 21, 2026 ( Tuesday )",
+      "text": "Day 2 : Jul 21,2026 ( Tuesday )",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -106,7 +106,7 @@
     {
       "row": 8,
       "col": 2,
-      "text": "A\nAll \nAnnexes",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -120,7 +120,7 @@
     {
       "row": 9,
       "col": 2,
-      "text": "A\n\u0026 \nA,B,C,D,E,F\nBuilding \nA,A,A[ARCH],B,B,B\nD",
+      "text": "A,A,B,C,D,E,F,A,A,A[ARCH],B,B,B,D",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -274,7 +274,7 @@
     {
       "row": 21,
       "col": 2,
-      "text": "All \nA,B,C,D,E",
+      "text": "A,B,C,D,E",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -282,13 +282,6 @@
       "row": 22,
       "col": 1,
       "text": "DEVELOPMENT",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 22,
-      "col": 2,
-      "text": "Annexes",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -302,7 +295,7 @@
     {
       "row": 23,
       "col": 2,
-      "text": "A,B\n\u0026 \nA,A1,A2,A3,A4,A5,A6,A7\nBuilding",
+      "text": "A,B,A,A1,A2,A3,A4,A5,A6,A7",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -510,13 +503,6 @@
       "colSpan": 1
     },
     {
-      "row": 38,
-      "col": 2,
-      "text": "All",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
       "row": 39,
       "col": 1,
       "text": "GLOBAL FINANCE",
@@ -526,7 +512,7 @@
     {
       "row": 39,
       "col": 2,
-      "text": "A\nAnnexes",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -540,7 +526,7 @@
     {
       "row": 40,
       "col": 2,
-      "text": "\u0026 \nA\nBuilding",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },

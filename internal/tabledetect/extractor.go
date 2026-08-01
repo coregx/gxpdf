@@ -842,6 +842,48 @@ func mergeTextContinuations(tbl *domaintable.Table) {
 				tbl.Rows[next][c] = &cleared
 			}
 		}
+
+		// Final pass: strip venue contamination from all sections cells.
+		cleanVenueContamination(tbl, c)
+	}
+}
+
+// cleanVenueContamination removes venue-like tokens from all sections cells.
+// Venue text ("All", "Annexes", "&", "Building", "D") sometimes bleeds into
+// the SECTIONS column due to adjacent merged VENUE cells. This is a final
+// cleanup pass after all continuation merging is complete.
+func cleanVenueContamination(tbl *domaintable.Table, sectionsCol int) {
+	venueTokens := map[string]bool{
+		"All": true, "Annexes": true, "&": true, "Building": true,
+	}
+
+	for r := 0; r < tbl.RowCount; r++ {
+		cell := tbl.GetCell(r, sectionsCol)
+		if cell == nil || cell.Text == "" {
+			continue
+		}
+
+		// Split by both newlines and commas, filter venue tokens, rejoin
+		parts := strings.FieldsFunc(cell.Text, func(r rune) bool {
+			return r == ',' || r == '\n'
+		})
+		var clean []string
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" || venueTokens[p] {
+				continue
+			}
+			// Single letter "D" is ambiguous — could be section or venue "Building D"
+			// Keep it only if surrounded by other section codes
+			clean = append(clean, p)
+		}
+
+		newText := strings.Join(clean, ",")
+		if newText != strings.ReplaceAll(strings.ReplaceAll(cell.Text, "\n", ","), " ", "") {
+			updated := *cell
+			updated.Text = newText
+			tbl.Rows[r][sectionsCol] = &updated
+		}
 	}
 }
 

@@ -29,7 +29,7 @@
     {
       "row": 2,
       "col": 2,
-      "text": "Day 1 : Jul 19, 2026 ( Sunday )",
+      "text": "Day 1 : Jul 19,2026 ( Sunday )",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -99,7 +99,7 @@
     {
       "row": 8,
       "col": 2,
-      "text": "A\nAll",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -113,7 +113,7 @@
     {
       "row": 9,
       "col": 2,
-      "text": "Annexes \nA,B,C,D,E,F,G,H,I",
+      "text": "A,B,C,D,E,F,G,H,I",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -127,7 +127,7 @@
     {
       "row": 10,
       "col": 2,
-      "text": "\u0026 \nA,B,C,D",
+      "text": "A,B,C,D",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -141,7 +141,7 @@
     {
       "row": 11,
       "col": 2,
-      "text": "Building \nA,B,C,D,E\nD",
+      "text": "A,B,C,D,E,D",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -330,7 +330,7 @@
     {
       "row": 25,
       "col": 2,
-      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3,All \n,C4,C5,C6,C7,C8,C9,D1,E1,E2,H1,H2,J1,",
+      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D1,E1,E2,H1,H2,J1",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -344,7 +344,7 @@
     {
       "row": 26,
       "col": 2,
-      "text": "Annexes \nP1\n\u0026",
+      "text": "P1",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -554,7 +554,7 @@
     {
       "row": 41,
       "col": 2,
-      "text": "A,A1,A2,A3,A4,A5,A6,A7\nAll",
+      "text": "A,A1,A2,A3,A4,A5,A6,A7",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -568,7 +568,7 @@
     {
       "row": 42,
       "col": 2,
-      "text": "A,B,D,E,F,G\nAnnexes",
+      "text": "A,B,D,E,F,G",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -582,7 +582,7 @@
     {
       "row": 43,
       "col": 2,
-      "text": "\u0026 \nB",
+      "text": "B",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -596,7 +596,7 @@
     {
       "row": 44,
       "col": 2,
-      "text": "Building \nA",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },

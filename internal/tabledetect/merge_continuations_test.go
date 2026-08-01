@@ -245,8 +245,8 @@ func TestMergeTextContinuations_PatternC_StopsAtTitle(t *testing.T) {
 	mergeTextContinuations(tbl)
 
 	// Should NOT merge into Row 2 because Row 2 has its own course title.
-	// Row 1 keeps trailing comma (nothing was merged).
-	assert.Equal(t, "A,B,C,", cellText(tbl, 1, 2))
+	// Trailing comma cleaned by venue cleanup pass.
+	assert.Equal(t, "A,B,C", cellText(tbl, 1, 2))
 	assert.Equal(t, "D,E,F", cellText(tbl, 2, 2))
 }
 
