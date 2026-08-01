@@ -28,7 +28,7 @@
     },
     {
       "row": 2,
-      "col": 1,
+      "col": 2,
       "text": "Day 1 : Jul 19, 2026 ( Sunday )",
       "rowSpan": 1,
       "colSpan": 1
@@ -351,9 +351,16 @@
     {
       "row": 27,
       "col": 1,
-      "text": "ENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN\nA\nGAME THEORY\nA",
+      "text": "ENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN\nGAME THEORY",
       "rowSpan": 1,
       "colSpan": 3
+    },
+    {
+      "row": 27,
+      "col": 2,
+      "text": "A,A",
+      "rowSpan": 1,
+      "colSpan": 1
     },
     {
       "row": 28,

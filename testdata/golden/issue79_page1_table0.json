@@ -21,7 +21,7 @@
     },
     {
       "row": 2,
-      "col": 1,
+      "col": 2,
       "text": "Day 2 : Jul 21, 2026 ( Tuesday )",
       "rowSpan": 1,
       "colSpan": 1
@@ -589,9 +589,16 @@
     {
       "row": 45,
       "col": 1,
-      "text": "PRINCIPLES OF MARKETING\nA,B,C,E,F,G,H\nSELECTION AND STAFFING\nA\nSTRUCTURE I: BASIC MECHANICS OF SOLIDS\nA",
+      "text": "PRINCIPLES OF MARKETING\nSELECTION AND STAFFING\nSTRUCTURE I: BASIC MECHANICS OF SOLIDS",
       "rowSpan": 1,
       "colSpan": 3
+    },
+    {
+      "row": 45,
+      "col": 2,
+      "text": "A,B,C,E,F,G,H,A,A",
+      "rowSpan": 1,
+      "colSpan": 1
     }
   ]
 }

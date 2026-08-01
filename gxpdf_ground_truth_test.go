@@ -222,22 +222,23 @@ func findCourseRow(tbl *Table, title string) int {
 	if len(candidates) == 0 {
 		return -1
 	}
-	// Prefer row with section-like content in col 2 (not VENUE contamination)
+	// Prefer row with longest section-like content in col 2.
+	// Longer = more likely complete (vs truncated first occurrence).
+	bestRow := candidates[0]
+	bestLen := -1
 	for _, r := range candidates {
 		if tbl.ColumnCount() > 2 {
 			sect := strings.TrimSpace(tbl.Cell(r, 2))
-			if sect != "" && !isVenueText(sect) {
-				return r
+			if isVenueText(sect) {
+				continue
+			}
+			if len(sect) > bestLen {
+				bestLen = len(sect)
+				bestRow = r
 			}
 		}
 	}
-	// Fallback: any row with non-empty col 2
-	for _, r := range candidates {
-		if tbl.ColumnCount() > 2 && strings.TrimSpace(tbl.Cell(r, 2)) != "" {
-			return r
-		}
-	}
-	return candidates[0]
+	return bestRow
 }
 
 // TestGroundTruth_PageCount verifies we extract the right number of pages.

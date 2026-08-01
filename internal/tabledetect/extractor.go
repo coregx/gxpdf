@@ -704,6 +704,40 @@ func mergeTextContinuations(tbl *domaintable.Table) {
 			}
 		}
 
+		// Pattern F: split mixed title+sections cells.
+		// When the title column contains course titles mixed with section codes
+		// (newline-separated), split them: titles stay, sections move to col c.
+		// This happens when grid edge extension creates oversized last/first rows
+		// that capture text from multiple visual rows.
+		for r := 0; r < tbl.RowCount; r++ {
+			titleCell := tbl.GetCell(r, titleCol)
+			if titleCell == nil || titleCell.Text == "" {
+				continue
+			}
+			sectCell := tbl.GetCell(r, c)
+			if sectCell != nil && strings.TrimSpace(sectCell.Text) != "" {
+				continue // sections column already has content
+			}
+
+			// Check if title cell contains mixed content
+			titles, sections := splitTitleAndSections(titleCell.Text)
+			if sections == "" {
+				continue
+			}
+
+			// Update title cell with only titles
+			tc := *titleCell
+			tc.Text = titles
+			tbl.Rows[r][titleCol] = &tc
+
+			// Move sections to sections column
+			if sectCell != nil {
+				sc := *sectCell
+				sc.Text = sections
+				tbl.Rows[r][c] = &sc
+			}
+		}
+
 		// Pass 2: merge trailing-comma continuations downward (Pattern C).
 		// Pattern C+ extension: before checking endsWithComma, strip trailing
 		// venue contamination (a trailing "\nShortNonSectionWord" that the
@@ -1137,4 +1171,31 @@ func isCourseTitleText(s string) bool {
 		return true
 	}
 	return false
+}
+
+// splitTitleAndSections separates course titles from section codes
+// in a mixed newline-separated cell. Returns (titles, sections) where
+// titles contains course-title-like lines joined with newlines, and
+// sections contains section-code-like lines joined with commas.
+//
+// A line is a "section code" if it's short and comma-separated
+// (e.g. "A,B,C,D,E" or "A"). A line is a "course title" if it's
+// multi-word ALL CAPS (e.g. "DISCRETE MATHEMATICS").
+func splitTitleAndSections(text string) (string, string) {
+	lines := strings.Split(text, "\n")
+	var titles, sections []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if isCourseTitleText(line) {
+			titles = append(titles, line)
+		} else {
+			sections = append(sections, line)
+		}
+	}
+
+	return strings.Join(titles, "\n"), strings.Join(sections, ",")
 }
