@@ -141,7 +141,7 @@
     {
       "row": 12,
       "col": 0,
-      "text": "DEVELOPMENT\nCOMMUNICATION\n[BMB]",
+      "text": "",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -280,6 +280,13 @@
     },
     {
       "row": 22,
+      "col": 1,
+      "text": "DEVELOPMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 22,
       "col": 2,
       "text": "Annexes",
       "rowSpan": 1,
@@ -302,7 +309,7 @@
     {
       "row": 24,
       "col": 1,
-      "text": "INTRODUCTION TO DIGITAL TOOLS  OF",
+      "text": "INTRODUCTION TO DIGITAL TOOLS  OF \nCOMMUNICATION",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -330,7 +337,7 @@
     {
       "row": 26,
       "col": 1,
-      "text": "LITERARY THEORY AND CRITICISM",
+      "text": "[BMB]\nLITERARY THEORY AND CRITICISM",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -386,7 +393,7 @@
     {
       "row": 31,
       "col": 0,
-      "text": "TROPICS\nGLOBAL FINANCE",
+      "text": "",
       "rowSpan": 15,
       "colSpan": 1
     },
@@ -497,8 +504,22 @@
     },
     {
       "row": 38,
+      "col": 1,
+      "text": "TROPICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 38,
       "col": 2,
       "text": "All",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 39,
+      "col": 1,
+      "text": "GLOBAL FINANCE",
       "rowSpan": 1,
       "colSpan": 1
     },

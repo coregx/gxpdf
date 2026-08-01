@@ -138,17 +138,21 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 		}
 	}
 
-	// Extract content from each cell.
-	// Grid rows are sorted ascending by Y (bottom-to-top in PDF space).
-	// Reverse the iteration so output rows follow natural reading order
-	// (top-to-bottom: header first, data rows next, footer last).
+	// Two-pass extraction: non-merged cells first, then merged cells.
+	//
+	// Non-merged cells (course titles, sections) get priority for text
+	// assignment. Merged cells (TIME, VENUE) capture only remaining text.
+	// This prevents merged TIME cells from "stealing" course titles that
+	// happen to be positioned in the TIME column's X range.
+
+	// Pass 1: non-merged cells with expanded bounds into merged neighbors.
 	for r := 0; r < rowCount; r++ {
 		gridRow := rowCount - 1 - r
 		for c := 0; c < colCount; c++ {
-			// Skip cells that are covered by a merge from an earlier owner cell.
-			// These positions are left as empty placeholder cells (already
-			// initialized by NewTable), which is the Variant A approach from ADR-004.
 			if coveredCells[mergedKey{r, c}] {
+				continue
+			}
+			if _, isMerged := mergedOwners[mergedKey{r, c}]; isMerged {
 				continue
 			}
 
@@ -157,24 +161,41 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 				continue
 			}
 
-			// For merged cell owners, expand bounds to cover the entire
-			// merged area. Text in covered cells (TIME slot labels, etc.)
-			// would otherwise be lost because covered cells are skipped.
-			extractBounds := gridCell.Bounds
-			if info, ok := mergedOwners[mergedKey{r, c}]; ok && (info.RowSpan > 1 || info.ColSpan > 1) {
-				extractBounds = computeMergedBounds(grid, gridRow, c, info)
-			}
-
+			extractBounds := expandBoundsIntoMergedNeighbors(grid, gridRow, c, gridCell.Bounds, coveredCells, rowCount)
 			content := te.cellExtractor.ExtractCellContent(extractBounds)
-
 			domainBounds := domaintable.NewRectangle(extractBounds.X, extractBounds.Y, extractBounds.Width, extractBounds.Height)
-
 			cell := domaintable.NewCellWithBounds(content, r, c, domainBounds)
 			cell = cell.WithAlignment(te.detectAlignment(content, gridCell.Bounds))
 
-			if info, ok := mergedOwners[mergedKey{r, c}]; ok {
-				cell = cell.WithRowSpan(info.RowSpan).WithColSpan(info.ColSpan)
+			if err := tbl.SetCell(r, c, cell); err != nil {
+				return nil, fmt.Errorf("failed to set cell (%d,%d): %w", r, c, err)
 			}
+		}
+	}
+
+	// Pass 2: merged cell owners capture remaining text from their full area.
+	for r := 0; r < rowCount; r++ {
+		gridRow := rowCount - 1 - r
+		for c := 0; c < colCount; c++ {
+			if coveredCells[mergedKey{r, c}] {
+				continue
+			}
+			info, isMerged := mergedOwners[mergedKey{r, c}]
+			if !isMerged {
+				continue
+			}
+
+			gridCell := grid.GetCell(gridRow, c)
+			if gridCell == nil {
+				continue
+			}
+
+			extractBounds := computeMergedBounds(grid, gridRow, c, info)
+			content := te.cellExtractor.ExtractCellContent(extractBounds)
+			domainBounds := domaintable.NewRectangle(extractBounds.X, extractBounds.Y, extractBounds.Width, extractBounds.Height)
+			cell := domaintable.NewCellWithBounds(content, r, c, domainBounds)
+			cell = cell.WithAlignment(te.detectAlignment(content, gridCell.Bounds))
+			cell = cell.WithRowSpan(info.RowSpan).WithColSpan(info.ColSpan)
 
 			if err := tbl.SetCell(r, c, cell); err != nil {
 				return nil, fmt.Errorf("failed to set cell (%d,%d): %w", r, c, err)
@@ -321,6 +342,54 @@ func (te *TableExtractor) ExtractTables(regions []*TableRegion) ([]*domaintable.
 	}
 
 	return tables, nil
+}
+
+// expandBoundsIntoMergedNeighbors extends a non-merged cell's X bounds
+// into adjacent columns that are covered by a vertical merge at the same
+// output row. This captures text (e.g. course titles) that the PDF
+// positions in the merged column's X range but semantically belongs to
+// the adjacent non-merged column.
+func expandBoundsIntoMergedNeighbors(
+	grid *Grid, gridRow, col int,
+	bounds extractor.Rectangle,
+	coveredCells map[mergedKey]bool,
+	rowCount int,
+) extractor.Rectangle {
+	if coveredCells == nil {
+		return bounds
+	}
+	outputRow := rowCount - 1 - gridRow
+
+	// Expand left: if the column to the left is covered by a merge,
+	// extend this cell's X to the left column's X start.
+	if col > 0 && coveredCells[mergedKey{outputRow, col - 1}] {
+		leftCell := grid.GetCell(gridRow, col-1)
+		if leftCell != nil {
+			expansion := bounds.X - leftCell.Bounds.X
+			bounds = extractor.NewRectangle(
+				leftCell.Bounds.X, bounds.Y,
+				bounds.Width+expansion, bounds.Height,
+			)
+		}
+	}
+
+	// Expand right: if the column to the right is covered by a merge,
+	// extend this cell's width to include the right column.
+	if col < grid.ColumnCount()-1 && coveredCells[mergedKey{outputRow, col + 1}] {
+		rightCell := grid.GetCell(gridRow, col+1)
+		if rightCell != nil {
+			rightEdge := rightCell.Bounds.X + rightCell.Bounds.Width
+			currentRight := bounds.X + bounds.Width
+			if rightEdge > currentRight {
+				bounds = extractor.NewRectangle(
+					bounds.X, bounds.Y,
+					rightEdge-bounds.X, bounds.Height,
+				)
+			}
+		}
+	}
+
+	return bounds
 }
 
 // computeMergedBounds calculates the bounding rectangle that covers
