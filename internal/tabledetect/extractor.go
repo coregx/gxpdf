@@ -669,6 +669,41 @@ func mergeTextContinuations(tbl *domaintable.Table) {
 		skipPatternD:
 		}
 
+		// Pattern E: forward-looking comma-start continuation.
+		// If a row has NO course title and its sections cell starts with
+		// comma (,D,E,F,...), it's a continuation from a PREVIOUS row.
+		// Only apply when the row is an orphan (no title) — rows WITH
+		// a title may have mixed content (continuation + own sections).
+		for r := 1; r < tbl.RowCount; r++ {
+			titleCell := tbl.GetCell(r, titleCol)
+			hasTitle := titleCell != nil && strings.TrimSpace(titleCell.Text) != ""
+			if hasTitle {
+				continue
+			}
+
+			cell := tbl.GetCell(r, c)
+			if cell == nil || cell.Text == "" {
+				continue
+			}
+			trimmed := strings.TrimSpace(cell.Text)
+			if !strings.HasPrefix(trimmed, ",") {
+				continue
+			}
+			for prev := r - 1; prev >= 0; prev-- {
+				prevCell := tbl.GetCell(prev, c)
+				if prevCell == nil || strings.TrimSpace(prevCell.Text) == "" {
+					continue
+				}
+				pc := *prevCell
+				pc.Text = strings.TrimRight(pc.Text, " \n") + trimmed
+				tbl.Rows[prev][c] = &pc
+				cleared := *cell
+				cleared.Text = ""
+				tbl.Rows[r][c] = &cleared
+				break
+			}
+		}
+
 		// Pass 2: merge trailing-comma continuations downward (Pattern C).
 		// Pattern C+ extension: before checking endsWithComma, strip trailing
 		// venue contamination (a trailing "\nShortNonSectionWord" that the
