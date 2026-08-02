@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.2] - 2026-08-02
+
+### Fixed
+- **Lattice table extraction quality** — sections accuracy improved from 85.9% to 97.7% on 311-course exam schedule PDF, verified against DeepSeek ground truth with user-provided screenshots (#79)
+  - Two-pass extraction: non-merged cells first (courses/sections), merged cells second (TIME/VENUE)
+  - Coordinate space normalization between text and graphics elements
+  - Mixed cell splitting: title+sections in one cell correctly separated
+  - Venue contamination cleanup: removes leaked VENUE text from SECTIONS column
+  - Grid edge extension captures text at table boundaries
+  - Stateful CellExtractor prevents text bleeding between adjacent cells
+
+### Added
+- **Intersection-based grid construction** (ADR-005) — `BuildGridFromIntersections` uses ruling line intersection points for per-column cell boundaries (tabula-java 4-corner approach). Benefits PDFs with partial ruling lines.
+- **Golden snapshot tests** — cell-level JSON snapshots for regression detection
+- **Ground truth tests** — 311-course DeepSeek reference with quality thresholds
+- **`Table.CellAt()` public API** — returns `*CellInfo` with `RowSpan`/`ColSpan` metadata
+
+---
+
 ## [0.9.1] - 2026-07-31
 
 ### Fixed

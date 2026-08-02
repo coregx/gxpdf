@@ -315,6 +315,7 @@ Community-driven release — all three extraction features requested by @joa23:
 | feat-039 | Invoice Template | P3 | Backlog | Pre-built invoice |
 | feat-040 | Chart Integration | P3 | Backlog | Embed charts |
 | feat-041 | PDF Render | P3 | Backlog | Render to images |
+| feat-103 | Multi-Line Cell Text Extraction | **P2** | **In Progress** | Repair split section codes across PDF rows; 277/306 sections (90.5%) |
 
 ## Architecture
 

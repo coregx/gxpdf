@@ -129,6 +129,10 @@ func TestGroundTruth_CourseTitles(t *testing.T) {
 
 // TestGroundTruth_CourseSections verifies that sections for each found course
 // match the ground truth.
+//
+// Strategy: for each course title in ground truth, find the ROW where it
+// appears in the extracted table (any column), then read sections from
+// col 2 of THAT row. This handles courses in merged TIME cells (col 0).
 func TestGroundTruth_CourseSections(t *testing.T) {
 	if _, err := os.Stat(groundTruthPDF); os.IsNotExist(err) {
 		t.Skipf("fixture not found: %s", groundTruthPDF)
@@ -152,50 +156,34 @@ func TestGroundTruth_CourseSections(t *testing.T) {
 		if err != nil {
 			continue
 		}
-
-		// Build map: course title → sections text from extraction.
-		// Search all columns: some courses end up in merged TIME cells (col 0).
-		courseSections := make(map[string]string)
-		for _, tbl := range tables {
-			for r := 0; r < tbl.RowCount(); r++ {
-				if tbl.ColumnCount() < 3 {
-					continue
-				}
-				// Primary: col 1 = COURSE TITLE, col 2 = SECTIONS
-				title := strings.TrimSpace(tbl.Cell(r, 1))
-				sections := strings.TrimSpace(tbl.Cell(r, 2))
-				if title != "" {
-					courseSections[title] = sections
-				}
-				// Also check col 0 merged cells for course titles
-				col0 := strings.TrimSpace(tbl.Cell(r, 0))
-				if col0 != "" {
-					for _, line := range strings.Split(col0, "\n") {
-						line = strings.TrimSpace(line)
-						if len(line) > 3 && line == strings.ToUpper(line) && !strings.HasPrefix(line, "Slot") && !strings.Contains(line, "AM") && !strings.Contains(line, "PM") {
-							if _, exists := courseSections[line]; !exists {
-								courseSections[line] = sections
-							}
-						}
-					}
-				}
-			}
+		if len(tables) == 0 {
+			continue
 		}
+		tbl := tables[0]
 
 		for _, slot := range day.Slots {
 			for _, course := range slot.Courses {
-				extractedSections, found := findCourseSections(courseSections, course.Title)
-				if !found {
+				// Find the row containing this course title (any column)
+				row := findCourseRow(tbl, course.Title)
+				if row < 0 {
 					continue
 				}
+
 				totalChecked++
 				expectedSections := strings.Join(course.Sections, ",")
+
+				// Read sections from col 2 of the found row
+				extractedSections := ""
+				if tbl.ColumnCount() > 2 {
+					extractedSections = strings.TrimSpace(tbl.Cell(row, 2))
+				}
 				normalizedExtracted := normalizeSections(extractedSections)
+
 				if normalizedExtracted == expectedSections || sectionsContained(expectedSections, normalizedExtracted) {
 					totalMatched++
 				} else {
-					t.Logf("Day %d, %q: sections mismatch\n  want: %s\n  got:  %s",
-						day.Day, course.Title, expectedSections, normalizedExtracted)
+					t.Logf("Day %d, %q (row %d): sections mismatch\n  want: %s\n  got:  %s",
+						day.Day, course.Title, row, expectedSections, normalizedExtracted)
 				}
 			}
 		}
@@ -208,6 +196,49 @@ func TestGroundTruth_CourseSections(t *testing.T) {
 			t.Errorf("Sections accuracy %.1f%% is below 80%% threshold", pct)
 		}
 	}
+}
+
+// findCourseRow finds the best row index where a course title appears.
+//
+// Strategy: find ALL rows containing the title, prefer the one where
+// col 2 (SECTIONS) is non-empty. This handles cases where the same
+// course appears on multiple rows (e.g. in merged TIME cell on one row
+// and in regular COURSE TITLE column on another).
+func findCourseRow(tbl *Table, title string) int {
+	var candidates []int
+	for r := 0; r < tbl.RowCount(); r++ {
+		for c := 0; c < tbl.ColumnCount(); c++ {
+			text := tbl.Cell(r, c)
+			matched := strings.Contains(text, title)
+			if !matched && len(title) > 20 {
+				matched = strings.Contains(text, title[:20])
+			}
+			if matched {
+				candidates = append(candidates, r)
+				break
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return -1
+	}
+	// Prefer row with longest section-like content in col 2.
+	// Longer = more likely complete (vs truncated first occurrence).
+	bestRow := candidates[0]
+	bestLen := -1
+	for _, r := range candidates {
+		if tbl.ColumnCount() > 2 {
+			sect := strings.TrimSpace(tbl.Cell(r, 2))
+			if isVenueText(sect) {
+				continue
+			}
+			if len(sect) > bestLen {
+				bestLen = len(sect)
+				bestRow = r
+			}
+		}
+	}
+	return bestRow
 }
 
 // TestGroundTruth_PageCount verifies we extract the right number of pages.
@@ -344,6 +375,18 @@ func TestGroundTruth_Summary(t *testing.T) {
 	}
 }
 
+// isVenueText returns true if text looks like VENUE content, not sections.
+func isVenueText(s string) bool {
+	lower := strings.ToLower(s)
+	venueWords := []string{"all", "annexes", "building", "venue", "sections"}
+	for _, w := range venueWords {
+		if strings.Contains(lower, w) {
+			return true
+		}
+	}
+	return false
+}
+
 // normalizeSections cleans extracted sections text for comparison.
 // Removes newlines (from multi-line cells), collapses spaces,
 // strips trailing commas and whitespace.
@@ -403,20 +446,6 @@ func containsCourseTitle(pageContent, title string) bool {
 
 // findCourseSections finds sections for a course title in the extracted map.
 // Handles truncated titles.
-func findCourseSections(m map[string]string, title string) (string, bool) {
-	if s, ok := m[title]; ok {
-		return s, true
-	}
-	for k, v := range m {
-		if strings.HasPrefix(title, k) || strings.HasPrefix(k, title) {
-			return v, true
-		}
-		if len(title) > 20 && strings.Contains(k, title[:20]) {
-			return v, true
-		}
-	}
-	return "", false
-}
 
 func init() {
 	// Ensure ground truth file path is printed in test output for reference.

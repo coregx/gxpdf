@@ -21,8 +21,8 @@
     },
     {
       "row": 2,
-      "col": 1,
-      "text": "Day 2 : Jul 21, 2026 ( Tuesday )",
+      "col": 2,
+      "text": "Day 2 : Jul 21,2026 ( Tuesday )",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -106,7 +106,7 @@
     {
       "row": 8,
       "col": 2,
-      "text": "A\nAll \nAnnexes",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -120,7 +120,7 @@
     {
       "row": 9,
       "col": 2,
-      "text": "A\n\u0026 \nA,B,C,D,E,F\nBuilding \nA,A,A[ARCH],B,B,B\nD",
+      "text": "A,A,B,C,D,E,F,A,A,A[ARCH],B,B,B,D",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -134,21 +134,14 @@
     {
       "row": 10,
       "col": 2,
-      "text": "[ARCH],C,C,C1,C10,C2,C3,C4,C5,C6,C7,",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 11,
-      "col": 2,
-      "text": "C8,C9,D,D,E,E,F,F,G,H",
+      "text": "[ARCH],C,C,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D,D,E,E,F,F,G,H",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 12,
       "col": 0,
-      "text": "DEVELOPMENT\nCOMMUNICATION\n[BMB]",
+      "text": "",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -253,14 +246,7 @@
     {
       "row": 18,
       "col": 2,
-      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 19,
-      "col": 2,
-      "text": "U,V,W,X",
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -288,14 +274,14 @@
     {
       "row": 21,
       "col": 2,
-      "text": "All \nA,B,C,D,E",
+      "text": "A,B,C,D,E",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 22,
-      "col": 2,
-      "text": "Annexes",
+      "col": 1,
+      "text": "DEVELOPMENT",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -309,14 +295,14 @@
     {
       "row": 23,
       "col": 2,
-      "text": "A,B\n\u0026 \nA,A1,A2,A3,A4,A5,A6,A7\nBuilding",
+      "text": "A,B,A,A1,A2,A3,A4,A5,A6,A7",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 24,
       "col": 1,
-      "text": "INTRODUCTION TO DIGITAL TOOLS  OF",
+      "text": "INTRODUCTION TO DIGITAL TOOLS  OF \nCOMMUNICATION",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -344,7 +330,7 @@
     {
       "row": 26,
       "col": 1,
-      "text": "LITERARY THEORY AND CRITICISM",
+      "text": "[BMB]\nLITERARY THEORY AND CRITICISM",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -365,14 +351,7 @@
     {
       "row": 27,
       "col": 2,
-      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 28,
-      "col": 2,
-      "text": "U,V",
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -407,7 +386,7 @@
     {
       "row": 31,
       "col": 0,
-      "text": "TROPICS\nGLOBAL FINANCE",
+      "text": "",
       "rowSpan": 15,
       "colSpan": 1
     },
@@ -518,15 +497,22 @@
     },
     {
       "row": 38,
-      "col": 2,
-      "text": "All",
+      "col": 1,
+      "text": "TROPICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 39,
+      "col": 1,
+      "text": "GLOBAL FINANCE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 39,
       "col": 2,
-      "text": "A\nAnnexes",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -540,7 +526,7 @@
     {
       "row": 40,
       "col": 2,
-      "text": "\u0026 \nA\nBuilding",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -582,23 +568,23 @@
     {
       "row": 43,
       "col": 2,
-      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 44,
-      "col": 2,
-      "text": "U,V,W,X",
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 45,
       "col": 1,
-      "text": "PRINCIPLES OF MARKETING\nA,B,C,E,F,G,H\nSELECTION AND STAFFING\nA\nSTRUCTURE I: BASIC MECHANICS OF SOLIDS\nA",
+      "text": "PRINCIPLES OF MARKETING\nSELECTION AND STAFFING\nSTRUCTURE I: BASIC MECHANICS OF SOLIDS",
       "rowSpan": 1,
       "colSpan": 3
+    },
+    {
+      "row": 45,
+      "col": 2,
+      "text": "A,B,C,E,F,G,H,A,A",
+      "rowSpan": 1,
+      "colSpan": 1
     }
   ]
 }

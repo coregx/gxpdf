@@ -1,8 +1,12 @@
 package tabledetect
 
 import (
+	"errors"
+
 	"github.com/coregx/gxpdf/internal/extractor"
 )
+
+var errMockNotImplemented = errors.New("not implemented in mock")
 
 // MockRulingLineDetector is a mock implementation of RulingLineDetector for testing.
 type MockRulingLineDetector struct {
@@ -154,6 +158,11 @@ func (m *MockGridBuilder) FindCellsFromIntersections(horizontal, vertical []*Rul
 		return m.FindCellsFromIntersectionsFunc(horizontal, vertical)
 	}
 	return m.FindCellsResult, m.FindCellsError
+}
+
+// BuildGridFromIntersections implements GridBuilder interface.
+func (m *MockGridBuilder) BuildGridFromIntersections(horizontal, vertical []*RulingLine) (*Grid, error) {
+	return nil, errMockNotImplemented
 }
 
 // BuildGridFromCells implements GridBuilder interface.
