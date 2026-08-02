@@ -248,10 +248,23 @@ func (td *DefaultTableDetector) detectLattice(
 		return td.detectStream(textElements)
 	}
 
-	// Build grid from ruling lines
-	grid, err := td.gridBuilder.BuildGrid(rulingLines)
+	// Separate horizontal and vertical lines for intersection-based grid.
+	var hLines, vLines []*RulingLine
+	for _, line := range rulingLines {
+		if line.IsHorizontal {
+			hLines = append(hLines, line)
+		} else {
+			vLines = append(vLines, line)
+		}
+	}
+
+	// Build grid from ruling line intersections (ADR-005).
+	// Falls back to sorted-coordinate grid if intersection method fails.
+	grid, err := td.gridBuilder.BuildGridFromIntersections(hLines, vLines)
 	if err != nil {
-		// Grid building failed - fall back to stream mode
+		grid, err = td.gridBuilder.BuildGrid(rulingLines)
+	}
+	if err != nil {
 		return td.detectStream(textElements)
 	}
 

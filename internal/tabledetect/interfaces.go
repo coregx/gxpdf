@@ -90,8 +90,12 @@ type GridBuilder interface {
 	BuildGrid(lines []*RulingLine) (*Grid, error)
 
 	// FindCellsFromIntersections builds cells from intersection points.
-	// Alternative approach that finds cells by looking at intersection points.
 	FindCellsFromIntersections(horizontal, vertical []*RulingLine) ([]*Cell, error)
+
+	// BuildGridFromIntersections creates a grid using ruling line intersection
+	// points (ADR-005). Produces cells matching visual boundaries rather than
+	// minimum ruling line spacing.
+	BuildGridFromIntersections(horizontal, vertical []*RulingLine) (*Grid, error)
 
 	// BuildGridFromCells creates a grid structure from detected cells.
 	// Useful when cells are found through intersection detection.
