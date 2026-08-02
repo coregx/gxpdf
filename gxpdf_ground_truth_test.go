@@ -446,20 +446,6 @@ func containsCourseTitle(pageContent, title string) bool {
 
 // findCourseSections finds sections for a course title in the extracted map.
 // Handles truncated titles.
-func findCourseSections(m map[string]string, title string) (string, bool) {
-	if s, ok := m[title]; ok {
-		return s, true
-	}
-	for k, v := range m {
-		if strings.HasPrefix(title, k) || strings.HasPrefix(k, title) {
-			return v, true
-		}
-		if len(title) > 20 && strings.Contains(k, title[:20]) {
-			return v, true
-		}
-	}
-	return "", false
-}
 
 func init() {
 	// Ensure ground truth file path is printed in test output for reference.

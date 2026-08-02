@@ -699,7 +699,7 @@ func (gb *DefaultGridBuilder) buildGridFromRawCells(cells []*Cell) (*Grid, error
 	colCount := grid.ColumnCount()
 
 	// Build the 2D cell array. Not all (row, col) positions are guaranteed to
-	// have cells (non-uniform grids), so initialise with nils and fill only
+	// have cells (non-uniform grids), so initialize with nils and fill only
 	// where a physical cell was found.
 	gridCells := make([][]*Cell, rowCount)
 	for r := 0; r < rowCount; r++ {
