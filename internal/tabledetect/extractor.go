@@ -360,27 +360,29 @@ func expandBoundsIntoMergedNeighbors(
 	}
 	outputRow := rowCount - 1 - gridRow
 
-	// Expand left: only when the left column is explicitly covered by a
-	// merge (from DetectMergedCells). Do NOT expand into nil cells from
-	// intersection grid — those are tall merged cells whose content will
-	// be extracted in pass 2. Expanding into them steals their text (#86).
+	// Expand into covered neighbors (from DetectMergedCells) but NOT into
+	// nil cells from intersection grid. Covered = part of a detected merge
+	// whose owner is elsewhere. Nil = tall merged cell that will be
+	// extracted in pass 2 (#86).
 	if col > 0 && coveredCells != nil && coveredCells[mergedKey{outputRow, col - 1}] {
-		leftX := grid.Columns[col-1]
-		expansion := bounds.X - leftX
-		bounds = extractor.NewRectangle(
-			leftX, bounds.Y,
-			bounds.Width+expansion, bounds.Height,
-		)
+		leftCell := grid.GetCell(gridRow, col-1)
+		if leftCell != nil {
+			expansion := bounds.X - leftCell.Bounds.X
+			bounds = extractor.NewRectangle(
+				leftCell.Bounds.X, bounds.Y,
+				bounds.Width+expansion, bounds.Height,
+			)
+		}
 	}
 
-	// Expand right: same logic — only for explicitly covered cells.
 	if col < grid.ColumnCount()-1 && coveredCells != nil && coveredCells[mergedKey{outputRow, col + 1}] {
-		if col+2 < len(grid.Columns) {
-			rightX := grid.Columns[col+2]
-			if rightX > bounds.X+bounds.Width {
+		rightCell := grid.GetCell(gridRow, col+1)
+		if rightCell != nil {
+			rightEdge := rightCell.Bounds.X + rightCell.Bounds.Width
+			if rightEdge > bounds.X+bounds.Width {
 				bounds = extractor.NewRectangle(
 					bounds.X, bounds.Y,
-					rightX-bounds.X, bounds.Height,
+					rightEdge-bounds.X, bounds.Height,
 				)
 			}
 		}
