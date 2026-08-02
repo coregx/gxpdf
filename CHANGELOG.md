@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.4] - 2026-08-02
+
+### Fixed
+- **VENUE column extraction restored** — v0.9.3 fix for column separation (#86) inadvertently removed all bounds expansion, causing VENUE column to always be empty; now expands only into explicitly covered cells while keeping columns separate
+
+---
+
 ## [0.9.3] - 2026-08-02
 
 ### Fixed
