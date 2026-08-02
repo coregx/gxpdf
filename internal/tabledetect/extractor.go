@@ -360,30 +360,35 @@ func expandBoundsIntoMergedNeighbors(
 	}
 	outputRow := rowCount - 1 - gridRow
 
-	// Expand left: if the column to the left is covered by a merge,
-	// extend this cell's X to the left column's X start.
-	if col > 0 && coveredCells[mergedKey{outputRow, col - 1}] {
+	// Expand left: if the column to the left has no grid cell at this row
+	// (nil = part of a taller merged cell in intersection grid, or covered
+	// by merge in sorted-coordinate grid), extend this cell's X to include
+	// the left column's area.
+	if col > 0 {
 		leftCell := grid.GetCell(gridRow, col-1)
-		if leftCell != nil {
-			expansion := bounds.X - leftCell.Bounds.X
+		leftCovered := coveredCells != nil && coveredCells[mergedKey{outputRow, col - 1}]
+		leftNil := leftCell == nil
+		if leftCovered || leftNil {
+			leftX := grid.Columns[col-1]
+			expansion := bounds.X - leftX
 			bounds = extractor.NewRectangle(
-				leftCell.Bounds.X, bounds.Y,
+				leftX, bounds.Y,
 				bounds.Width+expansion, bounds.Height,
 			)
 		}
 	}
 
-	// Expand right: if the column to the right is covered by a merge,
-	// extend this cell's width to include the right column.
-	if col < grid.ColumnCount()-1 && coveredCells[mergedKey{outputRow, col + 1}] {
+	// Expand right: same logic for right column.
+	if col < grid.ColumnCount()-1 {
 		rightCell := grid.GetCell(gridRow, col+1)
-		if rightCell != nil {
-			rightEdge := rightCell.Bounds.X + rightCell.Bounds.Width
-			currentRight := bounds.X + bounds.Width
-			if rightEdge > currentRight {
+		rightCovered := coveredCells != nil && coveredCells[mergedKey{outputRow, col + 1}]
+		rightNil := rightCell == nil
+		if (rightCovered || rightNil) && col+2 < len(grid.Columns) {
+			rightX := grid.Columns[col+2]
+			if rightX > bounds.X+bounds.Width {
 				bounds = extractor.NewRectangle(
 					bounds.X, bounds.Y,
-					rightEdge-bounds.X, bounds.Height,
+					rightX-bounds.X, bounds.Height,
 				)
 			}
 		}
