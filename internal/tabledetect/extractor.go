@@ -109,10 +109,10 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
 	// Extend edge cell bounds BEFORE merged cell detection and extraction.
-	// Ruling lines for the very first/last table row may be missing,
-	// leaving text outside the grid. The extension must happen first so
-	// that merged cell detection and text extraction see the full bounds.
 	extendGridEdgeBounds(grid)
+
+	// Pass grid row boundaries to CellExtractor for grid-aware continuation.
+	te.cellExtractor.WithGridRows(grid.Rows)
 
 	// Detect merged cells when ruling lines are available.
 	var mergedOwners map[mergedKey]MergedCellInfo

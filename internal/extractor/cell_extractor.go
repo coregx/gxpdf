@@ -17,6 +17,12 @@ import (
 type CellExtractor struct {
 	textElements []*TextElement
 	assigned     map[*TextElement]bool
+	// gridRows stores Y coordinates of grid row boundaries (sorted ascending).
+	// Used for grid-aware visual grouping: elements are only grouped if
+	// they don't cross a grid row boundary. This prevents grouping sections
+	// from different courses that happen to be at similar X/Y positions.
+	// nil = no grid awareness (legacy behavior).
+	gridRows []float64
 }
 
 // NewCellExtractor creates a new CellExtractor with the given text elements.
@@ -25,6 +31,15 @@ func NewCellExtractor(textElements []*TextElement) *CellExtractor {
 		textElements: textElements,
 		assigned:     make(map[*TextElement]bool),
 	}
+}
+
+// WithGridRows sets grid row boundaries for grid-aware visual grouping.
+// When set, FindElementsInBounds will include adjacent-line elements
+// that belong to the same visual block, but only if they don't cross
+// a grid row boundary.
+func (ce *CellExtractor) WithGridRows(rows []float64) *CellExtractor {
+	ce.gridRows = rows
+	return ce
 }
 
 // ExtractCellContent extracts text from a rectangular region (cell bounds).
@@ -83,15 +98,135 @@ func (ce *CellExtractor) FindElementsInBounds(bounds Rectangle) []*TextElement {
 		if ce.assigned[elem] {
 			continue
 		}
-		centerX := elem.CenterX()
-		centerY := elem.CenterY()
-
-		if expanded.Contains(centerX, centerY) {
+		if expanded.Contains(elem.CenterX(), elem.CenterY()) {
 			result = append(result, elem)
 		}
 	}
 
+	// Grid-aware continuation: only expand when initial text looks
+	// truncated (ends with comma = incomplete section list).
+	// This avoids regressions from pulling adjacent course sections.
+	if len(ce.gridRows) > 0 && len(result) > 0 {
+		text := ce.buildTextFromFoundElements(result)
+		if strings.HasSuffix(strings.TrimSpace(text), ",") {
+			result = ce.expandWithContinuations(result, bounds)
+		}
+	}
+
 	return result
+}
+
+// expandWithContinuations adds text elements that are visually connected
+// to already-found elements but outside cell bounds. Only expands within
+// the same grid row band (between two consecutive grid row Y coordinates).
+func (ce *CellExtractor) expandWithContinuations(found []*TextElement, bounds Rectangle) []*TextElement {
+	foundSet := make(map[*TextElement]bool, len(found))
+	for _, e := range found {
+		foundSet[e] = true
+	}
+
+	// Determine the grid row band for these elements
+	gridBandMin, gridBandMax := ce.findGridBand(bounds.Y, bounds.Y+bounds.Height)
+
+	var added []*TextElement
+	for _, elem := range ce.textElements {
+		if ce.assigned[elem] || foundSet[elem] {
+			continue
+		}
+		// Must be STRICTLY within grid band — no padding
+		if elem.CenterY() < gridBandMin || elem.CenterY() > gridBandMax {
+			continue
+		}
+		// Must be in same X column (cell bounds only, minimal padding)
+		if elem.CenterX() < bounds.X-1 || elem.CenterX() > bounds.X+bounds.Width+1 {
+			continue
+		}
+		// Must be visually connected to a found element
+		if ce.isVisualContinuation(elem, found) {
+			added = append(added, elem)
+		}
+	}
+
+	return append(found, added...)
+}
+
+// findGridBand returns the Y range of the grid row band that contains
+// the given Y range. Grid rows define bands between consecutive Y values.
+func (ce *CellExtractor) findGridBand(yMin, yMax float64) (float64, float64) {
+	if len(ce.gridRows) < 2 {
+		return yMin, yMax
+	}
+	bandMin := ce.gridRows[0]
+	bandMax := ce.gridRows[len(ce.gridRows)-1]
+	for i := 0; i < len(ce.gridRows)-1; i++ {
+		if yMin >= ce.gridRows[i]-cellBoundsPadding && yMin <= ce.gridRows[i+1]+cellBoundsPadding {
+			bandMin = ce.gridRows[i]
+			bandMax = ce.gridRows[i+1]
+			break
+		}
+	}
+	return bandMin, bandMax
+}
+
+// isVisualContinuation checks if elem is a visual continuation of any
+// found element. Strict criteria to prevent pulling course titles from
+// adjacent rows:
+//   - Same X start (within 3pt)
+//   - Adjacent Y (within 1.5× fontSize)
+//   - Same font size
+//   - Text must look like section codes (short, comma-separated),
+//     NOT a course title (multi-word ALL CAPS)
+func (ce *CellExtractor) isVisualContinuation(elem *TextElement, found []*TextElement) bool {
+	// Don't pull course-title-like text as continuation
+	text := strings.TrimSpace(elem.Text)
+	if isCourseTitle(text) {
+		return false
+	}
+
+	for _, f := range found {
+		if abs(elem.FontSize-f.FontSize) > 1.0 {
+			continue
+		}
+		if abs(elem.X-f.X) > 3.0 {
+			continue
+		}
+		yDist := abs(elem.Y - f.Y)
+		maxDist := f.FontSize * 1.5
+		if maxDist < 12 {
+			maxDist = 12
+		}
+		if yDist > 0.5 && yDist <= maxDist {
+			return true
+		}
+	}
+	return false
+}
+
+// buildTextFromFoundElements quickly joins found element text for truncation check.
+func (ce *CellExtractor) buildTextFromFoundElements(elements []*TextElement) string {
+	var sb strings.Builder
+	for _, e := range elements {
+		sb.WriteString(e.Text)
+	}
+	return sb.String()
+}
+
+// isCourseTitle checks if text looks like a course title (multi-word ALL CAPS,
+// length > 10 chars, contains spaces). Used to prevent pulling titles as
+// visual continuations.
+func isCourseTitle(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 5 {
+		return false
+	}
+	if !strings.ContainsRune(s, ' ') {
+		return false
+	}
+	// ALL CAPS with no commas → likely course title
+	if s == strings.ToUpper(s) && !strings.ContainsRune(s, ',') {
+		return true
+	}
+	return false
 }
 
 // MarkAssigned marks the given text elements as assigned to a cell.
