@@ -161,7 +161,7 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 				continue
 			}
 
-			extractBounds := expandBoundsIntoMergedNeighbors(grid, gridRow, c, gridCell.Bounds, coveredCells, rowCount)
+			extractBounds := gridCell.Bounds
 			content := te.cellExtractor.ExtractCellContent(extractBounds)
 			domainBounds := domaintable.NewRectangle(extractBounds.X, extractBounds.Y, extractBounds.Width, extractBounds.Height)
 			cell := domaintable.NewCellWithBounds(content, r, c, domainBounds)
@@ -360,30 +360,22 @@ func expandBoundsIntoMergedNeighbors(
 	}
 	outputRow := rowCount - 1 - gridRow
 
-	// Expand left: if the column to the left has no grid cell at this row
-	// (nil = part of a taller merged cell in intersection grid, or covered
-	// by merge in sorted-coordinate grid), extend this cell's X to include
-	// the left column's area.
-	if col > 0 {
-		leftCell := grid.GetCell(gridRow, col-1)
-		leftCovered := coveredCells != nil && coveredCells[mergedKey{outputRow, col - 1}]
-		leftNil := leftCell == nil
-		if leftCovered || leftNil {
-			leftX := grid.Columns[col-1]
-			expansion := bounds.X - leftX
-			bounds = extractor.NewRectangle(
-				leftX, bounds.Y,
-				bounds.Width+expansion, bounds.Height,
-			)
-		}
+	// Expand left: only when the left column is explicitly covered by a
+	// merge (from DetectMergedCells). Do NOT expand into nil cells from
+	// intersection grid — those are tall merged cells whose content will
+	// be extracted in pass 2. Expanding into them steals their text (#86).
+	if col > 0 && coveredCells != nil && coveredCells[mergedKey{outputRow, col - 1}] {
+		leftX := grid.Columns[col-1]
+		expansion := bounds.X - leftX
+		bounds = extractor.NewRectangle(
+			leftX, bounds.Y,
+			bounds.Width+expansion, bounds.Height,
+		)
 	}
 
-	// Expand right: same logic for right column.
-	if col < grid.ColumnCount()-1 {
-		rightCell := grid.GetCell(gridRow, col+1)
-		rightCovered := coveredCells != nil && coveredCells[mergedKey{outputRow, col + 1}]
-		rightNil := rightCell == nil
-		if (rightCovered || rightNil) && col+2 < len(grid.Columns) {
+	// Expand right: same logic — only for explicitly covered cells.
+	if col < grid.ColumnCount()-1 && coveredCells != nil && coveredCells[mergedKey{outputRow, col + 1}] {
+		if col+2 < len(grid.Columns) {
 			rightX := grid.Columns[col+2]
 			if rightX > bounds.X+bounds.Width {
 				bounds = extractor.NewRectangle(
