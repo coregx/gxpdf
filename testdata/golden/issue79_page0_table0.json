@@ -8,7 +8,7 @@
     {
       "row": 0,
       "col": 0,
-      "text": "",
+      "text": "TIME\nSlot 1: \n9:00 AM\n - \n11:00 AM",
       "rowSpan": 14,
       "colSpan": 1
     },
@@ -29,7 +29,7 @@
     {
       "row": 2,
       "col": 1,
-      "text": "TIME\nCOURSE TITLE",
+      "text": "COURSE TITLE",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -50,7 +50,7 @@
     {
       "row": 3,
       "col": 2,
-      "text": "VENUE\nA,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y",
+      "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -99,7 +99,7 @@
     {
       "row": 7,
       "col": 1,
-      "text": "Slot 1: \nDISCRETE MATHEMATICS\n9:00 AM",
+      "text": "DISCRETE MATHEMATICS",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -113,7 +113,7 @@
     {
       "row": 8,
       "col": 1,
-      "text": "ELECTRICAL POWER TRANSMISSION \u0026 DIST.\n -",
+      "text": "ELECTRICAL POWER TRANSMISSION \u0026 DIST.",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -127,14 +127,14 @@
     {
       "row": 9,
       "col": 1,
-      "text": "11:00 AM\nFOUNDATION COURSE",
+      "text": "FOUNDATION COURSE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 9,
       "col": 2,
-      "text": "A,B,C,D,E,D",
+      "text": "A,B,C,D,E",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -197,7 +197,7 @@
     {
       "row": 14,
       "col": 0,
-      "text": "- \n2:00 PM",
+      "text": "Slot 2: \n12:00 PM\n - \n2:00 PM",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -218,7 +218,7 @@
     {
       "row": 14,
       "col": 3,
-      "text": "Building \nD",
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -316,28 +316,14 @@
     {
       "row": 23,
       "col": 1,
-      "text": "ENGLISH READING SKILLS \u0026 PUBLIC SPEAKING\nSlot 2:",
+      "text": "ENGLISH READING SKILLS \u0026 PUBLIC SPEAKING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 23,
       "col": 2,
-      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D1,E1,E2,H1,H2,J1",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 24,
-      "col": 1,
-      "text": "12:00 PM",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 24,
-      "col": 2,
-      "text": "P1",
+      "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D1,E1,E2,H1,H2,J1,P1",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -456,14 +442,14 @@
     {
       "row": 33,
       "col": 0,
-      "text": "",
+      "text": "Slot 3: \n3:00 PM\n - \n5:00 PM",
       "rowSpan": 12,
       "colSpan": 1
     },
     {
       "row": 33,
       "col": 3,
-      "text": "",
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
       "rowSpan": 12,
       "colSpan": 1
     },
@@ -554,7 +540,7 @@
     {
       "row": 40,
       "col": 1,
-      "text": "Slot 3: \nFINANCIAL MANAGEMENT",
+      "text": "FINANCIAL MANAGEMENT",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -568,7 +554,7 @@
     {
       "row": 41,
       "col": 1,
-      "text": "3:00 PM\nHISTORY OF ENGLISH LANGUAGE\n -",
+      "text": "HISTORY OF ENGLISH LANGUAGE",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -582,7 +568,7 @@
     {
       "row": 42,
       "col": 1,
-      "text": "INVESTIGATIVE JOURNALISM\n5:00 PM",
+      "text": "INVESTIGATIVE JOURNALISM",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -603,7 +589,7 @@
     {
       "row": 43,
       "col": 2,
-      "text": "D\nA",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },

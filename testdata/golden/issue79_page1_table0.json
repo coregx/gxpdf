@@ -141,7 +141,7 @@
     {
       "row": 12,
       "col": 0,
-      "text": "",
+      "text": "DEVELOPMENT\nCOMMUNICATION\n[BMB]",
       "rowSpan": 19,
       "colSpan": 1
     },
@@ -279,13 +279,6 @@
       "colSpan": 1
     },
     {
-      "row": 22,
-      "col": 1,
-      "text": "DEVELOPMENT",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
       "row": 23,
       "col": 1,
       "text": "HISTORY OF EMERGENCE OF BANGLADESH\nINTRODUCTION TO BUSINESS",
@@ -302,7 +295,7 @@
     {
       "row": 24,
       "col": 1,
-      "text": "INTRODUCTION TO DIGITAL TOOLS  OF \nCOMMUNICATION",
+      "text": "INTRODUCTION TO DIGITAL TOOLS  OF",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -330,7 +323,7 @@
     {
       "row": 26,
       "col": 1,
-      "text": "[BMB]\nLITERARY THEORY AND CRITICISM",
+      "text": "LITERARY THEORY AND CRITICISM",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -386,7 +379,7 @@
     {
       "row": 31,
       "col": 0,
-      "text": "",
+      "text": "TROPICS",
       "rowSpan": 15,
       "colSpan": 1
     },
@@ -492,13 +485,6 @@
       "row": 37,
       "col": 2,
       "text": "A",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 38,
-      "col": 1,
-      "text": "TROPICS",
       "rowSpan": 1,
       "colSpan": 1
     },

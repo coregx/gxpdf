@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.3] - 2026-08-02
+
+### Fixed
+- **Column content no longer merges with adjacent colspan cells** — header text ("TIME", "VENUE") was incorrectly pulled into neighboring columns when adjacent cells had rowspan/colspan; now each column contains only its own content (#86, @AtifChy)
+
+---
+
 ## [0.9.2] - 2026-08-02
 
 ### Fixed

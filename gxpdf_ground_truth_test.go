@@ -447,6 +447,44 @@ func containsCourseTitle(pageContent, title string) bool {
 // findCourseSections finds sections for a course title in the extracted map.
 // Handles truncated titles.
 
+// TestGroundTruth_ColumnSeparation verifies that columns are not merged.
+// Regression test for #86: expandBoundsIntoMergedNeighbors was pulling
+// header text from adjacent columns.
+func TestGroundTruth_ColumnSeparation(t *testing.T) {
+	if _, err := os.Stat(groundTruthPDF); os.IsNotExist(err) {
+		t.Skipf("fixture not found: %s", groundTruthPDF)
+	}
+
+	doc, err := Open(groundTruthPDF)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer doc.Close()
+
+	page := doc.Page(0)
+	tables, err := page.ExtractTablesWithOptions(&ExtractionOptions{Method: MethodLattice})
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if len(tables) == 0 {
+		t.Fatal("no tables")
+	}
+	tbl := tables[0]
+
+	// Column 1 should never contain "TIME" as standalone text
+	// Column 2 should never contain "VENUE" as standalone text
+	for r := 0; r < tbl.RowCount(); r++ {
+		col1 := tbl.Cell(r, 1)
+		col2 := tbl.Cell(r, 2)
+		if strings.Contains(col1, "TIME") && !strings.Contains(col1, "OVERTIME") {
+			t.Errorf("Row %d col 1 contains TIME text (should be in col 0): %q", r, col1)
+		}
+		if strings.HasPrefix(strings.TrimSpace(col2), "VENUE") {
+			t.Errorf("Row %d col 2 starts with VENUE text (should be in col 3): %q", r, col2)
+		}
+	}
+}
+
 func init() {
 	// Ensure ground truth file path is printed in test output for reference.
 	_ = fmt.Sprintf("Ground truth: %s", groundTruthPath)
