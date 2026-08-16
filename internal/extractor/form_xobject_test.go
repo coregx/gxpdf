@@ -421,6 +421,7 @@ func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
 	assert.InDelta(t, 6, elements[0].Width, 0.001)
 	assert.InDelta(t, 5, elements[0].Height, 0.001)
 	assert.InDelta(t, 5, elements[0].FontSize, 0.001)
+	assert.True(t, elements[0].preciseWidth)
 
 	assert.Equal(t, "C", elements[1].Text)
 	assert.InDelta(t, 67.5, elements[1].X, 0.001)
@@ -432,6 +433,7 @@ func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
 	assert.InDelta(t, 20, elements[2].Y, 0.001)
 	assert.InDelta(t, 6, elements[2].Width, 0.001)
 	assert.InDelta(t, 10, elements[2].FontSize, 0.001)
+	assert.False(t, elements[2].preciseWidth, "direct-page text must retain legacy width behavior")
 
 	assert.Equal(t, "AB C\nD", AssembleText(elements))
 }
