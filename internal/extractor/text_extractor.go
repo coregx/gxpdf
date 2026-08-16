@@ -710,11 +710,9 @@ func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64,
 	// Existing direct-page extraction intentionally remains in raw text space
 	// for compatibility with the lattice coordinate normalizer. Form XObjects,
 	// however, cannot be positioned without inheriting the caller CTM and their
-	// own /Matrix, so apply the accumulated CTM while recursing into a Form.
-	coordinateMatrix := Identity()
-	if te.usesPositionedFormGeometry() {
-		coordinateMatrix = te.ctm
-	}
+	// own /Matrix. The caller invokes this function only for that positioned
+	// Form path, so the accumulated CTM is always authoritative here.
+	coordinateMatrix := te.ctm
 	bottom := te.textState.Rise
 	top := bottom + te.textState.FontSize
 	points := [4][2]float64{{0, bottom}, {width, bottom}, {0, top}, {width, top}}

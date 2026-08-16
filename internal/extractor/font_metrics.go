@@ -125,7 +125,7 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 		if !ok {
 			break
 		}
-		first := int(firstObj.Value())
+		first := firstObj.Value()
 		i++
 		if i >= widths.Len() {
 			break
@@ -133,8 +133,9 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 
 		if explicit, ok := te.resolveObject(widths.Get(i)).(*parser.Array); ok {
 			for offset := 0; offset < explicit.Len(); offset++ {
-				if width := getNumber(explicit.Get(offset)); width != nil && first+offset >= 0 && first+offset <= 65535 {
-					metrics.widths[uint16(first+offset)] = *width
+				glyphID := first + int64(offset)
+				if width := getNumber(explicit.Get(offset)); width != nil && glyphID >= 0 && glyphID <= 65535 {
+					metrics.widths[uint16(glyphID)] = *width
 				}
 			}
 			i++
@@ -149,11 +150,18 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 		if width == nil {
 			break
 		}
-		last := int(lastObj.Value())
-		for glyphID := first; glyphID <= last && glyphID <= 65535; glyphID++ {
-			if glyphID >= 0 {
-				metrics.widths[uint16(glyphID)] = *width
-			}
+		last := lastObj.Value()
+		// CID values are unsigned 16-bit identifiers. Clamp both ends before
+		// iterating so a hostile negative cFirst cannot turn a malformed /W
+		// range into billions of no-op loop iterations.
+		if first < 0 {
+			first = 0
+		}
+		if last > 65535 {
+			last = 65535
+		}
+		for glyphID := first; glyphID <= last; glyphID++ {
+			metrics.widths[uint16(glyphID)] = *width
 		}
 		i += 2
 	}
