@@ -172,7 +172,7 @@ func (fe *FontExtractor) extractFontData(fontDict *parser.Dictionary) (*Embedded
 	var err error
 
 	switch subtype {
-	case "Type0":
+	case type0FontSubtype:
 		// Composite font: descriptor lives inside DescendantFonts.
 		descriptorDict, err = fe.descriptorFromType0(fontDict)
 		if err != nil || descriptorDict == nil {
