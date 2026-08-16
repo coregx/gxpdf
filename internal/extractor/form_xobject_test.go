@@ -244,6 +244,39 @@ func buildNestedXObjectPDF(t *testing.T) []byte {
 	return b.finalize(catalogN)
 }
 
+// buildTransformedGlyphXObjectPDF mimics Quartz-generated financial reports:
+// the page scales a Form XObject, the Form supplies its own matrix, and each
+// glyph is positioned by a nested cm operator while the text matrix stays at
+// the origin. Accurate coordinates therefore require all three transforms.
+func buildTransformedGlyphXObjectPDF(t *testing.T) []byte {
+	t.Helper()
+
+	b := newXObjPDFBuilder(20)
+	fontN := b.addRaw("<< /Type /Font /Subtype /TrueType /BaseFont /Test /FirstChar 65 /LastChar 68 /Widths [600 600 600 600] >>")
+
+	xobjContent := []byte(strings.Join([]string{
+		"q 10 0 0 10 100 200 cm BT /F1 1 Tf 1 0 0 1 0 0 Tm (A) Tj ET Q",
+		"q 10 0 0 10 106 200 cm BT /F1 1 Tf 1 0 0 1 0 0 Tm (B) Tj ET Q",
+		"q 10 0 0 10 115 200 cm BT /F1 1 Tf 1 0 0 1 0 0 Tm (C) Tj ET Q",
+	}, "\n"))
+	xobjN := b.addStream(
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Matrix [1 0 0 1 20 30] /Resources << /Font << /F1 %d 0 R >> >>", fontN),
+		xobjContent,
+	)
+
+	// The direct page text after Q proves that the Form and graphics state are
+	// restored rather than leaking their scale/translation into the caller.
+	pageContent := []byte("q 0.5 0 0 0.5 0 0 cm /Fm1 Do Q BT /F1 10 Tf 1 0 0 1 10 20 Tm (D) Tj ET")
+	pageContentN := b.addStream("", pageContent)
+	pageN := b.addRaw(fmt.Sprintf(
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> /XObject << /Fm1 %d 0 R >> >> /Contents %d 0 R >>",
+		fontN, xobjN, pageContentN,
+	))
+	pagesN := b.addRaw(fmt.Sprintf("<< /Type /Pages /Kids [%d 0 R] /Count 1 >>", pageN))
+	catalogN := b.addRaw(fmt.Sprintf("<< /Type /Catalog /Pages %d 0 R >>", pagesN))
+	return b.finalize(catalogN)
+}
+
 // buildImageXObjectPDF builds a PDF whose XObjects section contains only an
 // Image XObject (Subtype /Image). The extractor must skip it silently.
 //
@@ -372,6 +405,35 @@ func TestFormXObject_SimpleFont_ExtractsText(t *testing.T) {
 	}
 	assert.Equal(t, "Hello World", sb.String(),
 		"Form XObject with simple font must produce correct text")
+}
+
+func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
+	reader := openPDFBytes(t, buildTransformedGlyphXObjectPDF(t))
+	extractor := NewTextExtractor(reader)
+
+	elements, err := extractor.ExtractFromPage(0)
+	require.NoError(t, err)
+	require.Len(t, elements, 3)
+
+	assert.Equal(t, "AB", elements[0].Text)
+	assert.InDelta(t, 60, elements[0].X, 0.001)
+	assert.InDelta(t, 115, elements[0].Y, 0.001)
+	assert.InDelta(t, 6, elements[0].Width, 0.001)
+	assert.InDelta(t, 5, elements[0].Height, 0.001)
+	assert.InDelta(t, 5, elements[0].FontSize, 0.001)
+
+	assert.Equal(t, "C", elements[1].Text)
+	assert.InDelta(t, 67.5, elements[1].X, 0.001)
+	assert.InDelta(t, 115, elements[1].Y, 0.001)
+	assert.InDelta(t, 3, elements[1].Width, 0.001)
+
+	assert.Equal(t, "D", elements[2].Text)
+	assert.InDelta(t, 10, elements[2].X, 0.001)
+	assert.InDelta(t, 20, elements[2].Y, 0.001)
+	assert.InDelta(t, 6, elements[2].Width, 0.001)
+	assert.InDelta(t, 10, elements[2].FontSize, 0.001)
+
+	assert.Equal(t, "AB C\nD", AssembleText(elements))
 }
 
 // ─── Test 2: Type0 CID font inside Form XObject (TCPDF pattern) ──────────────
