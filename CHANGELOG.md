@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Form XObject text geometry** — compose page `cm`, Form `/Matrix`, and nested glyph transforms for unit-sized positioned text; isolate Form graphics state, use embedded font widths, and bound hostile composite `/W` ranges (#89)
+
 ---
 
 ## [0.9.4] - 2026-08-02
