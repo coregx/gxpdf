@@ -270,6 +270,10 @@ func buildNestedXObjectPDF(t *testing.T) []byte {
 // glyph is positioned by a nested cm operator while the text matrix stays at
 // the origin. Accurate coordinates therefore require all three transforms.
 func buildTransformedGlyphXObjectPDF(t *testing.T) []byte {
+	return buildTransformedGlyphXObjectPDFWithRotation(t, 0)
+}
+
+func buildTransformedGlyphXObjectPDFWithRotation(t *testing.T, rotation int) []byte {
 	t.Helper()
 
 	b := newXObjPDFBuilder(20)
@@ -289,9 +293,13 @@ func buildTransformedGlyphXObjectPDF(t *testing.T) []byte {
 	// restored rather than leaking their scale/translation into the caller.
 	pageContent := []byte("q 0.5 0 0 0.5 0 0 cm /Fm1 Do Q BT /F1 10 Tf 1 0 0 1 10 20 Tm (D) Tj ET")
 	pageContentN := b.addStream("", pageContent)
+	rotationEntry := ""
+	if rotation != 0 {
+		rotationEntry = fmt.Sprintf(" /Rotate %d", rotation)
+	}
 	pageN := b.addRaw(fmt.Sprintf(
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> /XObject << /Fm1 %d 0 R >> >> /Contents %d 0 R >>",
-		fontN, xobjN, pageContentN,
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]%s /Resources << /Font << /F1 %d 0 R >> /XObject << /Fm1 %d 0 R >> >> /Contents %d 0 R >>",
+		rotationEntry, fontN, xobjN, pageContentN,
 	))
 	pagesN := b.addRaw(fmt.Sprintf("<< /Type /Pages /Kids [%d 0 R] /Count 1 >>", pageN))
 	catalogN := b.addRaw(fmt.Sprintf("<< /Type /Catalog /Pages %d 0 R >>", pagesN))
@@ -429,34 +437,40 @@ func TestFormXObject_SimpleFont_ExtractsText(t *testing.T) {
 }
 
 func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
-	reader := openPDFBytes(t, buildTransformedGlyphXObjectPDF(t))
-	extractor := NewTextExtractor(reader)
+	for _, rotation := range []int{0, 90} {
+		t.Run(fmt.Sprintf("page-rotate-%d", rotation), func(t *testing.T) {
+			reader := openPDFBytes(t, buildTransformedGlyphXObjectPDFWithRotation(t, rotation))
+			extractor := NewTextExtractor(reader)
 
-	elements, err := extractor.ExtractFromPage(0)
-	require.NoError(t, err)
-	require.Len(t, elements, 3)
+			elements, err := extractor.ExtractFromPage(0)
+			require.NoError(t, err)
+			require.Len(t, elements, 3)
 
-	assert.Equal(t, "AB", elements[0].Text)
-	assert.InDelta(t, 60, elements[0].X, 0.001)
-	assert.InDelta(t, 115, elements[0].Y, 0.001)
-	assert.InDelta(t, 6, elements[0].Width, 0.001)
-	assert.InDelta(t, 5, elements[0].Height, 0.001)
-	assert.InDelta(t, 5, elements[0].FontSize, 0.001)
-	assert.True(t, elements[0].preciseWidth)
+			// /Rotate controls page display orientation. Extracted coordinates stay
+			// in PDF page user space and must not disturb Form matrix composition.
+			assert.Equal(t, "AB", elements[0].Text)
+			assert.InDelta(t, 60, elements[0].X, 0.001)
+			assert.InDelta(t, 115, elements[0].Y, 0.001)
+			assert.InDelta(t, 6, elements[0].Width, 0.001)
+			assert.InDelta(t, 5, elements[0].Height, 0.001)
+			assert.InDelta(t, 5, elements[0].FontSize, 0.001)
+			assert.True(t, elements[0].preciseWidth)
 
-	assert.Equal(t, "C", elements[1].Text)
-	assert.InDelta(t, 67.5, elements[1].X, 0.001)
-	assert.InDelta(t, 115, elements[1].Y, 0.001)
-	assert.InDelta(t, 3, elements[1].Width, 0.001)
+			assert.Equal(t, "C", elements[1].Text)
+			assert.InDelta(t, 67.5, elements[1].X, 0.001)
+			assert.InDelta(t, 115, elements[1].Y, 0.001)
+			assert.InDelta(t, 3, elements[1].Width, 0.001)
 
-	assert.Equal(t, "D", elements[2].Text)
-	assert.InDelta(t, 10, elements[2].X, 0.001)
-	assert.InDelta(t, 20, elements[2].Y, 0.001)
-	assert.InDelta(t, 6, elements[2].Width, 0.001)
-	assert.InDelta(t, 10, elements[2].FontSize, 0.001)
-	assert.False(t, elements[2].preciseWidth, "direct-page text must retain legacy width behavior")
+			assert.Equal(t, "D", elements[2].Text)
+			assert.InDelta(t, 10, elements[2].X, 0.001)
+			assert.InDelta(t, 20, elements[2].Y, 0.001)
+			assert.InDelta(t, 6, elements[2].Width, 0.001)
+			assert.InDelta(t, 10, elements[2].FontSize, 0.001)
+			assert.False(t, elements[2].preciseWidth, "direct-page text must retain legacy width behavior")
 
-	assert.Equal(t, "AB C\nD", AssembleText(elements))
+			assert.Equal(t, "AB C\nD", AssembleText(elements))
+		})
+	}
 }
 
 func TestFormXObject_UnmatchedRestoreCannotPopCallerGraphicsState(t *testing.T) {
