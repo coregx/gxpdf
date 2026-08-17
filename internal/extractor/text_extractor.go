@@ -826,7 +826,10 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 	// Push current resources and switch to XObject's resources (if present)
 	savedResources := te.pageResources
 	savedCTM := te.ctm
-	savedGraphicsDepth := len(te.graphicsStateStack)
+	// Form graphics state is isolated from its caller. Malformed content with
+	// an unmatched Q must not pop a q that belongs to the page or parent Form.
+	savedGraphicsStateStack := te.graphicsStateStack
+	te.graphicsStateStack = nil
 	te.resourceStack = append(te.resourceStack, savedResources)
 	te.xobjectDepth++
 
@@ -850,7 +853,7 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 	// Restore saved resources and depth counter
 	te.xobjectDepth--
 	te.ctm = savedCTM
-	te.graphicsStateStack = te.graphicsStateStack[:savedGraphicsDepth]
+	te.graphicsStateStack = savedGraphicsStateStack
 	if len(te.resourceStack) > 0 {
 		te.pageResources = te.resourceStack[len(te.resourceStack)-1]
 		te.resourceStack = te.resourceStack[:len(te.resourceStack)-1]
