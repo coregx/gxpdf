@@ -524,6 +524,18 @@ Convenience methods like `ExtractText()`, `ExtractTables()`, and `GetImages()` l
 
 See [ROADMAP.md](ROADMAP.md) for the full development plan and version history.
 
+
+
+## Star History
+
+<a href="https://starhistory.io">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.starhistory.io/png?repos=coregx/gxpdf&style=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.starhistory.io/png?repos=coregx/gxpdf&style=professional" />
+   <img alt="Star History Chart" src="https://api.starhistory.io/png?repos=coregx/gxpdf" width="800" />
+ </picture>
+</a>
+
 ## License
 
 GxPDF is released under the **MIT License**. See [LICENSE](LICENSE) for details.
