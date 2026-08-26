@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"strings"
 
 	"github.com/coregx/gxpdf/internal/parser"
@@ -35,6 +36,18 @@ const glyphMergeGapFactor = 1.5
 // as a word boundary and receives a space.
 const wordSpaceGapFactor = 1.0
 
+// preciseGlyphGapFactor is used when the PDF provides authoritative font
+// widths. Exact widths let us preserve real word gaps without the generous
+// tolerance required by the legacy estimated-width path.
+const preciseGlyphGapFactor = 0.2
+
+// positionedGlyphFontSizeLimit identifies the Form-XObject pattern emitted by
+// Quartz and similar generators: every glyph uses a unit-sized font and a cm
+// matrix supplies the actual size and position. Direct-page/larger text keeps
+// the established raw-coordinate behavior until gxpdf's graphics and lattice
+// coordinate paths can migrate together without changing existing tables.
+const positionedGlyphFontSizeLimit = 2.0
+
 // maxXObjectDepth limits Form XObject recursion to prevent infinite loops.
 //
 // The PDF specification does not forbid cyclic XObject references, so we
@@ -63,7 +76,11 @@ type TextExtractor struct {
 	textState     *TextState
 	elements      []*TextElement
 	fontDecoders  map[string]*FontDecoder // fontName -> FontDecoder
+	fontMetrics   map[string]*fontMetrics // fontName -> glyph widths
 	pageResources *parser.Dictionary      // Current page resources
+	ctm           Matrix                  // Current transformation matrix
+
+	graphicsStateStack []textExtractorGraphicsState
 
 	// resourceStack holds the saved resource context across Form XObject calls.
 	// Each Do operator pushes the current resources; on return they are restored.
@@ -74,6 +91,10 @@ type TextExtractor struct {
 	xobjectDepth int
 }
 
+type textExtractorGraphicsState struct {
+	ctm Matrix
+}
+
 // NewTextExtractor creates a new TextExtractor for the given PDF reader.
 func NewTextExtractor(reader *parser.Reader) *TextExtractor {
 	return &TextExtractor{
@@ -81,6 +102,8 @@ func NewTextExtractor(reader *parser.Reader) *TextExtractor {
 		textState:    NewTextState(),
 		elements:     []*TextElement{},
 		fontDecoders: make(map[string]*FontDecoder),
+		fontMetrics:  make(map[string]*fontMetrics),
+		ctm:          Identity(),
 	}
 }
 
@@ -94,6 +117,9 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 	te.elements = []*TextElement{}
 	te.textState = NewTextState()
 	te.fontDecoders = make(map[string]*FontDecoder)
+	te.fontMetrics = make(map[string]*fontMetrics)
+	te.ctm = Identity()
+	te.graphicsStateStack = nil
 
 	// Get page
 	page, err := te.reader.GetPage(pageNum)
@@ -176,13 +202,14 @@ func mergeAdjacentElements(elements []*TextElement) []*TextElement {
 		if canMerge(current, next) {
 			// Extend current element: append text and widen bounding box.
 			current = &TextElement{
-				Text:     current.Text + next.Text,
-				X:        current.X,
-				Y:        current.Y,
-				Width:    (next.X + next.Width) - current.X,
-				Height:   current.Height,
-				FontName: current.FontName,
-				FontSize: current.FontSize,
+				Text:         current.Text + next.Text,
+				X:            current.X,
+				Y:            current.Y,
+				Width:        (next.X + next.Width) - current.X,
+				Height:       current.Height,
+				FontName:     current.FontName,
+				FontSize:     current.FontSize,
+				preciseWidth: current.preciseWidth && next.preciseWidth,
 			}
 		} else {
 			// Word boundary — commit the current run and start a new one.
@@ -246,7 +273,11 @@ func canMerge(a, b *TextElement) bool {
 	}
 
 	// Positive gap: merge only if the gap is within the intra-word threshold.
-	threshold := a.FontSize * glyphMergeGapFactor
+	thresholdFactor := glyphMergeGapFactor
+	if a.preciseWidth && b.preciseWidth {
+		thresholdFactor = preciseGlyphGapFactor
+	}
+	threshold := a.FontSize * thresholdFactor
 	return gap <= threshold
 }
 
@@ -290,7 +321,11 @@ func AssembleText(elements []*TextElement) string {
 
 		// Same line: decide whether a space is needed.
 		gap := curr.X - (prev.X + prev.Width)
-		if gap > prev.FontSize*wordSpaceGapFactor {
+		gapFactor := wordSpaceGapFactor
+		if prev.preciseWidth && curr.preciseWidth {
+			gapFactor = preciseGlyphGapFactor
+		}
+		if gap > prev.FontSize*gapFactor {
 			sb.WriteByte(' ')
 		}
 		sb.WriteString(curr.Text)
@@ -466,6 +501,33 @@ func (b *bytesReaderCloser) Close() error {
 //nolint:cyclop,funlen,gocognit,gocyclo // Text operator processing inherently requires many cases
 func (te *TextExtractor) processOperator(op *Operator) {
 	switch op.Name {
+	// Graphics state operators (Section 8.4.2). Text coordinates are expressed
+	// in the current user space, so page/Form transformations must be applied.
+	case "q":
+		te.graphicsStateStack = append(te.graphicsStateStack, textExtractorGraphicsState{
+			ctm: te.ctm,
+		})
+
+	case "Q":
+		if n := len(te.graphicsStateStack); n > 0 {
+			saved := te.graphicsStateStack[n-1]
+			te.graphicsStateStack = te.graphicsStateStack[:n-1]
+			te.ctm = saved.ctm
+		}
+
+	case "cm":
+		if len(op.Operands) >= 6 {
+			values := [6]*float64{}
+			for i := range values {
+				values[i] = getNumber(op.Operands[i])
+			}
+			if values[0] != nil && values[1] != nil && values[2] != nil &&
+				values[3] != nil && values[4] != nil && values[5] != nil {
+				operand := NewMatrix(*values[0], *values[1], *values[2], *values[3], *values[4], *values[5])
+				te.ctm = te.ctm.Multiply(operand)
+			}
+		}
+
 	// Text object delimiters (Section 9.4.1)
 	case "BT": // Begin text
 		te.textState.Reset()
@@ -621,22 +683,68 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 	// Decode glyph bytes to Unicode text
 	decodedText := te.decodeTextBytes(glyphBytes)
 
-	// Get current position from text matrix
-	x := te.textState.CurrentX
-	y := te.textState.CurrentY
-
-	// Estimate width (simple heuristic - will be improved with font metrics in Phase 3)
-	// Use decoded text length for more accurate width calculation
-	charWidth := te.textState.FontSize * 0.6 * (te.textState.HorizScale / 100.0)
-	width := float64(len(decodedText)) * charWidth
-	height := te.textState.FontSize
+	advance, width, precise := te.measureGlyphBytes(glyphBytes)
+	positionedFormGeometry := te.usesPositionedFormGeometry()
+	if !positionedFormGeometry {
+		width = float64(len(decodedText)) * te.textState.FontSize * 0.6 * (te.textState.HorizScale / 100.0)
+		advance, precise = width, false
+	}
+	x, y := te.textState.CurrentX, te.textState.CurrentY
+	height, effectiveFontSize := te.textState.FontSize, te.textState.FontSize
+	if positionedFormGeometry {
+		x, y, width, height, effectiveFontSize = te.transformedTextBounds(width)
+	}
 
 	// Create text element with decoded text
-	elem := NewTextElement(decodedText, x, y, width, height, te.textState.FontName, te.textState.FontSize)
+	elem := NewTextElement(decodedText, x, y, width, height, te.textState.FontName, effectiveFontSize)
+	elem.preciseWidth = precise
 	te.elements = append(te.elements, elem)
 
 	// Advance text position
-	te.textState.AdvanceX(width)
+	te.textState.AdvanceX(advance)
+}
+
+// transformedTextBounds maps the text-space bounding box through the text
+// matrix and current transformation matrix and returns its axis-aligned bounds.
+func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64, float64, float64, float64) {
+	// Existing direct-page extraction intentionally remains in raw text space
+	// for compatibility with the lattice coordinate normalizer. Form XObjects,
+	// however, cannot be positioned without inheriting the caller CTM and their
+	// own /Matrix. The caller invokes this function only for that positioned
+	// Form path, so the accumulated CTM is always authoritative here.
+	coordinateMatrix := te.ctm
+	bottom := te.textState.Rise
+	top := bottom + te.textState.FontSize
+	points := [4][2]float64{{0, bottom}, {width, bottom}, {0, top}, {width, top}}
+
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for _, point := range points {
+		tx, ty := te.textState.Tm.Transform(point[0], point[1])
+		x, y := coordinateMatrix.Transform(tx, ty)
+		minX = math.Min(minX, x)
+		minY = math.Min(minY, y)
+		maxX = math.Max(maxX, x)
+		maxY = math.Max(maxY, y)
+	}
+
+	baseX, baseY := te.textState.Tm.Transform(0, bottom)
+	topX, topY := te.textState.Tm.Transform(0, top)
+	baseX, baseY = coordinateMatrix.Transform(baseX, baseY)
+	topX, topY = coordinateMatrix.Transform(topX, topY)
+	effectiveFontSize := math.Hypot(topX-baseX, topY-baseY)
+
+	return minX, minY, maxX - minX, maxY - minY, effectiveFontSize
+}
+
+func (te *TextExtractor) usesPositionedFormGeometry() bool {
+	if te.xobjectDepth == 0 || te.textState.FontSize <= 0 {
+		return false
+	}
+	baseX, baseY := te.textState.Tm.Transform(0, te.textState.Rise)
+	topX, topY := te.textState.Tm.Transform(0, te.textState.Rise+te.textState.FontSize)
+	rawTextSize := math.Hypot(topX-baseX, topY-baseY)
+	return rawTextSize > 0 && rawTextSize <= positionedGlyphFontSizeLimit
 }
 
 // processTextArray processes a TJ array with positioning adjustments.
@@ -717,12 +825,20 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 
 	// Push current resources and switch to XObject's resources (if present)
 	savedResources := te.pageResources
+	savedCTM := te.ctm
+	// Form graphics state is isolated from its caller. Malformed content with
+	// an unmatched Q must not pop a q that belongs to the page or parent Form.
+	savedGraphicsStateStack := te.graphicsStateStack
+	te.graphicsStateStack = nil
 	te.resourceStack = append(te.resourceStack, savedResources)
 	te.xobjectDepth++
 
 	xobjResources := te.getXObjectResources(xobjectStream)
 	if xobjResources != nil {
 		te.pageResources = xobjResources
+	}
+	if formMatrix, ok := te.getFormMatrix(xobjectStream); ok {
+		te.ctm = te.ctm.Multiply(formMatrix)
 	}
 
 	// Parse and process the XObject's content stream
@@ -736,12 +852,39 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 
 	// Restore saved resources and depth counter
 	te.xobjectDepth--
+	te.ctm = savedCTM
+	te.graphicsStateStack = savedGraphicsStateStack
 	if len(te.resourceStack) > 0 {
 		te.pageResources = te.resourceStack[len(te.resourceStack)-1]
 		te.resourceStack = te.resourceStack[:len(te.resourceStack)-1]
 	} else {
 		te.pageResources = savedResources
 	}
+}
+
+// getFormMatrix resolves a Form XObject's optional /Matrix entry.
+func (te *TextExtractor) getFormMatrix(stream *parser.Stream) (Matrix, bool) {
+	matrixObj := stream.Dictionary().Get("Matrix")
+	if ref, ok := matrixObj.(*parser.IndirectReference); ok {
+		resolved, err := te.reader.GetObject(ref.Number)
+		if err != nil {
+			return Matrix{}, false
+		}
+		matrixObj = resolved
+	}
+	arr, ok := matrixObj.(*parser.Array)
+	if !ok || arr.Len() != 6 {
+		return Matrix{}, false
+	}
+	values := [6]float64{}
+	for i := range values {
+		num := getNumber(arr.Get(i))
+		if num == nil {
+			return Matrix{}, false
+		}
+		values[i] = *num
+	}
+	return NewMatrix(values[0], values[1], values[2], values[3], values[4], values[5]), true
 }
 
 // resolveXObject looks up a named XObject from the current pageResources and
@@ -924,6 +1067,10 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 		return
 	}
 
+	// Load widths alongside the decoder so positioned glyphs receive accurate
+	// bounds and word-gap detection can use a conservative threshold.
+	te.fontMetrics[fontName] = te.loadFontMetrics(fontDict)
+
 	// Extract encoding name AND Differences array
 	encodingName := ""
 	var differences map[uint16]string
@@ -962,7 +1109,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 	isType0 := false
 	if subtypeObj := fontDict.Get("Subtype"); subtypeObj != nil {
 		if subtypeName, ok := subtypeObj.(*parser.Name); ok {
-			isType0 = subtypeName.Value() == "Type0"
+			isType0 = subtypeName.Value() == type0FontSubtype
 		}
 	}
 
