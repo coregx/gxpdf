@@ -1012,7 +1012,9 @@ func (te *TextExtractor) getPageResources(page *parser.Dictionary) *parser.Dicti
 // If the font cannot be loaded or has no ToUnicode CMap, we create
 // a default decoder that will use fallback encoding (Latin-1).
 func (te *TextExtractor) loadFontDecoder(fontName string) {
-	// Check if already loaded
+	// fontMetrics shares the same per-page cache lifecycle as fontDecoders.
+	// If the decoder already exists, it was loaded in this extraction pass
+	// and the associated metrics are still valid.
 	if _, exists := te.fontDecoders[fontName]; exists {
 		return
 	}
