@@ -309,6 +309,54 @@ func positionedText(text, operator string) string {
 	return fmt.Sprintf("(%s) Tj", text)
 }
 
+// buildResourceScopedFontsXObjectPDF creates two sibling Forms that both call
+// their font /F1 while defining different encodings and widths for that local
+// name. Decoder and metric caches must not cross the resource boundary.
+func buildResourceScopedFontsXObjectPDF(t *testing.T) []byte {
+	t.Helper()
+	b := newXObjPDFBuilder(20)
+	firstFontN := b.addRaw("<< /Type /Font /Subtype /TrueType /BaseFont /First /FirstChar 65 /LastChar 65 /Widths [600] /Encoding /WinAnsiEncoding >>")
+	secondFontN := b.addRaw("<< /Type /Font /Subtype /TrueType /BaseFont /Second /FirstChar 65 /LastChar 65 /Widths [1000] /Encoding << /BaseEncoding /WinAnsiEncoding /Differences [65 /Z] >> >>")
+	firstFormN := b.addStream(
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> >>", firstFontN),
+		[]byte("q 10 0 0 10 0 100 cm BT /F1 1 Tf 1 0 0 1 0 0 Tm (A) Tj ET Q"),
+	)
+	secondFormN := b.addStream(
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> >>", secondFontN),
+		[]byte("q 10 0 0 10 20 100 cm BT /F1 1 Tf 1 0 0 1 0 0 Tm (A) Tj ET Q"),
+	)
+	pageContentN := b.addStream("", []byte("/First Do /Second Do"))
+	pageN := b.addRaw(fmt.Sprintf(
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /First %d 0 R /Second %d 0 R >> >> /Contents %d 0 R >>",
+		firstFormN, secondFormN, pageContentN,
+	))
+	pagesN := b.addRaw(fmt.Sprintf("<< /Type /Pages /Kids [%d 0 R] /Count 1 >>", pageN))
+	catalogN := b.addRaw(fmt.Sprintf("<< /Type /Catalog /Pages %d 0 R >>", pagesN))
+	return b.finalize(catalogN)
+}
+
+// buildFormTextStateIsolationPDF changes every tracked text-state parameter in
+// a Form, then emits caller text without setting those parameters again.
+func buildFormTextStateIsolationPDF(t *testing.T) []byte {
+	t.Helper()
+	b := newXObjPDFBuilder(20)
+	pageFontN := b.addRaw("<< /Type /Font /Subtype /TrueType /BaseFont /Page /FirstChar 68 /LastChar 68 /Widths [600] >>")
+	formFontN := b.addRaw("<< /Type /Font /Subtype /TrueType /BaseFont /Form /FirstChar 65 /LastChar 65 /Widths [600] >>")
+	formN := b.addStream(
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /FForm %d 0 R >> >>", formFontN),
+		[]byte("BT /FForm 1 Tf 9 Tc 8 Tw 50 Tz 7 TL 3 Ts 1 0 0 1 0 100 Tm (A) Tj ET"),
+	)
+	pageContent := []byte("BT /FPage 10 Tf 1 Tc 2 Tw 80 Tz 14 TL 4 Ts ET /Fm Do BT 1 0 0 1 20 20 Tm (D) Tj ET")
+	pageContentN := b.addStream("", pageContent)
+	pageN := b.addRaw(fmt.Sprintf(
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /FPage %d 0 R >> /XObject << /Fm %d 0 R >> >> /Contents %d 0 R >>",
+		pageFontN, formN, pageContentN,
+	))
+	pagesN := b.addRaw(fmt.Sprintf("<< /Type /Pages /Kids [%d 0 R] /Count 1 >>", pageN))
+	catalogN := b.addRaw(fmt.Sprintf("<< /Type /Catalog /Pages %d 0 R >>", pagesN))
+	return b.finalize(catalogN)
+}
+
 // buildImageXObjectPDF builds a PDF whose XObjects section contains only an
 // Image XObject (Subtype /Image). The extractor must skip it silently.
 //
@@ -476,6 +524,92 @@ func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestFormXObject_FontCachesAreScopedToResources(t *testing.T) {
+	reader := openPDFBytes(t, buildResourceScopedFontsXObjectPDF(t))
+	extractor := NewTextExtractor(reader)
+
+	elements, err := extractor.ExtractFromPage(0)
+	require.NoError(t, err)
+	require.Len(t, elements, 2)
+
+	assert.Equal(t, "A", elements[0].Text)
+	assert.InDelta(t, 6, elements[0].Width, 0.001)
+	assert.Equal(t, "Z", elements[1].Text)
+	assert.InDelta(t, 10, elements[1].Width, 0.001)
+}
+
+func TestFormXObject_RestoresCallerTextState(t *testing.T) {
+	reader := openPDFBytes(t, buildFormTextStateIsolationPDF(t))
+	extractor := NewTextExtractor(reader)
+
+	elements, err := extractor.ExtractFromPage(0)
+	require.NoError(t, err)
+	require.Len(t, elements, 2)
+
+	assert.Equal(t, "D", elements[1].Text)
+	assert.Equal(t, "FPage", elements[1].FontName)
+	assert.InDelta(t, 10, elements[1].FontSize, 0.001)
+	assert.InDelta(t, 4.8, elements[1].Width, 0.001)
+	assert.Equal(t, "FPage", extractor.textState.FontName)
+	assert.InDelta(t, 10, extractor.textState.FontSize, 0.001)
+	assert.InDelta(t, 1, extractor.textState.CharSpace, 0.001)
+	assert.InDelta(t, 2, extractor.textState.WordSpace, 0.001)
+	assert.InDelta(t, 80, extractor.textState.HorizScale, 0.001)
+	assert.InDelta(t, 14, extractor.textState.Leading, 0.001)
+	assert.InDelta(t, 4, extractor.textState.Rise, 0.001)
+}
+
+func TestGraphicsStateRestoresTextParametersButNotTextMatrix(t *testing.T) {
+	extractor := NewTextExtractor(nil)
+	extractor.textState.SetFont("CallerFont", 12)
+	extractor.textState.CharSpace = 1
+	extractor.textState.WordSpace = 2
+	extractor.textState.HorizScale = 80
+	extractor.textState.Leading = 14
+	extractor.textState.Rise = 4
+	extractor.processOperator(&Operator{Name: "q"})
+
+	extractor.textState.SetFont("NestedFont", 1)
+	extractor.textState.CharSpace = 9
+	extractor.textState.WordSpace = 8
+	extractor.textState.HorizScale = 50
+	extractor.textState.Leading = 7
+	extractor.textState.Rise = 3
+	extractor.textState.SetTextMatrix(1, 0, 0, 1, 30, 40)
+	extractor.processOperator(&Operator{Name: "Q"})
+
+	assert.Equal(t, "CallerFont", extractor.textState.FontName)
+	assert.InDelta(t, 12, extractor.textState.FontSize, 0.001)
+	assert.InDelta(t, 1, extractor.textState.CharSpace, 0.001)
+	assert.InDelta(t, 2, extractor.textState.WordSpace, 0.001)
+	assert.InDelta(t, 80, extractor.textState.HorizScale, 0.001)
+	assert.InDelta(t, 14, extractor.textState.Leading, 0.001)
+	assert.InDelta(t, 4, extractor.textState.Rise, 0.001)
+	assert.InDelta(t, 30, extractor.textState.CurrentX, 0.001, "q/Q must not restore the text matrix")
+	assert.InDelta(t, 40, extractor.textState.CurrentY, 0.001, "q/Q must not restore the text matrix")
+}
+
+func TestPositionedTJAdjustmentHonorsHorizontalScaling(t *testing.T) {
+	extractor := NewTextExtractor(nil)
+	extractor.xobjectDepth = 1
+	extractor.ctm = Scaling(10, 10)
+	extractor.textState.SetFont("F1", 1)
+	extractor.textState.HorizScale = 50
+	extractor.fontMetrics["F1"] = &fontMetrics{
+		widths:       map[uint16]float64{65: 600, 66: 600},
+		defaultWidth: 600,
+		precise:      true,
+	}
+	items := parser.NewArrayFromSlice([]parser.PdfObject{
+		parser.NewString("A"), parser.NewInteger(-100), parser.NewString("B"),
+	})
+
+	extractor.processTextArray(items)
+	require.Len(t, extractor.elements, 2)
+	assert.InDelta(t, 0, extractor.elements[0].X, 0.001)
+	assert.InDelta(t, 3.5, extractor.elements[1].X, 0.001)
 }
 
 func TestFormXObject_UnmatchedRestoreCannotPopCallerGraphicsState(t *testing.T) {

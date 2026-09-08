@@ -92,7 +92,38 @@ type TextExtractor struct {
 }
 
 type textExtractorGraphicsState struct {
-	ctm Matrix
+	ctm        Matrix
+	fontName   string
+	fontSize   float64
+	charSpace  float64
+	wordSpace  float64
+	horizScale float64
+	leading    float64
+	rise       float64
+}
+
+func (te *TextExtractor) currentGraphicsState() textExtractorGraphicsState {
+	return textExtractorGraphicsState{
+		ctm:        te.ctm,
+		fontName:   te.textState.FontName,
+		fontSize:   te.textState.FontSize,
+		charSpace:  te.textState.CharSpace,
+		wordSpace:  te.textState.WordSpace,
+		horizScale: te.textState.HorizScale,
+		leading:    te.textState.Leading,
+		rise:       te.textState.Rise,
+	}
+}
+
+func (te *TextExtractor) restoreGraphicsState(state textExtractorGraphicsState) {
+	te.ctm = state.ctm
+	te.textState.FontName = state.fontName
+	te.textState.FontSize = state.fontSize
+	te.textState.CharSpace = state.charSpace
+	te.textState.WordSpace = state.wordSpace
+	te.textState.HorizScale = state.horizScale
+	te.textState.Leading = state.leading
+	te.textState.Rise = state.rise
 }
 
 // NewTextExtractor creates a new TextExtractor for the given PDF reader.
@@ -504,15 +535,13 @@ func (te *TextExtractor) processOperator(op *Operator) {
 	// Graphics state operators (Section 8.4.2). Text coordinates are expressed
 	// in the current user space, so page/Form transformations must be applied.
 	case "q":
-		te.graphicsStateStack = append(te.graphicsStateStack, textExtractorGraphicsState{
-			ctm: te.ctm,
-		})
+		te.graphicsStateStack = append(te.graphicsStateStack, te.currentGraphicsState())
 
 	case "Q":
 		if n := len(te.graphicsStateStack); n > 0 {
 			saved := te.graphicsStateStack[n-1]
 			te.graphicsStateStack = te.graphicsStateStack[:n-1]
-			te.ctm = saved.ctm
+			te.restoreGraphicsState(saved)
 		}
 
 	case "cm":
@@ -773,7 +802,7 @@ func (te *TextExtractor) processTextArray(arr *parser.Array) {
 			if num := getNumber(obj); num != nil {
 				// Negative values move forward, positive values move backward
 				// The unit is 1/1000 of a text space unit
-				adjustment := -*num / 1000.0 * te.textState.FontSize
+				adjustment := -*num / 1000.0 * te.textState.FontSize * (te.textState.HorizScale / 100.0)
 				te.textState.AdvanceX(adjustment)
 			}
 		}
@@ -825,7 +854,9 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 
 	// Push current resources and switch to XObject's resources (if present)
 	savedResources := te.pageResources
-	savedCTM := te.ctm
+	savedGraphicsState := te.currentGraphicsState()
+	savedFontDecoders := te.fontDecoders
+	savedFontMetrics := te.fontMetrics
 	// Form graphics state is isolated from its caller. Malformed content with
 	// an unmatched Q must not pop a q that belongs to the page or parent Form.
 	savedGraphicsStateStack := te.graphicsStateStack
@@ -836,6 +867,11 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 	xobjResources := te.getXObjectResources(xobjectStream)
 	if xobjResources != nil {
 		te.pageResources = xobjResources
+		// Resource names are local to their dictionary. A page and two Forms may
+		// all define /F1 as different fonts, so decoder and metric caches must
+		// follow the same scope as pageResources.
+		te.fontDecoders = make(map[string]*FontDecoder)
+		te.fontMetrics = make(map[string]*fontMetrics)
 	}
 	if formMatrix, ok := te.getFormMatrix(xobjectStream); ok {
 		te.ctm = te.ctm.Multiply(formMatrix)
@@ -852,8 +888,12 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 
 	// Restore saved resources and depth counter
 	te.xobjectDepth--
-	te.ctm = savedCTM
+	te.restoreGraphicsState(savedGraphicsState)
 	te.graphicsStateStack = savedGraphicsStateStack
+	if xobjResources != nil {
+		te.fontDecoders = savedFontDecoders
+		te.fontMetrics = savedFontMetrics
+	}
 	if len(te.resourceStack) > 0 {
 		te.pageResources = te.resourceStack[len(te.resourceStack)-1]
 		te.resourceStack = te.resourceStack[:len(te.resourceStack)-1]
@@ -1012,9 +1052,9 @@ func (te *TextExtractor) getPageResources(page *parser.Dictionary) *parser.Dicti
 // If the font cannot be loaded or has no ToUnicode CMap, we create
 // a default decoder that will use fallback encoding (Latin-1).
 func (te *TextExtractor) loadFontDecoder(fontName string) {
-	// fontMetrics shares the same per-page cache lifecycle as fontDecoders.
-	// If the decoder already exists, it was loaded in this extraction pass
-	// and the associated metrics are still valid.
+	// fontMetrics shares the same resource-scope lifecycle as fontDecoders.
+	// ExtractFromPage resets the page caches, and processFormXObject swaps both
+	// caches when a Form supplies its own Resources dictionary.
 	if _, exists := te.fontDecoders[fontName]; exists {
 		return
 	}
