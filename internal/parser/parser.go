@@ -336,8 +336,6 @@ func (p *Parser) parseStreamContent(dict *Dictionary) (*Stream, error) {
 	}
 
 	// Read exactly 'length' bytes from the underlying reader
-	content := make([]byte, length)
-
 	// We need to read raw bytes from the lexer's reader
 	// Skip the newline after 'stream' keyword first
 	reader := p.getReaderFromLexer()
@@ -358,12 +356,17 @@ func (p *Parser) parseStreamContent(dict *Dictionary) (*Stream, error) {
 		_ = reader.UnreadByte()
 	}
 
-	n, err := io.ReadFull(reader, content)
+	// Read up to 'length' bytes from the underlying reader. length comes from
+	// the untrusted /Length entry, so it must not size an allocation directly:
+	// io.ReadAll over a LimitReader grows the buffer to the bytes actually
+	// present, so a stream that claims a huge length but is short cannot force
+	// a multi-gigabyte allocation before the length mismatch is detected below.
+	content, err := io.ReadAll(io.LimitReader(reader, length))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read stream content: %w", err)
 	}
-	if n != int(length) {
-		return nil, fmt.Errorf("expected %d bytes, got %d", length, n)
+	if int64(len(content)) != length {
+		return nil, fmt.Errorf("expected %d bytes, got %d", length, len(content))
 	}
 
 	// Skip optional whitespace/newline before endstream
