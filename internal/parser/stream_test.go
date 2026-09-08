@@ -134,7 +134,7 @@ func TestStreamDecoder_DCTDecode_WithParams(t *testing.T) {
 // TestStreamDecoder_UnsupportedFilter tests handling of unsupported filters.
 func TestStreamDecoder_UnsupportedFilter(t *testing.T) {
 	dict := NewDictionary()
-	dict.Set("Filter", NewName("LZWDecode"))
+	dict.Set("Filter", NewName("CCITTFaxDecode"))
 	stream := NewStream(dict, []byte("data"))
 
 	reader := NewReader("")
@@ -171,114 +171,4 @@ func TestStreamDecoder_MultipleFilters(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, originalData, decoded)
-}
-
-// TestExtractFilterName tests the filter name extraction logic.
-func TestExtractFilterName(t *testing.T) {
-	reader := NewReader("")
-
-	tests := []struct {
-		name     string
-		setup    func() PdfObject
-		expected string
-	}{
-		{
-			name: "Name object",
-			setup: func() PdfObject {
-				return NewName("FlateDecode")
-			},
-			expected: "FlateDecode",
-		},
-		{
-			name: "Array with single filter",
-			setup: func() PdfObject {
-				arr := NewArray()
-				arr.Append(NewName("DCTDecode"))
-				return arr
-			},
-			expected: "DCTDecode",
-		},
-		{
-			name: "Array with multiple filters",
-			setup: func() PdfObject {
-				arr := NewArray()
-				arr.Append(NewName("ASCII85Decode"))
-				arr.Append(NewName("FlateDecode"))
-				return arr
-			},
-			expected: "ASCII85Decode", // First filter
-		},
-		{
-			name: "Empty array",
-			setup: func() PdfObject {
-				return NewArray()
-			},
-			expected: "",
-		},
-		{
-			name: "Nil object",
-			setup: func() PdfObject {
-				return nil
-			},
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			filterObj := tt.setup()
-			result := reader.extractFilterName(filterObj)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-// TestCreateDCTDecoder tests DCT decoder creation with parameters.
-func TestCreateDCTDecoder(t *testing.T) {
-	reader := NewReader("")
-
-	tests := []struct {
-		name              string
-		setup             func() *Dictionary
-		expectedTransform int
-	}{
-		{
-			name: "No decode parameters",
-			setup: func() *Dictionary {
-				return NewDictionary()
-			},
-			expectedTransform: 1, // Default
-		},
-		{
-			name: "ColorTransform 0",
-			setup: func() *Dictionary {
-				dict := NewDictionary()
-				params := NewDictionary()
-				params.Set("ColorTransform", NewInteger(0))
-				dict.Set("DecodeParms", params)
-				return dict
-			},
-			expectedTransform: 0,
-		},
-		{
-			name: "ColorTransform 1",
-			setup: func() *Dictionary {
-				dict := NewDictionary()
-				params := NewDictionary()
-				params.Set("ColorTransform", NewInteger(1))
-				dict.Set("DecodeParms", params)
-				return dict
-			},
-			expectedTransform: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dict := tt.setup()
-			decoder := reader.createDCTDecoder(dict)
-			require.NotNil(t, decoder)
-			assert.Equal(t, tt.expectedTransform, decoder.ColorTransform)
-		})
-	}
 }

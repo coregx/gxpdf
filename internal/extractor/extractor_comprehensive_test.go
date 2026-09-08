@@ -3,7 +3,9 @@ package extractor
 import (
 	"bytes"
 	"compress/zlib"
+	"errors"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/coregx/gxpdf/internal/parser"
@@ -745,44 +747,6 @@ func TestIsDelimiter_NonDelimiters(t *testing.T) {
 	}
 }
 
-// ---------- decodeFlateDecode tests ----------
-
-func TestDecodeFlateDecode_ValidData(t *testing.T) {
-	r := openExtractorTestReader(t, "../../testdata/pdfs/minimal.pdf")
-	defer r.Close()
-
-	te := NewTextExtractor(r)
-
-	// Compress "Hello World" with zlib
-	compress := func(data []byte) []byte {
-		var buf bytes.Buffer
-		w := zlib.NewWriter(&buf)
-		_, _ = w.Write(data)
-		_ = w.Close()
-		return buf.Bytes()
-	}
-	compressed := compress([]byte("Hello World"))
-
-	decoded, err := te.decodeFlateDecode(compressed)
-	if err != nil {
-		t.Fatalf("decodeFlateDecode error = %v", err)
-	}
-	if string(decoded) != "Hello World" {
-		t.Errorf("decodeFlateDecode = %q, want Hello World", string(decoded))
-	}
-}
-
-func TestDecodeFlateDecode_InvalidData(t *testing.T) {
-	r := openExtractorTestReader(t, "../../testdata/pdfs/minimal.pdf")
-	defer r.Close()
-
-	te := NewTextExtractor(r)
-	_, err := te.decodeFlateDecode([]byte("not valid zlib data"))
-	if err == nil {
-		t.Error("decodeFlateDecode(invalid) should return error")
-	}
-}
-
 // ---------- parseDifferencesArray tests ----------
 
 func TestParseDifferencesArray_NoDifferences(t *testing.T) {
@@ -823,28 +787,6 @@ func TestParseDifferencesArray_WithDifferences(t *testing.T) {
 	result := te.parseDifferencesArray(encodingDict)
 	if len(result) == 0 {
 		t.Error("parseDifferencesArray with valid data should return non-empty map")
-	}
-}
-
-// ---------- bytesReaderCloser tests ----------
-
-func TestBytesReaderCloser_ReadAndClose(t *testing.T) {
-	b := &bytesReaderCloser{data: []byte("hello"), pos: 0}
-	buf := make([]byte, 5)
-	n, err := b.Read(buf)
-	if err != nil {
-		t.Fatalf("Read error = %v", err)
-	}
-	if n != 5 || string(buf[:n]) != "hello" {
-		t.Errorf("Read = %q (n=%d), want hello", string(buf[:n]), n)
-	}
-	// Read again should return EOF
-	n2, err2 := b.Read(buf)
-	if err2 == nil || n2 != 0 {
-		t.Errorf("Read at EOF: n=%d err=%v, want 0/EOF", n2, err2)
-	}
-	if err := b.Close(); err != nil {
-		t.Errorf("Close error = %v", err)
 	}
 }
 
@@ -1411,13 +1353,8 @@ func TestDecodeStream_UnsupportedFilter(t *testing.T) {
 	dict := parser.NewDictionary()
 	dict.Set("Filter", parser.NewName("JBIG2Decode"))
 	stream := parser.NewStream(dict, []byte("raw"))
-	// Unsupported filter returns raw content, no error
-	data, err := te.decodeStream(stream)
-	if err != nil {
-		t.Fatalf("decodeStream(unsupported) unexpected error = %v", err)
-	}
-	if string(data) != "raw" {
-		t.Errorf("decodeStream(unsupported) = %q, want raw", string(data))
+	if _, err := te.decodeStream(stream); err == nil {
+		t.Fatal("decodeStream(unsupported) error = nil, want error")
 	}
 }
 
@@ -1469,6 +1406,28 @@ func TestGetPageContent_ArrayOfStreams(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Error("getPageContent(array) should return non-empty data")
+	}
+}
+
+func TestGetPageContent_ArrayFailsClosedOnUndecodableStream(t *testing.T) {
+	te := newExtractorWithResources(t)
+	page := parser.NewDictionary()
+	unsupportedDictionary := parser.NewDictionary()
+	unsupportedDictionary.Set("Filter", parser.NewName("CCITTFaxDecode"))
+	contents := parser.NewArray()
+	contents.Append(parser.NewStream(parser.NewDictionary(), []byte("BT ET")))
+	contents.Append(parser.NewStream(unsupportedDictionary, []byte("encoded")))
+	page.Set("Contents", contents)
+
+	_, err := te.getPageContent(page)
+	if err == nil {
+		t.Fatal("getPageContent() error = nil, want unsupported-filter error")
+	}
+	if !strings.Contains(err.Error(), "content stream 1") {
+		t.Errorf("getPageContent() error = %q, want stream index", err)
+	}
+	if !errors.Is(err, parser.ErrUnsupportedStreamFilter) {
+		t.Errorf("getPageContent() error = %v, want ErrUnsupportedStreamFilter", err)
 	}
 }
 
@@ -1654,12 +1613,8 @@ func TestGraphicsParser_DecodeStream_UnsupportedFilter(t *testing.T) {
 	dict := parser.NewDictionary()
 	dict.Set("Filter", parser.NewName("JBIG2Decode"))
 	stream := parser.NewStream(dict, []byte("raw"))
-	data, err := gp.decodeStream(stream)
-	if err != nil {
-		t.Fatalf("graphics decodeStream(unsupported) error = %v", err)
-	}
-	if string(data) != "raw" {
-		t.Errorf("graphics decodeStream(unsupported) = %q, want raw", string(data))
+	if _, err := gp.decodeStream(stream); err == nil {
+		t.Fatal("graphics decodeStream(unsupported) error = nil, want error")
 	}
 }
 

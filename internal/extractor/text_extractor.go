@@ -1,9 +1,7 @@
 package extractor
 
 import (
-	"compress/zlib"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -338,28 +336,30 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 		for i := 0; i < obj.Len(); i++ {
 			streamRef := obj.Get(i)
 			if streamRef == nil {
-				continue
+				return nil, fmt.Errorf("content stream %d is null", i)
 			}
 
 			// Resolve indirect reference
 			if ref, ok := streamRef.(*parser.IndirectReference); ok {
 				resolved, err := te.reader.GetObject(ref.Number)
 				if err != nil {
-					continue
+					return nil, fmt.Errorf("failed to resolve content stream %d: %w", i, err)
 				}
 				streamRef = resolved
 			}
 
 			// Decode stream
-			if stream, ok := streamRef.(*parser.Stream); ok {
-				content, err := te.decodeStream(stream)
-				if err != nil {
-					continue
-				}
-				allContent = append(allContent, content...)
-				// Add space between streams for safety
-				allContent = append(allContent, ' ')
+			stream, ok := streamRef.(*parser.Stream)
+			if !ok {
+				return nil, fmt.Errorf("content stream %d is %T, want Stream", i, streamRef)
 			}
+			content, err := te.decodeStream(stream)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode content stream %d: %w", i, err)
+			}
+			allContent = append(allContent, content...)
+			// Add space between streams for safety
+			allContent = append(allContent, ' ')
 		}
 
 	default:
@@ -369,91 +369,9 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 	return allContent, nil
 }
 
-// decodeStream decodes a PDF stream based on its filters.
-//
-// For Phase 2.5, we implement FlateDecode (most common).
-// Other filters can be added in future phases.
+// decodeStream delegates to the parser's canonical bounded filter pipeline.
 func (te *TextExtractor) decodeStream(stream *parser.Stream) ([]byte, error) {
-	// Get filter
-	filterObj := stream.Dictionary().Get("Filter")
-	if filterObj == nil {
-		// No filter - return raw content
-		return stream.Content(), nil
-	}
-
-	// Get filter name
-	var filterName string
-	if name, ok := filterObj.(*parser.Name); ok {
-		filterName = name.Value()
-	} else if arr, ok := filterObj.(*parser.Array); ok {
-		// Array of filters - for now, just handle first one
-		if arr.Len() > 0 {
-			if name, ok := arr.Get(0).(*parser.Name); ok {
-				filterName = name.Value()
-			}
-		}
-	}
-
-	// Apply filter
-	switch filterName {
-	case filterFlateDecode:
-		return te.decodeFlateDecode(stream.Content())
-
-	case "":
-		// No filter
-		return stream.Content(), nil
-
-	default:
-		// Unsupported filter - return raw content and hope for the best
-		// In production, we should log this
-		return stream.Content(), nil
-	}
-}
-
-// decodeFlateDecode decodes FlateDecode (zlib) compressed data.
-//
-// FlateDecode is the most common compression filter in PDFs.
-//
-// Reference: PDF 1.7 specification, Section 7.4.4 (LZW and Flate Filters).
-func (te *TextExtractor) decodeFlateDecode(data []byte) ([]byte, error) {
-	// Create a bytes buffer wrapper
-	buf := &bytesReaderCloser{data: data, pos: 0}
-
-	// Create zlib reader with actual data
-	reader, err := zlib.NewReader(buf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize zlib reader: %w", err)
-	}
-	defer func() {
-		_ = reader.Close() // Close reader, ignore error
-	}()
-
-	// Read all decoded data
-	decoded, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode FlateDecode: %w", err)
-	}
-
-	return decoded, nil
-}
-
-// bytesReaderCloser wraps a byte slice to implement io.ReadCloser.
-type bytesReaderCloser struct {
-	data []byte
-	pos  int
-}
-
-func (b *bytesReaderCloser) Read(p []byte) (int, error) {
-	if b.pos >= len(b.data) {
-		return 0, io.EOF
-	}
-	n := copy(p, b.data[b.pos:])
-	b.pos += n
-	return n, nil
-}
-
-func (b *bytesReaderCloser) Close() error {
-	return nil
+	return stream.Decode()
 }
 
 // processOperator processes a single content stream operator.

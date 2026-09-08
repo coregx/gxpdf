@@ -120,16 +120,6 @@ func (s *Stream) Clone() *Stream {
 	}
 }
 
-// Decode decodes the stream content based on the filters in the dictionary.
-// This is a placeholder for Phase 3 (Stream Processing).
-// Currently returns the raw content.
-func (s *Stream) Decode() ([]byte, error) {
-	// TODO: Phase 3 - implement filter decoding
-	// Check /Filter entry in dictionary
-	// Apply filters: FlateDecode, ASCIIHexDecode, ASCII85Decode, etc.
-	return s.content, nil
-}
-
 // Encode encodes the stream content with the specified filters.
 // This is a placeholder for Phase 3 (Stream Processing).
 func (s *Stream) Encode(_ []string) error {

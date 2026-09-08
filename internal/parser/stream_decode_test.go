@@ -1,0 +1,339 @@
+package parser
+
+import (
+	"bytes"
+	"compress/zlib"
+	"encoding/ascii85"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"math"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestStreamDecodeSupportedFilters(t *testing.T) {
+	raw := []byte("BT /F1 12 Tf 72 700 Td (Filtered text) Tj ET")
+	tests := []struct {
+		name    string
+		filter  string
+		encoded func(*testing.T, []byte) []byte
+	}{
+		{name: "flate", filter: "FlateDecode", encoded: encodeFlateForTest},
+		{name: "ascii85", filter: "ASCII85Decode", encoded: encodeASCII85ForTest},
+		{name: "ascii hex", filter: "ASCIIHexDecode", encoded: encodeASCIIHexForTest},
+		{name: "run length", filter: "RunLengthDecode", encoded: encodeRunLengthForTest},
+		{name: "lzw", filter: "LZWDecode", encoded: encodeLiteralLZWForTest},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dictionary := NewDictionary()
+			dictionary.Set("Filter", NewName(test.filter))
+			decoded, err := NewStream(dictionary, test.encoded(t, raw)).Decode()
+			require.NoError(t, err)
+			assert.Equal(t, raw, decoded)
+		})
+	}
+}
+
+func TestStreamDecodeFilterChain(t *testing.T) {
+	raw := []byte("BT (chained filters) Tj ET")
+	compressed := encodeFlateForTest(t, raw)
+	encoded := encodeASCII85ForTest(t, compressed)
+	filters := NewArray()
+	filters.Append(NewName("ASCII85Decode"))
+	filters.Append(NewName("FlateDecode"))
+	parameters := NewArray()
+	parameters.Append(NewNull())
+	parameters.Append(NewDictionary())
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", filters)
+	dictionary.Set("DecodeParms", parameters)
+
+	decoded, err := NewStream(dictionary, encoded).Decode()
+	require.NoError(t, err)
+	assert.Equal(t, raw, decoded)
+}
+
+func TestStreamDecodeFilterAliases(t *testing.T) {
+	raw := []byte("alias")
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", NewName("AHx"))
+	decoded, err := NewStream(dictionary, encodeASCIIHexForTest(t, raw)).Decode()
+	require.NoError(t, err)
+	assert.Equal(t, raw, decoded)
+}
+
+func TestStreamDecodeLZWEarlyChangeModes(t *testing.T) {
+	raw := bytes.Repeat([]byte("abcdef"), 120)
+	for _, earlyChange := range []int{0, 1} {
+		t.Run(fmt.Sprintf("EarlyChange_%d", earlyChange), func(t *testing.T) {
+			parameters := NewDictionary()
+			parameters.Set("EarlyChange", NewInteger(int64(earlyChange)))
+			dictionary := NewDictionary()
+			dictionary.Set("Filter", NewName("LZWDecode"))
+			dictionary.Set("DecodeParms", parameters)
+			decoded, err := NewStream(dictionary, encodeLiteralLZW(raw, earlyChange)).Decode()
+			require.NoError(t, err)
+			assert.Equal(t, raw, decoded)
+		})
+	}
+}
+
+func TestStreamDecodePredictors(t *testing.T) {
+	tests := []struct {
+		name      string
+		predictor int64
+		encoded   []byte
+		want      []byte
+	}{
+		{
+			name:      "TIFF horizontal differencing",
+			predictor: 2,
+			encoded:   []byte{10, 10, 10, 5, 2, 2},
+			want:      []byte{10, 20, 30, 5, 7, 9},
+		},
+		{
+			name:      "PNG row filters",
+			predictor: 15,
+			encoded:   []byte{0, 10, 20, 30, 2, 5, 5, 5},
+			want:      []byte{10, 20, 30, 15, 25, 35},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parameters := NewDictionary()
+			parameters.Set("Predictor", NewInteger(test.predictor))
+			parameters.Set("Colors", NewInteger(1))
+			parameters.Set("BitsPerComponent", NewInteger(8))
+			parameters.Set("Columns", NewInteger(3))
+			dictionary := NewDictionary()
+			dictionary.Set("Filter", NewName("FlateDecode"))
+			dictionary.Set("DecodeParms", parameters)
+
+			decoded, err := NewStream(dictionary, encodeFlateForTest(t, test.encoded)).Decode()
+			require.NoError(t, err)
+			assert.Equal(t, test.want, decoded)
+		})
+	}
+}
+
+func TestStreamDecodeRejectsInvalidInputs(t *testing.T) {
+	jpegData := func() []byte {
+		var output bytes.Buffer
+		require.NoError(t, jpeg.Encode(&output, image.NewGray(image.Rect(0, 0, 100, 100)), nil))
+		return output.Bytes()
+	}()
+	tests := []struct {
+		name       string
+		stream     *Stream
+		options    StreamDecodeOptions
+		wantIs     error
+		wantDetail string
+	}{
+		{
+			name: "unsupported filter",
+			stream: func() *Stream {
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", NewName("CCITTFaxDecode"))
+				return NewStream(dictionary, []byte("encoded"))
+			}(),
+			options: DefaultStreamDecodeOptions(), wantIs: ErrUnsupportedStreamFilter,
+		},
+		{
+			name: "decoded output limit",
+			stream: func() *Stream {
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", NewName("RunLengthDecode"))
+				return NewStream(dictionary, []byte{129, 'x', 128})
+			}(),
+			options: StreamDecodeOptions{MaxDecodedBytes: 8, MaxFilters: 1}, wantIs: ErrStreamDecodeLimit,
+		},
+		{
+			name: "DCT decoded output limit",
+			stream: func() *Stream {
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", NewName("DCTDecode"))
+				return NewStream(dictionary, jpegData)
+			}(),
+			options: StreamDecodeOptions{MaxDecodedBytes: 1_000, MaxFilters: 1}, wantIs: ErrStreamDecodeLimit,
+		},
+		{
+			name: "filter chain limit",
+			stream: func() *Stream {
+				filters := NewArray()
+				filters.Append(NewName("ASCIIHexDecode"))
+				filters.Append(NewName("ASCIIHexDecode"))
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", filters)
+				return NewStream(dictionary, []byte("41>"))
+			}(),
+			options: StreamDecodeOptions{MaxDecodedBytes: 100, MaxFilters: 1}, wantIs: ErrStreamDecodeLimit,
+		},
+		{
+			name:    "overflowing byte limit",
+			stream:  NewStream(NewDictionary(), nil),
+			options: StreamDecodeOptions{MaxDecodedBytes: math.MaxInt64, MaxFilters: 1}, wantDetail: "invalid stream decode options",
+		},
+		{
+			name: "decode parameter count",
+			stream: func() *Stream {
+				filters := NewArray()
+				filters.Append(NewName("ASCII85Decode"))
+				filters.Append(NewName("FlateDecode"))
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", filters)
+				dictionary.Set("DecodeParms", NewDictionary())
+				return NewStream(dictionary, nil)
+			}(),
+			options: DefaultStreamDecodeOptions(), wantDetail: "requires exactly one filter",
+		},
+		{
+			name: "decode parameter type",
+			stream: func() *Stream {
+				parameters := NewDictionary()
+				parameters.Set("Predictor", NewName("invalid"))
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", NewName("FlateDecode"))
+				dictionary.Set("DecodeParms", parameters)
+				return NewStream(dictionary, encodeFlateForTest(t, []byte("content")))
+			}(),
+			options: DefaultStreamDecodeOptions(), wantDetail: "Predictor is *parser.Name, want Integer",
+		},
+		{
+			name: "truncated run length",
+			stream: func() *Stream {
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", NewName("RunLengthDecode"))
+				return NewStream(dictionary, []byte{2, 'a'})
+			}(),
+			options: DefaultStreamDecodeOptions(), wantDetail: "unexpected EOF",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := test.stream.DecodeWithOptions(test.options)
+			require.Error(t, err)
+			if test.wantIs != nil {
+				assert.True(t, errors.Is(err, test.wantIs), "error = %v", err)
+			}
+			if test.wantDetail != "" {
+				assert.ErrorContains(t, err, test.wantDetail)
+			}
+		})
+	}
+}
+
+func TestStreamDecodeDCTWithinLimit(t *testing.T) {
+	var encoded bytes.Buffer
+	pixels := image.NewGray(image.Rect(0, 0, 2, 2))
+	pixels.SetGray(0, 0, color.Gray{Y: 20})
+	require.NoError(t, jpeg.Encode(&encoded, pixels, nil))
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", NewName("DCTDecode"))
+
+	decoded, err := NewStream(dictionary, encoded.Bytes()).DecodeWithOptions(StreamDecodeOptions{
+		MaxDecodedBytes: 512,
+		MaxFilters:      1,
+	})
+	require.NoError(t, err)
+	assert.Len(t, decoded, 4)
+}
+
+func encodeFlateForTest(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var output bytes.Buffer
+	writer := zlib.NewWriter(&output)
+	_, err := writer.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return output.Bytes()
+}
+
+func encodeASCII85ForTest(t *testing.T, data []byte) []byte {
+	t.Helper()
+	encoded := make([]byte, ascii85.MaxEncodedLen(len(data)))
+	written := ascii85.Encode(encoded, data)
+	return append(encoded[:written], '~', '>')
+}
+
+func encodeASCIIHexForTest(t *testing.T, data []byte) []byte {
+	t.Helper()
+	encoded := make([]byte, hex.EncodedLen(len(data)))
+	hex.Encode(encoded, data)
+	return append(encoded, '>')
+}
+
+func encodeRunLengthForTest(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var encoded []byte
+	for len(data) > 0 {
+		count := min(len(data), 128)
+		encoded = append(encoded, byte(count-1))
+		encoded = append(encoded, data[:count]...)
+		data = data[count:]
+	}
+	return append(encoded, 128)
+}
+
+func encodeLiteralLZWForTest(t *testing.T, data []byte) []byte {
+	t.Helper()
+	return encodeLiteralLZW(data, 1)
+}
+
+func encodeLiteralLZW(data []byte, earlyChange int) []byte {
+	var encoded []byte
+	bitOffset := 0
+	writeCode := func(code, width int) {
+		for bit := width - 1; bit >= 0; bit-- {
+			if bitOffset%8 == 0 {
+				encoded = append(encoded, 0)
+			}
+			if code>>bit&1 != 0 {
+				encoded[len(encoded)-1] |= 1 << (7 - bitOffset%8)
+			}
+			bitOffset++
+		}
+	}
+	codeWidth := 9
+	nextCode := 258
+	writeCode(256, codeWidth)
+	for index, value := range data {
+		writeCode(int(value), codeWidth)
+		if index == 0 || nextCode >= 4096 {
+			continue
+		}
+		nextCode++
+		if codeWidth < 12 && nextCode+earlyChange == 1<<codeWidth {
+			codeWidth++
+		}
+	}
+	writeCode(257, codeWidth)
+	return encoded
+}
+
+func FuzzStreamDecodeNeverExceedsLimit(f *testing.F) {
+	f.Add(byte(0), []byte("raw"))
+	f.Add(byte(1), []byte("!!!!"))
+	f.Add(byte(2), []byte{128})
+	f.Fuzz(func(t *testing.T, selector byte, data []byte) {
+		filters := []string{"FlateDecode", "ASCII85Decode", "ASCIIHexDecode", "RunLengthDecode", "LZWDecode", "unknown"}
+		dictionary := NewDictionary()
+		dictionary.Set("Filter", NewName(filters[int(selector)%len(filters)]))
+		decoded, _ := NewStream(dictionary, data).DecodeWithOptions(StreamDecodeOptions{
+			MaxDecodedBytes: 1024,
+			MaxFilters:      2,
+		})
+		if len(decoded) > 1024 {
+			t.Fatalf("decoded %d bytes, limit 1024", len(decoded))
+		}
+	})
+}

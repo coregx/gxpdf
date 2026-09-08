@@ -11,15 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/coregx/gxpdf/internal/encoding"
 	"github.com/coregx/gxpdf/internal/security"
 	"github.com/coregx/gxpdf/logging"
-)
-
-// PDF filter name constants.
-const (
-	filterFlateDecode = "FlateDecode"
-	filterDCTDecode   = "DCTDecode"
 )
 
 // Page tree node type constants.
@@ -954,86 +947,9 @@ func (r *Reader) getCompressedObject(objectNum int, entry *XRefEntry) (PdfObject
 	return obj, nil
 }
 
-// createDCTDecoder creates a DCT decoder with parameters from the stream dictionary.
-func (r *Reader) createDCTDecoder(dict *Dictionary) *encoding.DCTDecoder {
-	// Check for decode parameters
-	decodeParmsObj := dict.Get("DecodeParms")
-	if decodeParmsObj == nil {
-		// No parameters - use defaults
-		return encoding.NewDCTDecoder()
-	}
-
-	// Extract ColorTransform parameter
-	colorTransform := 1 // Default: YCbCr to RGB
-	if parmsDict, ok := decodeParmsObj.(*Dictionary); ok {
-		if ctObj := parmsDict.Get("ColorTransform"); ctObj != nil {
-			if ctInt, ok := ctObj.(*Integer); ok {
-				colorTransform = int(ctInt.Value())
-			}
-		}
-	}
-
-	return encoding.NewDCTDecoderWithParams(colorTransform)
-}
-
 // decodeStream decodes a stream object based on its filters.
 func (r *Reader) decodeStream(stream *Stream) ([]byte, error) {
-	dict := stream.Dictionary()
-	filterObj := dict.Get("Filter")
-
-	// No filter - return raw content
-	if filterObj == nil {
-		return stream.Content(), nil
-	}
-
-	// Extract filter name from Filter entry
-	filterName := r.extractFilterName(filterObj)
-	if filterName == "" {
-		return stream.Content(), nil
-	}
-
-	// Apply the filter
-	return r.applyFilter(filterName, dict, stream.Content())
-}
-
-// extractFilterName extracts the filter name from a Filter object.
-func (r *Reader) extractFilterName(filterObj PdfObject) string {
-	switch obj := filterObj.(type) {
-	case *Name:
-		return obj.Value()
-	case *Array:
-		// Multiple filters - for now, handle single filter case
-		if obj.Len() > 0 {
-			if nameObj, ok := obj.Get(0).(*Name); ok {
-				return nameObj.Value()
-			}
-		}
-	}
-	return ""
-}
-
-// applyFilter applies the specified filter to stream content.
-func (r *Reader) applyFilter(filterName string, dict *Dictionary, content []byte) ([]byte, error) {
-	switch filterName {
-	case filterFlateDecode:
-		decoder := encoding.NewFlateDecoder()
-		decoded, err := decoder.Decode(content)
-		if err != nil {
-			return nil, fmt.Errorf("%s failed: %w", filterFlateDecode, err)
-		}
-		return decoded, nil
-
-	case filterDCTDecode:
-		decoder := r.createDCTDecoder(dict)
-		decoded, err := decoder.Decode(content)
-		if err != nil {
-			return nil, fmt.Errorf("DCTDecode failed: %w", err)
-		}
-		return decoded, nil
-
-	default:
-		return nil, fmt.Errorf("unsupported filter: %s", filterName)
-	}
+	return stream.Decode()
 }
 
 // resolveReferences recursively resolves indirect references.

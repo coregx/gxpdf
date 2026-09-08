@@ -131,7 +131,7 @@ func TestApplyPNGPredictor_Errors(t *testing.T) {
 		input := []byte{5, 1, 2, 3}
 		_, err := applyPNGPredictor(input, 3)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown PNG filter type: 5")
+		assert.Contains(t, err.Error(), "PNG predictor filter 5 is invalid")
 	})
 
 	t.Run("data length not divisible by row size", func(t *testing.T) {
@@ -256,12 +256,12 @@ func TestFlateDecoder_DecodeWithPredictor(t *testing.T) {
 		assert.Equal(t, []byte("hello"), result)
 	})
 
-	t.Run("predictor 2 (TIFF) returns error", func(t *testing.T) {
+	t.Run("predictor 2 (TIFF) applies horizontal differencing", func(t *testing.T) {
 		decoder := &flateDecoder{}
-		compressed := []byte{0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01} // empty
-		_, err := decoder.DecodeWithPredictor(compressed, 2, 5)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "TIFF predictor not implemented")
+		compressed := encodeFlateForTest(t, []byte{10, 10, 10, 5, 2, 2})
+		result, err := decoder.DecodeWithPredictor(compressed, 2, 3)
+		require.NoError(t, err)
+		assert.Equal(t, []byte{10, 20, 30, 5, 7, 9}, result)
 	})
 
 	t.Run("unsupported predictor returns error", func(t *testing.T) {
