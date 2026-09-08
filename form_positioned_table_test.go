@@ -28,7 +28,7 @@ func TestFormPositionedGeometryReachesTableDetection(t *testing.T) {
 			}
 			rows := tables[0].Rows()
 			for _, label := range []string{"Line Item", "Revenue", "Cost of Sales"} {
-				if !tableContainsText(rows, label) {
+				if !formTableContainsText(rows, label) {
 					t.Errorf("table does not contain %q: %#v", label, rows)
 				}
 			}
@@ -36,7 +36,7 @@ func TestFormPositionedGeometryReachesTableDetection(t *testing.T) {
 	}
 }
 
-func tableContainsText(rows [][]string, want string) bool {
+func formTableContainsText(rows [][]string, want string) bool {
 	for _, row := range rows {
 		for _, cell := range row {
 			if cell == want {

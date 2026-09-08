@@ -71,7 +71,7 @@ func (te *TextExtractor) loadSimpleFontMetrics(fontDict *parser.Dictionary) *fon
 	if !ok {
 		return nil
 	}
-	widthsObj := te.resolveObject(fontDict.Get("Widths"))
+	widthsObj := resolveObject(te.reader, fontDict.Get("Widths"))
 	widthsArray, ok := widthsObj.(*parser.Array)
 	if !ok || widthsArray.Len() == 0 {
 		return nil
@@ -89,7 +89,7 @@ func (te *TextExtractor) loadSimpleFontMetrics(fontDict *parser.Dictionary) *fon
 		}
 	}
 
-	if descriptor, ok := te.resolveObject(fontDict.Get("FontDescriptor")).(*parser.Dictionary); ok {
+	if descriptor, ok := resolveObject(te.reader, fontDict.Get("FontDescriptor")).(*parser.Dictionary); ok {
 		if missingWidth := getNumber(descriptor.Get("MissingWidth")); missingWidth != nil {
 			metrics.defaultWidth = *missingWidth
 		}
@@ -98,11 +98,11 @@ func (te *TextExtractor) loadSimpleFontMetrics(fontDict *parser.Dictionary) *fon
 }
 
 func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *fontMetrics {
-	descendants, ok := te.resolveObject(fontDict.Get("DescendantFonts")).(*parser.Array)
+	descendants, ok := resolveObject(te.reader, fontDict.Get("DescendantFonts")).(*parser.Array)
 	if !ok || descendants.Len() == 0 {
 		return nil
 	}
-	descendant, ok := te.resolveObject(descendants.Get(0)).(*parser.Dictionary)
+	descendant, ok := resolveObject(te.reader, descendants.Get(0)).(*parser.Dictionary)
 	if !ok {
 		return nil
 	}
@@ -115,7 +115,7 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 	if defaultWidth := getNumber(descendant.Get("DW")); defaultWidth != nil {
 		metrics.defaultWidth = *defaultWidth
 	}
-	widths, _ := te.resolveObject(descendant.Get("W")).(*parser.Array)
+	widths, _ := resolveObject(te.reader, descendant.Get("W")).(*parser.Array)
 	if widths == nil {
 		return metrics
 	}
@@ -131,7 +131,7 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 			break
 		}
 
-		if explicit, ok := te.resolveObject(widths.Get(i)).(*parser.Array); ok {
+		if explicit, ok := resolveObject(te.reader, widths.Get(i)).(*parser.Array); ok {
 			for offset := 0; offset < explicit.Len(); offset++ {
 				glyphID := first + int64(offset)
 				if width := getNumber(explicit.Get(offset)); width != nil && glyphID >= 0 && glyphID <= 65535 {
@@ -166,15 +166,4 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 		i += 2
 	}
 	return metrics
-}
-
-func (te *TextExtractor) resolveObject(object parser.PdfObject) parser.PdfObject {
-	if ref, ok := object.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
-		if err != nil {
-			return nil
-		}
-		return resolved
-	}
-	return object
 }
