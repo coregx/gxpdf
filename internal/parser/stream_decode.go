@@ -470,6 +470,9 @@ func decodePDFLZW(ctx context.Context, data []byte, earlyChange int, limit int64
 }
 
 func applyStreamPredictor(ctx context.Context, data []byte, parameters *Dictionary) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	predictor, err := decodeParameter(parameters, "Predictor", 1)
 	if err != nil {
 		return nil, err
