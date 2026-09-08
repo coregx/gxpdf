@@ -108,12 +108,25 @@ func (cbd *ColumnBoundaryDetector) completeAndCompactBoundaries(
 	minX, maxX := cbd.findExtent(elements)
 	completed := append([]float64(nil), boundaries...)
 	sort.Float64s(completed)
-	const coordinateEpsilon = 1e-6
-	if completed[0]-minX > coordinateEpsilon {
-		completed = append([]float64{minX}, completed...)
+	// Edge clusters are medians, so an outer cluster can legitimately land a
+	// fraction of a point inside the true extent. Treat positions within the
+	// clustering radius as the same edge and snap them to the extent. Appending
+	// both would create a narrow phantom terminal column.
+	edgeTolerance := cbd.minGapWidth / 2
+	if completed[0] > minX {
+		if completed[0]-minX <= edgeTolerance {
+			completed[0] = minX
+		} else {
+			completed = append([]float64{minX}, completed...)
+		}
 	}
-	if maxX-completed[len(completed)-1] > coordinateEpsilon {
-		completed = append(completed, maxX)
+	last := len(completed) - 1
+	if completed[last] < maxX {
+		if maxX-completed[last] <= edgeTolerance {
+			completed[last] = maxX
+		} else {
+			completed = append(completed, maxX)
+		}
 	}
 
 	for interval := 0; interval < len(completed)-1; {
@@ -135,9 +148,15 @@ func (cbd *ColumnBoundaryDetector) completeAndCompactBoundaries(
 }
 
 func intervalContainsTextCenter(left, right float64, elements []*extractor.TextElement, includeRight bool) bool {
+	const coordinateEpsilon = 1e-6
 	for _, element := range elements {
 		center := element.CenterX()
-		if center >= left && (center < right || includeRight && center <= right) {
+		// A center exactly on a candidate edge is evidence that the edge cuts
+		// through text, not that the interval to its right is populated. Keep
+		// the center strictly inside an interval so variable-width labels do not
+		// turn their right edges into phantom columns.
+		if center > left+coordinateEpsilon &&
+			(center < right-coordinateEpsilon || includeRight && center <= right+coordinateEpsilon) {
 			return true
 		}
 	}
