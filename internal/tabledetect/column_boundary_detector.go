@@ -83,10 +83,65 @@ func (cbd *ColumnBoundaryDetector) DetectBoundaries(elements []*extractor.TextEl
 
 	if len(boundaries) == 0 {
 		// Fallback to header-based
-		return cbd.detectBoundariesHeaderBased(elements)
+		boundaries = cbd.detectBoundariesHeaderBased(elements)
 	}
 
-	return boundaries
+	return cbd.completeAndCompactBoundaries(boundaries, elements)
+}
+
+// completeAndCompactBoundaries turns clustered text edges into cell boundaries.
+//
+// Edge clustering can select the right edge of one column and the left edge of
+// the next as two separate boundaries. The interval between them is whitespace,
+// not a logical column. It can also omit the final content edge when that edge
+// is closer than minColumnWidth to the last selected cluster. Complete the
+// outer extent first, then remove intervals that contain no text center by
+// folding their whitespace into the column on the left.
+func (cbd *ColumnBoundaryDetector) completeAndCompactBoundaries(
+	boundaries []float64,
+	elements []*extractor.TextElement,
+) []float64 {
+	if len(boundaries) == 0 || len(elements) == 0 {
+		return boundaries
+	}
+
+	minX, maxX := cbd.findExtent(elements)
+	completed := append([]float64(nil), boundaries...)
+	sort.Float64s(completed)
+	const coordinateEpsilon = 1e-6
+	if completed[0]-minX > coordinateEpsilon {
+		completed = append([]float64{minX}, completed...)
+	}
+	if maxX-completed[len(completed)-1] > coordinateEpsilon {
+		completed = append(completed, maxX)
+	}
+
+	for interval := 0; interval < len(completed)-1; {
+		if intervalContainsTextCenter(completed[interval], completed[interval+1], elements, interval == len(completed)-2) {
+			interval++
+			continue
+		}
+
+		if interval == 0 {
+			completed = append(completed[:1], completed[2:]...)
+			continue
+		}
+
+		completed = append(completed[:interval], completed[interval+1:]...)
+		interval--
+	}
+
+	return completed
+}
+
+func intervalContainsTextCenter(left, right float64, elements []*extractor.TextElement, includeRight bool) bool {
+	for _, element := range elements {
+		center := element.CenterX()
+		if center >= left && (center < right || includeRight && center <= right) {
+			return true
+		}
+	}
+	return false
 }
 
 // DetectBoundariesWithRulingLines detects column boundaries using HYBRID approach.
@@ -1204,158 +1259,13 @@ func (cbd *ColumnBoundaryDetector) median(values []float64) float64 {
 //	Phase 2: Use boundary count as column count
 func (cbd *ColumnBoundaryDetector) DetectColumnCount(elements []*extractor.TextElement) int {
 	boundaries := cbd.DetectBoundaries(elements)
-
-	// Column count = number of boundary pairs
-	// For N boundaries, we have (N-1)/2 columns (assuming left+right boundaries)
-	// But simpler: count gaps between boundaries
 	if len(boundaries) < 2 {
 		return 1 // At least 1 column
 	}
 
-	// Each gap represents a column
-	// For boundaries [x1, x2, x3, x4, x5, x6, x7], we have gaps:
-	// [x1-x2], [x2-x3], [x3-x4], [x4-x5], [x5-x6], [x6-x7]
-	// But adjacent pairs are column edges, so real columns = len(boundaries) / 2
-
-	// Actually, a better approach:
-	// Boundaries represent left edges of columns
-	// So number of columns ≈ number of boundaries
-	// But we need to be smarter...
-
-	// Let's use a different approach: count significant gaps
-	gaps := []float64{}
-	for i := 1; i < len(boundaries); i++ {
-		gap := boundaries[i] - boundaries[i-1]
-		if gap >= cbd.minColumnWidth {
-			gaps = append(gaps, gap)
-		}
-	}
-
-	// Cluster gaps into "column widths" and "inter-column spaces"
-	// For now, simple heuristic: count boundaries as column starts
-	return cbd.countColumnsFromBoundaries(boundaries)
-}
-
-// countColumnsFromBoundaries estimates column count from boundaries.
-//
-// Strategy:
-// - For N boundaries, gaps alternate between "column widths" and "inter-column spaces"
-// - Use k-means-like clustering to find 2 groups of gaps: small and large
-// - Small gaps = column widths (left edge → right edge)
-// - Large gaps = inter-column spaces
-// - Count columns based on alternating pattern
-func (cbd *ColumnBoundaryDetector) countColumnsFromBoundaries(boundaries []float64) int {
-	if len(boundaries) == 0 {
-		return 1
-	}
-	if len(boundaries) == 1 {
-		return 1
-	}
-	if len(boundaries) == 2 {
-		// 2 boundaries = 1 column (left and right edges)
-		return 1
-	}
-
-	// Calculate gaps between consecutive boundaries
-	gaps := make([]float64, 0, len(boundaries)-1)
-	for i := 1; i < len(boundaries); i++ {
-		gaps = append(gaps, boundaries[i]-boundaries[i-1])
-	}
-
-	if len(gaps) == 0 {
-		return 1
-	}
-
-	// Simple heuristic: if all gaps are similar, assume alternating pattern
-	// For [50, 100, 150, 200, 250, 300] → gaps [50, 50, 50, 50, 50]
-	// This represents 3 columns (every 2 boundaries = 1 column)
-
-	// Check if gaps are uniform (all similar)
-	if cbd.areGapsUniform(gaps) {
-		// Uniform gaps - boundaries alternate: left, right, left, right, ...
-		// Number of columns = ceil(boundaries / 2)
-		return (len(boundaries) + 1) / 2
-	}
-
-	// Non-uniform gaps - cluster into small (column width) and large (inter-column)
-	threshold := cbd.findGapThreshold(gaps)
-
-	// Count large gaps (inter-column spaces)
-	interColumnGaps := 0
-	for _, gap := range gaps {
-		if gap >= threshold {
-			interColumnGaps++
-		}
-	}
-
-	// Number of columns = inter-column gaps + 1
-	return max(1, interColumnGaps+1)
-}
-
-// areGapsUniform checks if all gaps are similar (within 20% of median).
-func (cbd *ColumnBoundaryDetector) areGapsUniform(gaps []float64) bool {
-	if len(gaps) == 0 {
-		return true
-	}
-
-	median := cbd.median(gaps)
-	tolerance := median * 0.2 // 20% tolerance
-
-	for _, gap := range gaps {
-		if abs(gap-median) > tolerance {
-			return false
-		}
-	}
-
-	return true
-}
-
-// findGapThreshold finds threshold to separate small gaps from large gaps.
-//
-// Uses mean of all gaps as threshold (simple k-means with k=2).
-func (cbd *ColumnBoundaryDetector) findGapThreshold(gaps []float64) float64 {
-	if len(gaps) == 0 {
-		return cbd.minColumnWidth
-	}
-
-	// Use mean as initial threshold
-	mean := cbd.mean(gaps)
-
-	// Refine using k-means iteration (just 1 iteration for simplicity)
-	smallGaps := []float64{}
-	largeGaps := []float64{}
-
-	for _, gap := range gaps {
-		if gap < mean {
-			smallGaps = append(smallGaps, gap)
-		} else {
-			largeGaps = append(largeGaps, gap)
-		}
-	}
-
-	// Calculate centroids
-	var smallCentroid, largeCentroid float64
-	if len(smallGaps) > 0 {
-		smallCentroid = cbd.mean(smallGaps)
-	}
-	if len(largeGaps) > 0 {
-		largeCentroid = cbd.mean(largeGaps)
-	}
-
-	// Threshold = midpoint between centroids
-	if len(smallGaps) > 0 && len(largeGaps) > 0 {
-		return (smallCentroid + largeCentroid) / 2.0
-	}
-
-	// Fallback to mean
-	return mean
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	// DetectBoundaries now returns compact logical cell edges, so every
+	// adjacent boundary pair describes exactly one column.
+	return len(boundaries) - 1
 }
 
 // AssignToColumns assigns text elements to columns based on detected boundaries.

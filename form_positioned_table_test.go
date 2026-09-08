@@ -2,14 +2,19 @@ package gxpdf
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
-// TestFormPositionedGeometryReachesTableDetection verifies the public handoff:
-// corrected Form glyph geometry must reach the table detector instead of leaving
-// a native-text table undiscoverable. Exact multi-column reconstruction is a
-// separate concern and is intentionally not frozen by this regression test.
+// TestFormPositionedGeometryReachesTableDetection verifies the complete public
+// handoff from corrected Form glyph geometry through table reconstruction.
 func TestFormPositionedGeometryReachesTableDetection(t *testing.T) {
+	want := [][]string{
+		{"Income Statement", "", ""},
+		{"Line Item", "2023", "2024"},
+		{"Revenue", "1200", "1450"},
+		{"Cost of Sales", "(400)", "(570)"},
+	}
 	methods := []ExtractionMethod{MethodAuto, MethodStream, MethodLattice, MethodHybrid}
 	for _, method := range methods {
 		t.Run(method.String(), func(t *testing.T) {
@@ -26,23 +31,9 @@ func TestFormPositionedGeometryReachesTableDetection(t *testing.T) {
 			if len(tables) != 1 {
 				t.Fatalf("tables = %d, want 1", len(tables))
 			}
-			rows := tables[0].Rows()
-			for _, label := range []string{"Line Item", "Revenue", "Cost of Sales"} {
-				if !formTableContainsText(rows, label) {
-					t.Errorf("table does not contain %q: %#v", label, rows)
-				}
+			if got := tables[0].Rows(); !reflect.DeepEqual(got, want) {
+				t.Errorf("table rows = %#v, want %#v", got, want)
 			}
 		})
 	}
-}
-
-func formTableContainsText(rows [][]string, want string) bool {
-	for _, row := range rows {
-		for _, cell := range row {
-			if cell == want {
-				return true
-			}
-		}
-	}
-	return false
 }

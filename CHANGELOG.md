@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Form XObject text geometry** — compose page `cm`, Form `/Matrix`, and nested glyph transforms for unit-sized positioned text; isolate Form graphics state, use embedded font widths, and bound hostile composite `/W` ranges (#89)
+- **Terminal table columns** — preserve the rightmost content edge and compact whitespace-only intervals so Stream table reconstruction does not drop the final populated column (#94)
 
 ---
 

@@ -319,3 +319,19 @@ func TestGolden_Issue79_AutoMode(t *testing.T) {
 		opts,
 	)
 }
+
+// TestGolden_FormPositionedTable_Stream locks the complete three-column
+// reconstruction, including the narrow terminal numeric column.
+func TestGolden_FormPositionedTable_Stream(t *testing.T) {
+	opts := DefaultExtractionOptions().
+		WithMethod(MethodStream).
+		WithPages(0)
+
+	runGoldenTest(t,
+		"form_positioned_table_stream_table0",
+		"testdata/pdfs/form_positioned_table.pdf",
+		0,
+		0,
+		opts,
+	)
+}
