@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -239,19 +240,19 @@ func buildNestedXObjectPDF(t *testing.T) []byte {
 
 	// L2 Form XObject: actual text in its stream body
 	l2N := b.addStream(
-		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> >>", fontN),
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Matrix [1 0 0 1 40 50] /Resources << /Font << /F1 %d 0 R >> >>", fontN),
 		[]byte("BT /F1 12 Tf 10 700 Td (Nested) Tj ET"),
 	)
 
 	// L1 Form XObject: invokes L2 from its stream body
 	l1N := b.addStream(
-		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /XObject << /L2 %d 0 R >> /Font << /F1 %d 0 R >> >>",
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Matrix [1 0 0 1 20 30] /Resources << /XObject << /L2 %d 0 R >> /Font << /F1 %d 0 R >> >>",
 			l2N, fontN),
 		[]byte("/L2 Do"),
 	)
 
 	// Page content: invoke L1
-	pageContentN := b.addStream("", []byte("/L1 Do"))
+	pageContentN := b.addStream("", []byte("q 1 0 0 1 5 7 cm /L1 Do Q"))
 
 	// Page
 	pageN := b.addRaw(fmt.Sprintf(
@@ -665,6 +666,44 @@ func TestFormXObject_Nested_ExtractsText(t *testing.T) {
 	}
 	assert.Equal(t, "Nested", sb.String(),
 		"text from doubly-nested Form XObject must be extracted")
+	assert.InDelta(t, 75, elements[0].X, 0.001)
+	assert.InDelta(t, 787, elements[0].Y, 0.001)
+}
+
+func TestFormTextGeometryHandlesAffineTransforms(t *testing.T) {
+	tests := []struct {
+		name                       string
+		ctm                        Matrix
+		fontSize, horizontal, rise float64
+		wantX, wantY, wantW, wantH float64
+		wantEffectiveFontSize      float64
+	}{
+		{name: "rotation", ctm: Rotation(math.Pi / 2), fontSize: 10, horizontal: 100, wantX: -30, wantY: 10, wantW: 10, wantH: 6, wantEffectiveFontSize: 10},
+		{name: "skew", ctm: NewMatrix(1, 0.5, 0.25, 1, 3, 4), fontSize: 10, horizontal: 100, wantX: 18, wantY: 29, wantW: 8.5, wantH: 13, wantEffectiveFontSize: math.Hypot(2.5, 10)},
+		{name: "reflection", ctm: NewMatrix(-1, 0, 0, 1, 100, 0), fontSize: 10, horizontal: 100, wantX: 84, wantY: 20, wantW: 6, wantH: 10, wantEffectiveFontSize: 10},
+		{name: "non-uniform scale with rise and horizontal scaling", ctm: NewMatrix(2, 0, 0, 3, 5, 7), fontSize: 10, horizontal: 50, rise: 2, wantX: 25, wantY: 73, wantW: 6, wantH: 30, wantEffectiveFontSize: 30},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			extractor := NewTextExtractor(nil)
+			extractor.xobjectDepth = 1
+			extractor.ctm = test.ctm
+			extractor.textState.SetFont("F1", test.fontSize)
+			extractor.textState.SetTextMatrix(1, 0, 0, 1, 10, 20)
+			extractor.textState.HorizScale = test.horizontal
+			extractor.textState.Rise = test.rise
+			extractor.fontMetrics["F1"] = &fontMetrics{widths: map[uint16]float64{65: 600}, defaultWidth: 600, precise: true}
+			extractor.addTextBytes([]byte("A"))
+			require.Len(t, extractor.elements, 1)
+			element := extractor.elements[0]
+			assert.InDelta(t, test.wantX, element.X, 0.001)
+			assert.InDelta(t, test.wantY, element.Y, 0.001)
+			assert.InDelta(t, test.wantW, element.Width, 0.001)
+			assert.InDelta(t, test.wantH, element.Height, 0.001)
+			assert.InDelta(t, test.wantEffectiveFontSize, element.FontSize, 0.001)
+		})
+	}
 }
 
 // ─── Test 4: Image XObject — must be silently skipped ────────────────────────

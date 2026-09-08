@@ -4,6 +4,8 @@
 //
 // The fixture places four otherwise-equivalent text runs in a transformed Form
 // XObject at font sizes around the former two-unit compatibility threshold.
+// The page has /Rotate 90 to prove display metadata does not alter user-space
+// bounds.
 // Run from the repository root with:
 //
 //	go run testdata/generators/form_text_sizes.go
@@ -29,7 +31,7 @@ func main() {
 	objects := []pdfObject{
 		pdfObject("<< /Type /Catalog /Pages 2 0 R >>"),
 		pdfObject("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
-		pdfObject("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Fm1 5 0 R >> >> /Contents 4 0 R >>"),
+		pdfObject("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 90 /Resources << /XObject << /Fm1 5 0 R >> >> /Contents 4 0 R >>"),
 		streamObject([]byte("q 0.5 0 0 0.5 100 50 cm /Fm1 Do Q"), ""),
 		streamObject([]byte(formContent), "/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Matrix [2 0 0 3 10 20] /Resources << /Font << /F1 6 0 R >> >>"),
 		pdfObject("<< /Type /Font /Subtype /TrueType /BaseFont /Synthetic /FirstChar 65 /LastChar 68 /Widths [600 600 600 600] >>"),
