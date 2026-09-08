@@ -13,7 +13,9 @@ import (
 //
 // Each TextElement has position information (X, Y coordinates) which is critical
 // for table extraction and layout analysis. The coordinates represent the
-// bottom-left corner of the text element in PDF coordinate space.
+// axis-aligned bottom-left corner of the text element in PDF page space. Text
+// inside Form XObjects includes the accumulated caller and Form transforms;
+// page /Rotate remains display metadata and is not applied.
 //
 // PDF Coordinate System (Section 8.3.2):
 //   - Origin (0,0) is at bottom-left of page

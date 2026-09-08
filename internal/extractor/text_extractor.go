@@ -41,13 +41,6 @@ const wordSpaceGapFactor = 1.0
 // tolerance required by the legacy estimated-width path.
 const preciseGlyphGapFactor = 0.2
 
-// positionedGlyphFontSizeLimit identifies the Form-XObject pattern emitted by
-// Quartz and similar generators: every glyph uses a unit-sized font and a cm
-// matrix supplies the actual size and position. Direct-page/larger text keeps
-// the established raw-coordinate behavior until gxpdf's graphics and lattice
-// coordinate paths can migrate together without changing existing tables.
-const positionedGlyphFontSizeLimit = 2.0
-
 // maxXObjectDepth limits Form XObject recursion to prevent infinite loops.
 //
 // The PDF specification does not forbid cyclic XObject references, so we
@@ -713,14 +706,14 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 	decodedText := te.decodeTextBytes(glyphBytes)
 
 	advance, width, precise := te.measureGlyphBytes(glyphBytes)
-	positionedFormGeometry := te.usesPositionedFormGeometry()
-	if !positionedFormGeometry {
+	formGeometry := te.usesFormGeometry()
+	if !formGeometry {
 		width = float64(len(decodedText)) * te.textState.FontSize * 0.6 * (te.textState.HorizScale / 100.0)
 		advance, precise = width, false
 	}
 	x, y := te.textState.CurrentX, te.textState.CurrentY
 	height, effectiveFontSize := te.textState.FontSize, te.textState.FontSize
-	if positionedFormGeometry {
+	if formGeometry {
 		x, y, width, height, effectiveFontSize = te.transformedTextBounds(width)
 	}
 
@@ -733,14 +726,14 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 	te.textState.AdvanceX(advance)
 }
 
-// transformedTextBounds maps the text-space bounding box through the text
-// matrix and current transformation matrix and returns its axis-aligned bounds.
+// transformedTextBounds maps a Form's text-space bounding box through the text
+// matrix and accumulated page/Form transformation matrix, then returns its
+// axis-aligned page-space bounds.
 func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64, float64, float64, float64) {
-	// Existing direct-page extraction intentionally remains in raw text space
-	// for compatibility with the lattice coordinate normalizer. Form XObjects,
-	// however, cannot be positioned without inheriting the caller CTM and their
-	// own /Matrix. The caller invokes this function only for that positioned
-	// Form path, so the accumulated CTM is always authoritative here.
+	// Direct-page extraction remains in its established raw text space. Every
+	// Form XObject, regardless of font size, inherits its caller CTM and /Matrix;
+	// using a size-dependent coordinate path would make otherwise equivalent
+	// Form text report different positions at an arbitrary threshold.
 	coordinateMatrix := te.ctm
 	bottom := te.textState.Rise
 	top := bottom + te.textState.FontSize
@@ -766,14 +759,8 @@ func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64,
 	return minX, minY, maxX - minX, maxY - minY, effectiveFontSize
 }
 
-func (te *TextExtractor) usesPositionedFormGeometry() bool {
-	if te.xobjectDepth == 0 || te.textState.FontSize <= 0 {
-		return false
-	}
-	baseX, baseY := te.textState.Tm.Transform(0, te.textState.Rise)
-	topX, topY := te.textState.Tm.Transform(0, te.textState.Rise+te.textState.FontSize)
-	rawTextSize := math.Hypot(topX-baseX, topY-baseY)
-	return rawTextSize > 0 && rawTextSize <= positionedGlyphFontSizeLimit
+func (te *TextExtractor) usesFormGeometry() bool {
+	return te.xobjectDepth > 0 && te.textState.FontSize > 0
 }
 
 // processTextArray processes a TJ array with positioning adjustments.
