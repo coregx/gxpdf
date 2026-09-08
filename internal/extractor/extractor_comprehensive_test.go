@@ -1120,8 +1120,8 @@ func TestDecodeImageData_DCTDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeImageData(DCT) error = %v", err)
 	}
-	if len(data) == 0 {
-		t.Error("DCT decode should return data")
+	if !bytes.Equal(data, jpegData) {
+		t.Errorf("DCT image path changed encoded payload: got %x, want %x", data, jpegData)
 	}
 }
 

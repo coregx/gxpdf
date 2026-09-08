@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/ascii85"
 	"errors"
 	"fmt"
@@ -41,33 +42,45 @@ func DefaultStreamDecodeOptions() StreamDecodeOptions {
 // Decode decodes the stream using bounded default options.
 func (s *Stream) Decode() ([]byte, error) {
 	options := DefaultStreamDecodeOptions()
-	return s.DecodeWithOptions(options)
+	return s.DecodeWithContext(context.Background(), options)
 }
 
 // DecodeWithOptions applies the stream's filter chain in declaration order.
 func (s *Stream) DecodeWithOptions(options StreamDecodeOptions) ([]byte, error) {
+	return s.DecodeWithContext(context.Background(), options)
+}
+
+// DecodeWithContext applies the stream's filter chain in declaration order
+// and stops bounded reads and decode loops when ctx is cancelled. Codecs whose
+// standard-library API is not context-aware are checked immediately before and
+// after the codec call.
+func (s *Stream) DecodeWithContext(ctx context.Context, options StreamDecodeOptions) ([]byte, error) {
 	maxInt := int64(^uint(0) >> 1)
-	if options.MaxDecodedBytes <= 0 || options.MaxDecodedBytes >= maxInt || options.MaxFilters <= 0 {
+	if ctx == nil || options.MaxDecodedBytes <= 0 || options.MaxDecodedBytes >= maxInt || options.MaxFilters <= 0 {
 		return nil, fmt.Errorf("invalid stream decode options")
 	}
-	filters, err := streamFilterNames(s.GetFilter())
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if len(filters) > options.MaxFilters {
-		return nil, fmt.Errorf("%w: filter count %d exceeds %d", ErrStreamDecodeLimit, len(filters), options.MaxFilters)
+	content := s.Content()
+	if int64(len(content)) > options.MaxDecodedBytes {
+		return nil, fmt.Errorf("%w: encoded stream is %d bytes", ErrStreamDecodeLimit, len(content))
+	}
+	filters, err := streamFilterNames(s.GetFilter(), options.MaxFilters)
+	if err != nil {
+		return nil, err
 	}
 	parameters, err := streamDecodeParameters(s.GetDecodeParams(), len(filters))
 	if err != nil {
 		return nil, err
 	}
 
-	decoded := append([]byte(nil), s.Content()...)
-	if int64(len(decoded)) > options.MaxDecodedBytes {
-		return nil, fmt.Errorf("%w: encoded stream is %d bytes", ErrStreamDecodeLimit, len(decoded))
-	}
+	decoded := append([]byte(nil), content...)
 	for index, filter := range filters {
-		decoded, err = applyStreamFilter(filter, decoded, parameters[index], options.MaxDecodedBytes)
+		if err = ctx.Err(); err != nil {
+			return nil, err
+		}
+		decoded, err = applyStreamFilter(ctx, filter, decoded, parameters[index], options.MaxDecodedBytes)
 		if err != nil {
 			return nil, fmt.Errorf("decode filter %d (%s): %w", index, filter, err)
 		}
@@ -75,7 +88,7 @@ func (s *Stream) DecodeWithOptions(options StreamDecodeOptions) ([]byte, error) 
 	return decoded, nil
 }
 
-func streamFilterNames(filterObject PdfObject) ([]string, error) {
+func streamFilterNames(filterObject PdfObject, maxFilters int) ([]string, error) {
 	if filterObject == nil {
 		return nil, nil
 	}
@@ -83,6 +96,9 @@ func streamFilterNames(filterObject PdfObject) ([]string, error) {
 	case *Name:
 		return []string{canonicalStreamFilterName(value.Value())}, nil
 	case *Array:
+		if value.Len() > maxFilters {
+			return nil, fmt.Errorf("%w: filter count %d exceeds %d", ErrStreamDecodeLimit, value.Len(), maxFilters)
+		}
 		filters := make([]string, value.Len())
 		for index := 0; index < value.Len(); index++ {
 			name, ok := value.Get(index).(*Name)
@@ -148,7 +164,7 @@ func streamDecodeParameters(parameterObject PdfObject, filterCount int) ([]*Dict
 	return parameters, nil
 }
 
-func applyStreamFilter(name string, data []byte, parameters *Dictionary, limit int64) ([]byte, error) {
+func applyStreamFilter(ctx context.Context, name string, data []byte, parameters *Dictionary, limit int64) ([]byte, error) {
 	var (
 		decoded       []byte
 		err           error
@@ -161,26 +177,29 @@ func applyStreamFilter(name string, data []byte, parameters *Dictionary, limit i
 		reader, err = zlib.NewReader(bytes.NewReader(data))
 		if err == nil {
 			defer func() { _ = reader.Close() }()
-			decoded, err = readLimitedDecoded(reader, limit)
+			decoded, err = readLimitedDecoded(ctx, reader, limit)
 		}
 	case "ASCII85Decode":
 		var payload []byte
 		payload, err = stripASCII85Framing(data)
 		if err == nil {
-			decoded, err = readLimitedDecoded(ascii85.NewDecoder(bytes.NewReader(payload)), limit)
+			decoded, err = readLimitedDecoded(ctx, ascii85.NewDecoder(bytes.NewReader(payload)), limit)
 		}
 	case "ASCIIHexDecode":
-		decoded, err = decodeASCIIHex(data, limit)
+		decoded, err = decodeASCIIHex(ctx, data, limit)
 	case "RunLengthDecode":
-		decoded, err = decodeRunLength(data, limit)
+		decoded, err = decodeRunLength(ctx, data, limit)
 	case "LZWDecode":
 		usesPredictor = true
 		var earlyChange int
 		earlyChange, err = decodeParameter(parameters, "EarlyChange", 1)
 		if err == nil {
-			decoded, err = decodePDFLZW(data, earlyChange, limit)
+			decoded, err = decodePDFLZW(ctx, data, earlyChange, limit)
 		}
 	case "DCTDecode":
+		// Parser.Stream preserves the Reader's established decoded-pixel
+		// contract. ImageExtractor intentionally takes a separate path and keeps
+		// the original JPEG payload for image export.
 		if err = validateDCTOutputLimit(data, limit); err != nil {
 			break
 		}
@@ -189,6 +208,9 @@ func applyStreamFilter(name string, data []byte, parameters *Dictionary, limit i
 		if err == nil {
 			decoder := pdfencoding.NewDCTDecoderWithParams(colorTransform)
 			decoded, err = decoder.Decode(data)
+		}
+		if err == nil {
+			err = ctx.Err()
 		}
 		if err == nil && int64(len(decoded)) > limit {
 			err = fmt.Errorf("%w: DCTDecode produced more than %d bytes", ErrStreamDecodeLimit, limit)
@@ -200,7 +222,7 @@ func applyStreamFilter(name string, data []byte, parameters *Dictionary, limit i
 		return nil, err
 	}
 	if usesPredictor {
-		return applyStreamPredictor(decoded, parameters)
+		return applyStreamPredictor(ctx, decoded, parameters)
 	}
 	return decoded, nil
 }
@@ -221,8 +243,8 @@ func validateDCTOutputLimit(data []byte, limit int64) error {
 	return nil
 }
 
-func readLimitedDecoded(reader io.Reader, limit int64) ([]byte, error) {
-	decoded, err := io.ReadAll(io.LimitReader(reader, limit+1))
+func readLimitedDecoded(ctx context.Context, reader io.Reader, limit int64) ([]byte, error) {
+	decoded, err := io.ReadAll(io.LimitReader(&contextReader{ctx: ctx, reader: reader}, limit+1))
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +252,18 @@ func readLimitedDecoded(reader io.Reader, limit int64) ([]byte, error) {
 		return nil, fmt.Errorf("%w: decoded output exceeds %d bytes", ErrStreamDecodeLimit, limit)
 	}
 	return decoded, nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (reader *contextReader) Read(buffer []byte) (int, error) {
+	if err := reader.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return reader.reader.Read(buffer)
 }
 
 func stripASCII85Framing(data []byte) ([]byte, error) {
@@ -246,11 +280,16 @@ func stripASCII85Framing(data []byte) ([]byte, error) {
 	return data, nil
 }
 
-func decodeASCIIHex(data []byte, limit int64) ([]byte, error) {
+func decodeASCIIHex(ctx context.Context, data []byte, limit int64) ([]byte, error) {
 	decoded := make([]byte, 0, len(data)/2)
 	highNibble := -1
 	ended := false
-	for _, value := range data {
+	for index, value := range data {
+		if index&4095 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if isPDFWhitespace(value) {
 			continue
 		}
@@ -303,9 +342,12 @@ func isPDFWhitespace(value byte) bool {
 	}
 }
 
-func decodeRunLength(data []byte, limit int64) ([]byte, error) {
+func decodeRunLength(ctx context.Context, data []byte, limit int64) ([]byte, error) {
 	decoded := make([]byte, 0, len(data))
 	for index := 0; index < len(data); {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		length := int(data[index])
 		index++
 		switch {
@@ -357,7 +399,7 @@ func (reader *msbCodeReader) read(width int) (int, error) {
 	return value, nil
 }
 
-func decodePDFLZW(data []byte, earlyChange int, limit int64) ([]byte, error) {
+func decodePDFLZW(ctx context.Context, data []byte, earlyChange int, limit int64) ([]byte, error) {
 	if earlyChange != 0 && earlyChange != 1 {
 		return nil, fmt.Errorf("LZWDecode: EarlyChange must be 0 or 1, got %d", earlyChange)
 	}
@@ -382,6 +424,9 @@ func decodePDFLZW(data []byte, earlyChange int, limit int64) ([]byte, error) {
 	decoded := make([]byte, 0, capacity)
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		code, err := reader.read(codeWidth)
 		if err != nil {
 			return nil, fmt.Errorf("LZWDecode: %w", err)
@@ -424,7 +469,7 @@ func decodePDFLZW(data []byte, earlyChange int, limit int64) ([]byte, error) {
 	}
 }
 
-func applyStreamPredictor(data []byte, parameters *Dictionary) ([]byte, error) {
+func applyStreamPredictor(ctx context.Context, data []byte, parameters *Dictionary) ([]byte, error) {
 	predictor, err := decodeParameter(parameters, "Predictor", 1)
 	if err != nil {
 		return nil, err
@@ -459,9 +504,9 @@ func applyStreamPredictor(data []byte, parameters *Dictionary) ([]byte, error) {
 	}
 	switch {
 	case predictor == 2:
-		return applyTIFFPredictor(data, rowBytes, colors)
+		return applyTIFFPredictor(ctx, data, rowBytes, colors)
 	case predictor >= 10 && predictor <= 15:
-		return applyPNGPredictorBytes(data, rowBytes, colors)
+		return applyPNGPredictorBytesContext(ctx, data, rowBytes, colors)
 	default:
 		return nil, fmt.Errorf("unsupported predictor: %d", predictor)
 	}
@@ -486,12 +531,15 @@ func decodeParameter(parameters *Dictionary, key string, fallback int) (int, err
 	return converted, nil
 }
 
-func applyTIFFPredictor(data []byte, rowBytes, bytesPerPixel int) ([]byte, error) {
+func applyTIFFPredictor(ctx context.Context, data []byte, rowBytes, bytesPerPixel int) ([]byte, error) {
 	if len(data)%rowBytes != 0 {
 		return nil, fmt.Errorf("TIFF predictor data length %d is not divisible by row size %d", len(data), rowBytes)
 	}
 	decoded := append([]byte(nil), data...)
 	for row := 0; row < len(decoded); row += rowBytes {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		for index := bytesPerPixel; index < rowBytes; index++ {
 			decoded[row+index] += decoded[row+index-bytesPerPixel]
 		}
@@ -500,6 +548,10 @@ func applyTIFFPredictor(data []byte, rowBytes, bytesPerPixel int) ([]byte, error
 }
 
 func applyPNGPredictorBytes(data []byte, rowBytes, bytesPerPixel int) ([]byte, error) {
+	return applyPNGPredictorBytesContext(context.Background(), data, rowBytes, bytesPerPixel)
+}
+
+func applyPNGPredictorBytesContext(ctx context.Context, data []byte, rowBytes, bytesPerPixel int) ([]byte, error) {
 	encodedRowBytes := rowBytes + 1
 	if len(data)%encodedRowBytes != 0 {
 		return nil, fmt.Errorf("PNG predictor data length %d is not divisible by row size %d", len(data), encodedRowBytes)
@@ -507,6 +559,9 @@ func applyPNGPredictorBytes(data []byte, rowBytes, bytesPerPixel int) ([]byte, e
 	decoded := make([]byte, 0, len(data))
 	previous := make([]byte, rowBytes)
 	for offset := 0; offset < len(data); offset += encodedRowBytes {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		filter := data[offset]
 		encoded := data[offset+1 : offset+encodedRowBytes]
 		row := make([]byte, rowBytes)

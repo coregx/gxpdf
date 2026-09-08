@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/ascii85"
 	"encoding/hex"
 	"errors"
@@ -321,13 +322,36 @@ func encodeLiteralLZW(data []byte, earlyChange int) []byte {
 }
 
 func FuzzStreamDecodeNeverExceedsLimit(f *testing.F) {
-	f.Add(byte(0), []byte("raw"))
-	f.Add(byte(1), []byte("!!!!"))
-	f.Add(byte(2), []byte{128})
-	f.Fuzz(func(t *testing.T, selector byte, data []byte) {
+	f.Add(byte(0), byte(0), byte(0), []byte("raw"))
+	f.Add(byte(1), byte(1), byte(1), []byte("!!!!"))
+	f.Add(byte(2), byte(2), byte(2), []byte{128})
+	f.Fuzz(func(t *testing.T, selector, filterShape, parameterShape byte, data []byte) {
 		filters := []string{"FlateDecode", "ASCII85Decode", "ASCIIHexDecode", "RunLengthDecode", "LZWDecode", "unknown"}
 		dictionary := NewDictionary()
-		dictionary.Set("Filter", NewName(filters[int(selector)%len(filters)]))
+		filter := NewName(filters[int(selector)%len(filters)])
+		switch filterShape % 3 {
+		case 0:
+			dictionary.Set("Filter", filter)
+		case 1:
+			array := NewArray()
+			array.Append(filter)
+			dictionary.Set("Filter", array)
+		case 2:
+			array := NewArray()
+			array.Append(filter)
+			array.Append(NewInteger(int64(selector)))
+			dictionary.Set("Filter", array)
+		}
+		switch parameterShape % 4 {
+		case 1:
+			dictionary.Set("DecodeParms", NewDictionary())
+		case 2:
+			array := NewArray()
+			array.Append(NewNull())
+			dictionary.Set("DecodeParms", array)
+		case 3:
+			dictionary.Set("DecodeParms", NewName("invalid"))
+		}
 		decoded, _ := NewStream(dictionary, data).DecodeWithOptions(StreamDecodeOptions{
 			MaxDecodedBytes: 1024,
 			MaxFilters:      2,
@@ -336,4 +360,62 @@ func FuzzStreamDecodeNeverExceedsLimit(f *testing.F) {
 			t.Fatalf("decoded %d bytes, limit 1024", len(decoded))
 		}
 	})
+}
+
+func TestStreamDecodeRejectsLimitsBeforeInspectingBoundedData(t *testing.T) {
+	filters := NewArray()
+	filters.Append(NewInteger(1))
+	filters.Append(NewInteger(2))
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", filters)
+
+	_, err := NewStream(dictionary, []byte("x")).DecodeWithOptions(StreamDecodeOptions{
+		MaxDecodedBytes: 8,
+		MaxFilters:      1,
+	})
+	require.ErrorIs(t, err, ErrStreamDecodeLimit)
+	assert.ErrorContains(t, err, "filter count 2 exceeds 1")
+
+	_, err = NewStream(NewDictionary(), []byte("too large")).DecodeWithOptions(StreamDecodeOptions{
+		MaxDecodedBytes: 4,
+		MaxFilters:      1,
+	})
+	require.ErrorIs(t, err, ErrStreamDecodeLimit)
+	assert.ErrorContains(t, err, "encoded stream is 9 bytes")
+}
+
+func TestStreamDecodeAcceptsConfiguredLimitsExactly(t *testing.T) {
+	raw := []byte("data")
+	decoded, err := NewStream(NewDictionary(), raw).DecodeWithOptions(StreamDecodeOptions{
+		MaxDecodedBytes: int64(len(raw)),
+		MaxFilters:      1,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, raw, decoded)
+
+	filters := NewArray()
+	filters.Append(NewName("ASCIIHexDecode"))
+	filters.Append(NewName("ASCIIHexDecode"))
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", filters)
+	twiceEncoded := encodeASCIIHexForTest(t, encodeASCIIHexForTest(t, []byte("A")))
+	decoded, err = NewStream(dictionary, twiceEncoded).DecodeWithOptions(StreamDecodeOptions{
+		MaxDecodedBytes: int64(len(twiceEncoded)),
+		MaxFilters:      filters.Len(),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []byte("A"), decoded)
+}
+
+func TestStreamDecodeHonorsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", NewName("FlateDecode"))
+
+	_, err := NewStream(dictionary, []byte("content is never inspected")).DecodeWithContext(
+		ctx,
+		DefaultStreamDecodeOptions(),
+	)
+	require.ErrorIs(t, err, context.Canceled)
 }
