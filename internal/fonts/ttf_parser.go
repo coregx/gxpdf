@@ -278,7 +278,8 @@ func (f *TTFFont) loadTables(data []byte) error {
 // loadTable loads data for a single table.
 func (f *TTFFont) loadTable(data []byte, table *TTFTable) error {
 	//nolint:gosec // len(data) from file size, typically < 2GB.
-	if table.Offset+table.Length > uint32(len(data)) {
+	dataLen := uint32(len(data))
+	if table.Offset > dataLen || table.Length > dataLen-table.Offset {
 		return fmt.Errorf("table offset/length out of bounds")
 	}
 	table.Data = data[table.Offset : table.Offset+table.Length]
