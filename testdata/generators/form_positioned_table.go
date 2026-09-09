@@ -63,6 +63,32 @@ func main() {
 	if err := os.WriteFile(outlierPath, buildPDF(outlierObjects), 0o644); err != nil {
 		panic(err)
 	}
+
+	footerObjects := append([]pdfObject(nil), objects...)
+	footerContent := formContent + "\n" + positionedGlyphRun(100, 560, "Annual report") + "\n" + positionedGlyphRun(1050, 560, "Page 1")
+	footerObjects[4] = streamObject([]byte(footerContent), "/Type /XObject /Subtype /Form /BBox [0 0 1224 792] /Matrix [1 0 0 1 20 30] /Resources << /Font << /F1 6 0 R >> >>")
+	footerPath := filepath.Join("testdata", "pdfs", "form_positioned_table_near_footer.pdf")
+	if err := os.WriteFile(footerPath, buildPDF(footerObjects), 0o644); err != nil {
+		panic(err)
+	}
+
+	sparseContent := strings.Join([]string{
+		positionedGlyphRun(100, 700, "Income Statement"),
+		positionedGlyphRun(100, 650, "Line Item"),
+		positionedGlyphRun(350, 650, "2023"),
+		positionedGlyphRun(100, 620, "Revenue"),
+		positionedGlyphRun(350, 620, "1200"),
+		positionedGlyphRun(100, 590, "Cost of Sales"),
+		positionedGlyphRun(350, 590, "(400)"),
+		positionedGlyphRun(100, 520, "Other"),
+		positionedGlyphRun(450, 520, "900"),
+	}, "\n")
+	sparseObjects := append([]pdfObject(nil), objects...)
+	sparseObjects[4] = streamObject([]byte(sparseContent), "/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Matrix [1 0 0 1 20 30] /Resources << /Font << /F1 6 0 R >> >>")
+	sparsePath := filepath.Join("testdata", "pdfs", "form_positioned_table_sparse_section.pdf")
+	if err := os.WriteFile(sparsePath, buildPDF(sparseObjects), 0o644); err != nil {
+		panic(err)
+	}
 }
 
 func positionedGlyphRun(x, y int, value string) string {

@@ -4,8 +4,15 @@ package tabledetect
 import (
 	"math"
 	"sort"
+	"strings"
+	"unicode"
 
 	"github.com/coregx/gxpdf/internal/extractor"
+)
+
+const (
+	standardRowAdjacencyFactor    = 1.5
+	sparseValueRowAdjacencyFactor = 2.5
 )
 
 // ColumnBoundaryDetector detects column boundaries using adaptive statistical analysis.
@@ -212,7 +219,8 @@ func (cbd *ColumnBoundaryDetector) elementsInSupportedRows(
 			}
 		}
 		y /= float64(len(row))
-		isCore := aligned >= 2
+		pageMetadata := rowContainsPageNumber(row) && !rowContainsNumericValue(row)
+		isCore := aligned >= 2 && !pageMetadata
 		rows = append(rows, supportedRow{elements: row, y: y, aligned: aligned, core: isCore})
 		if isCore {
 			coreY = append(coreY, y)
@@ -224,9 +232,17 @@ func (cbd *ColumnBoundaryDetector) elementsInSupportedRows(
 	// mistaken for unrelated page text. Admit one-edge rows when they continue
 	// the table's vertical rhythm; distant headers and footers remain excluded.
 	adjacency := supportedRowAdjacency(coreY)
+	sparseValueAdjacency := supportedSparseValueRowAdjacency(coreY)
 	result := make([]*extractor.TextElement, 0, len(elements))
 	for _, row := range rows {
-		if row.core || (row.aligned == 1 && rowIsAdjacentToCore(row.y, coreY, adjacency)) {
+		if rowContainsPageNumber(row.elements) && !rowContainsNumericValue(row.elements) {
+			continue
+		}
+		rowAdjacency := adjacency
+		if rowContainsNumericValue(row.elements) {
+			rowAdjacency = sparseValueAdjacency
+		}
+		if row.core || (row.aligned == 1 && rowIsAdjacentToCore(row.y, coreY, rowAdjacency)) {
 			result = append(result, row.elements...)
 		}
 	}
@@ -238,6 +254,14 @@ func (cbd *ColumnBoundaryDetector) elementsInSupportedRows(
 }
 
 func supportedRowAdjacency(coreY []float64) float64 {
+	return supportedRowAdjacencyWithFactor(coreY, standardRowAdjacencyFactor)
+}
+
+func supportedSparseValueRowAdjacency(coreY []float64) float64 {
+	return supportedRowAdjacencyWithFactor(coreY, sparseValueRowAdjacencyFactor)
+}
+
+func supportedRowAdjacencyWithFactor(coreY []float64, factor float64) float64 {
 	if len(coreY) < 2 {
 		return 0
 	}
@@ -256,7 +280,57 @@ func supportedRowAdjacency(coreY []float64) float64 {
 	// Prefer the lower median when only a few rows establish the rhythm. One
 	// large section gap must not make a distant page header look adjacent.
 	medianGap := gaps[(len(gaps)-1)/2]
-	return medianGap * 1.5
+	return medianGap * factor
+}
+
+func rowContainsPageNumber(row []*extractor.TextElement) bool {
+	for _, element := range row {
+		fields := strings.Fields(strings.ToLower(strings.TrimSpace(element.Text)))
+		if len(fields) == 2 && fields[0] == "page" && isDecimalDigits(fields[1]) {
+			return true
+		}
+		if len(fields) == 4 && fields[0] == "page" && fields[2] == "of" &&
+			isDecimalDigits(fields[1]) && isDecimalDigits(fields[3]) {
+			return true
+		}
+	}
+	return false
+}
+
+func rowContainsNumericValue(row []*extractor.TextElement) bool {
+	for _, element := range row {
+		text := strings.TrimSpace(element.Text)
+		if text == "" {
+			continue
+		}
+		hasDigit := false
+		valid := true
+		for _, value := range text {
+			switch {
+			case unicode.IsDigit(value):
+				hasDigit = true
+			case unicode.IsSpace(value), strings.ContainsRune("+-(),.'’$€£¥₹%", value):
+			default:
+				valid = false
+			}
+		}
+		if valid && hasDigit {
+			return true
+		}
+	}
+	return false
+}
+
+func isDecimalDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func rowIsAdjacentToCore(y float64, coreY []float64, adjacency float64) bool {

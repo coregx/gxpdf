@@ -328,10 +328,17 @@ func elementsWithinColumnExtent(
 	}
 	left, right := columns[0], columns[len(columns)-1]
 	filtered := make([]*extractor.TextElement, 0, len(elements))
-	for _, element := range elements {
-		if center := element.CenterX(); center >= left && center <= right {
-			filtered = append(filtered, element)
+	for _, row := range NewColumnBoundaryDetector().groupElementsByRow(elements) {
+		inExtent := make([]*extractor.TextElement, 0, len(row))
+		for _, element := range row {
+			if center := element.CenterX(); center >= left && center <= right {
+				inExtent = append(inExtent, element)
+			}
 		}
+		if rowContainsPageNumber(row) && !rowContainsNumericValue(inExtent) {
+			continue
+		}
+		filtered = append(filtered, inExtent...)
 	}
 	if len(filtered) == 0 {
 		return elements

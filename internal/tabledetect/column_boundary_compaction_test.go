@@ -148,6 +148,52 @@ func TestDetectBoundariesKeepsSparseTerminalValueOnAdjacentRow(t *testing.T) {
 	assert.Equal(t, []float64{20, 170, 376, 400}, boundaries)
 }
 
+func TestDetectBoundariesKeepsSparseTerminalValueAfterSectionGap(t *testing.T) {
+	elements := []*extractor.TextElement{
+		extractor.NewTextElement("Line Item", 20, 120, 60, 10, "F1", 10),
+		extractor.NewTextElement("2023", 176, 120, 24, 10, "F1", 10),
+		extractor.NewTextElement("Revenue", 20, 100, 50, 10, "F1", 10),
+		extractor.NewTextElement("1200", 176, 100, 24, 10, "F1", 10),
+		extractor.NewTextElement("Cost", 20, 80, 30, 10, "F1", 10),
+		extractor.NewTextElement("(400)", 170, 80, 30, 10, "F1", 10),
+		extractor.NewTextElement("Other", 20, 40, 30, 10, "F1", 10),
+		extractor.NewTextElement("900", 382, 40, 18, 10, "F1", 10),
+	}
+
+	boundaries := NewColumnBoundaryDetector().DetectBoundaries(elements)
+
+	assert.Equal(t, []float64{20, 170, 382, 400}, boundaries)
+}
+
+func TestDetectBoundariesRejectsNearbyPageNumberRows(t *testing.T) {
+	tests := []struct {
+		name string
+		row  []*extractor.TextElement
+	}{
+		{
+			name: "label and far-right page number",
+			row: []*extractor.TextElement{
+				extractor.NewTextElement("Note", 20, 60, 25, 10, "F1", 10),
+				extractor.NewTextElement("Page 1", 700, 60, 30, 10, "F1", 10),
+			},
+		},
+		{
+			name: "centered page number",
+			row: []*extractor.TextElement{
+				extractor.NewTextElement("Page 1 of 12", 180, 60, 60, 10, "F1", 10),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			elements := append(rightAlignedTableElements(2, false), test.row...)
+			boundaries := NewColumnBoundaryDetector().DetectBoundaries(elements)
+			assert.Equal(t, []float64{20, 170, 270, 300}, boundaries)
+		})
+	}
+}
+
 func rightAlignedTableElements(numericCols int, missingValue bool) []*extractor.TextElement {
 	elements := []*extractor.TextElement{
 		extractor.NewTextElement("Line Item", 20, 120, 60, 10, "F1", 10),
