@@ -3,6 +3,8 @@ package parser
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -292,6 +294,45 @@ func TestDecodeStream_FlateDecode(t *testing.T) {
 	if !bytes.Equal(decoded, originalData) {
 		t.Errorf("decodeStream() = %q, want %q", decoded, originalData)
 	}
+}
+
+func TestGetCompressedObjectWithContext(t *testing.T) {
+	objectStream := []byte("5 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Length 7 >>\nstream\n10 0 42\nendstream\nendobj")
+	targetEntry := NewXRefEntry(10, XRefEntryCompressed, 5, 0)
+
+	newReader := func() *Reader {
+		xref := NewXRefTable()
+		xref.AddEntry(NewXRefEntry(5, XRefEntryInUse, 0, 0))
+		xref.AddEntry(targetEntry)
+		return &Reader{
+			src:         bytes.NewReader(objectStream),
+			fileSize:    int64(len(objectStream)),
+			xrefTable:   xref,
+			objectCache: make(map[int]PdfObject),
+			objStmCache: make(map[int]map[int]PdfObject),
+		}
+	}
+
+	t.Run("decodes with active context", func(t *testing.T) {
+		object, err := newReader().GetObjectWithContext(context.Background(), 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		integer, ok := object.(*Integer)
+		if !ok || integer.Value() != 42 {
+			t.Fatalf("object = %#v, want integer 42", object)
+		}
+	})
+
+	t.Run("cancellation reaches object stream decode", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := newReader().getCompressedObjectWithContext(ctx, 10, targetEntry)
+		if err == nil || !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want context.Canceled", err)
+		}
+	})
 }
 
 // Helper function to check if a string contains a substring.

@@ -88,3 +88,26 @@ func TestExtractorConsumersHonorCancelledContext(t *testing.T) {
 		})
 	}
 }
+
+func TestImageExtractorRejectsUnsupportedJPX(t *testing.T) {
+	dictionary := parser.NewDictionary()
+	dictionary.Set("Filter", parser.NewName("JPXDecode"))
+	stream := parser.NewStream(dictionary, []byte("encoded JPEG 2000 payload"))
+
+	_, _, err := (&ImageExtractor{}).decodeImageData(stream)
+
+	require.ErrorIs(t, err, parser.ErrUnsupportedStreamFilter)
+}
+
+func TestImageExtractorPreservesTerminalDCT(t *testing.T) {
+	dictionary := parser.NewDictionary()
+	dictionary.Set("Filter", parser.NewName("DCTDecode"))
+	payload := []byte("encoded JPEG payload")
+	stream := parser.NewStream(dictionary, payload)
+
+	data, filter, err := (&ImageExtractor{}).decodeImageData(stream)
+
+	require.NoError(t, err)
+	assert.Equal(t, payload, data)
+	assert.Equal(t, "/DCTDecode", filter)
+}

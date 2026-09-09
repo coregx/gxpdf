@@ -163,7 +163,7 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 	gp.stateStack = nil
 
 	// Get page
-	page, err := gp.reader.GetPage(pageNum)
+	page, err := gp.reader.GetPageWithContext(gp.ctx, pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
@@ -194,7 +194,13 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 
 	// Process operators to extract graphics
 	for _, op := range operators {
+		if err := gp.ctx.Err(); err != nil {
+			return nil, err
+		}
 		gp.processOperator(op)
+		if err := gp.ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Normalize coordinates: align graphics Y-space with text Y-space.
@@ -221,7 +227,7 @@ func (gp *GraphicsParser) getPageContent(page *parser.Dictionary) ([]byte, error
 
 	// Resolve if it's an indirect reference
 	if ref, ok := contentsObj.(*parser.IndirectReference); ok {
-		resolved, err := gp.reader.GetObject(ref.Number)
+		resolved, err := gp.reader.GetObjectWithContext(gp.ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve contents reference: %w", err)
 		}
@@ -250,7 +256,7 @@ func (gp *GraphicsParser) getPageContent(page *parser.Dictionary) ([]byte, error
 
 			// Resolve indirect reference
 			if ref, ok := streamRef.(*parser.IndirectReference); ok {
-				resolved, err := gp.reader.GetObject(ref.Number)
+				resolved, err := gp.reader.GetObjectWithContext(gp.ctx, ref.Number)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve content stream %d: %w", i, err)
 				}
@@ -571,7 +577,7 @@ func (gp *GraphicsParser) readPageHeight(page *parser.Dictionary) float64 {
 
 	// Resolve indirect reference
 	if ref, ok := mb.(*parser.IndirectReference); ok {
-		resolved, err := gp.reader.GetObject(ref.Number)
+		resolved, err := gp.reader.GetObjectWithContext(gp.ctx, ref.Number)
 		if err != nil {
 			return 0
 		}

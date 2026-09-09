@@ -155,7 +155,7 @@ func (vp *VectorParser) ParseFromPage(pageNum int) ([]*VectorPath, error) {
 	vp.paths = nil
 	vp.pageNum = pageNum
 
-	page, err := vp.reader.GetPage(pageNum)
+	page, err := vp.reader.GetPageWithContext(vp.ctx, pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
@@ -179,7 +179,13 @@ func (vp *VectorParser) ParseFromPage(pageNum int) ([]*VectorPath, error) {
 	}
 
 	for _, op := range operators {
+		if err := vp.ctx.Err(); err != nil {
+			return nil, err
+		}
 		vp.processVectorOperator(op)
+		if err := vp.ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	return vp.paths, nil
@@ -197,7 +203,7 @@ func (vp *VectorParser) getPageResources(page *parser.Dictionary) *parser.Dictio
 		return parser.NewDictionary()
 	}
 	if ref, ok := resObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err == nil {
 			if d, ok := resolved.(*parser.Dictionary); ok {
 				return d
@@ -220,7 +226,7 @@ func (vp *VectorParser) getPageContent(page *parser.Dictionary) ([]byte, error) 
 	}
 
 	if ref, ok := contentsObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve contents reference: %w", err)
 		}
@@ -239,7 +245,7 @@ func (vp *VectorParser) getPageContent(page *parser.Dictionary) ([]byte, error) 
 				return nil, fmt.Errorf("content stream %d is null", i)
 			}
 			if ref, ok := streamRef.(*parser.IndirectReference); ok {
-				resolved, err := vp.reader.GetObject(ref.Number)
+				resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve content stream %d: %w", i, err)
 				}
@@ -647,7 +653,7 @@ func (vp *VectorParser) applyExtGState(name string) {
 
 	// Resolve indirect reference if needed.
 	if ref, ok := extGObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err != nil {
 			return
 		}
@@ -666,7 +672,7 @@ func (vp *VectorParser) applyExtGState(name string) {
 
 	// Resolve indirect reference for the graphics state dict itself.
 	if ref, ok := gsObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err != nil {
 			return
 		}

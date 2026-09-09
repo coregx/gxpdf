@@ -106,7 +106,7 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 	te.fontDecoders = make(map[string]*FontDecoder)
 
 	// Get page
-	page, err := te.reader.GetPage(pageNum)
+	page, err := te.reader.GetPageWithContext(te.ctx, pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
@@ -134,7 +134,13 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 
 	// Process operators to extract text
 	for _, op := range operators {
+		if err := te.ctx.Err(); err != nil {
+			return nil, err
+		}
 		te.processOperator(op)
+		if err := te.ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Merge per-glyph TextElements that belong to the same word.
@@ -324,7 +330,7 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 
 	// Resolve if it's an indirect reference
 	if ref, ok := contentsObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve contents reference: %w", err)
 		}
@@ -353,7 +359,7 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 
 			// Resolve indirect reference
 			if ref, ok := streamRef.(*parser.IndirectReference); ok {
-				resolved, err := te.reader.GetObject(ref.Number)
+				resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 				if err != nil {
 					return nil, fmt.Errorf("failed to resolve content stream %d: %w", i, err)
 				}
@@ -688,7 +694,7 @@ func (te *TextExtractor) resolveXObject(name string) *parser.Stream {
 
 	// Resolve indirect reference
 	if ref, ok := xobjDictObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil
 		}
@@ -708,7 +714,7 @@ func (te *TextExtractor) resolveXObject(name string) *parser.Stream {
 
 	// Resolve indirect reference to the XObject itself
 	if ref, ok := xobj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil
 		}
@@ -731,7 +737,7 @@ func (te *TextExtractor) getXObjectResources(stream *parser.Stream) *parser.Dict
 	}
 
 	if ref, ok := resourcesObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil
 		}
@@ -770,7 +776,7 @@ func (te *TextExtractor) getPageResources(page *parser.Dictionary) *parser.Dicti
 	if resourcesObj != nil {
 		// Resolve if it's an indirect reference
 		if ref, ok := resourcesObj.(*parser.IndirectReference); ok {
-			resolved, err := te.reader.GetObject(ref.Number)
+			resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 			if err == nil {
 				if dict, ok := resolved.(*parser.Dictionary); ok {
 					return dict
@@ -815,7 +821,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 	// Resolve Font dictionary
 	var fontsDict *parser.Dictionary
 	if ref, ok := fontsObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err == nil {
 			fontsDict, _ = resolved.(*parser.Dictionary)
 		}
@@ -840,7 +846,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 	// Resolve font object
 	var fontDict *parser.Dictionary
 	if ref, ok := fontObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err == nil {
 			fontDict, _ = resolved.(*parser.Dictionary)
 		}
@@ -866,7 +872,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 			// Case 2: Encoding is a dictionary (custom encoding with Differences)
 			// Resolve if its an indirect reference
 			if ref, ok := encodingObj.(*parser.IndirectReference); ok {
-				resolved, err := te.reader.GetObject(ref.Number)
+				resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 				if err == nil {
 					encodingObj = resolved
 				}
@@ -922,7 +928,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 	// Resolve ToUnicode stream
 	var toUnicodeStream *parser.Stream
 	if ref, ok := toUnicodeObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err == nil {
 			toUnicodeStream, _ = resolved.(*parser.Stream)
 		}
@@ -1034,7 +1040,7 @@ func (te *TextExtractor) parseDifferencesArray(encodingDict *parser.Dictionary) 
 
 	// Resolve if indirect reference
 	if ref, ok := diffsObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err == nil {
 			diffsObj = resolved
 		} else {

@@ -206,8 +206,10 @@ lower-level codecs also used by parser decoding and writing.
 | LZWDecode | LZW compression (legacy) | Implemented by parser stream pipeline |
 
 All extraction consumers use the parser-owned bounded pipeline. Image extraction
-uses the same pipeline for preceding filters while preserving terminal DCT/JPX
-payloads when the original encoded image is required for export.
+uses the same pipeline for preceding filters while preserving terminal DCT
+payloads when the original encoded image is required for export. JPXDecode
+currently fails explicitly because the Image value object has no JPEG 2000
+representation; encoded JPX bytes are never exposed as decoded pixels.
 
 #### Fonts (`internal/fonts/`)
 

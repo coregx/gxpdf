@@ -95,7 +95,7 @@ func (e *ImageExtractor) ExtractFromPage(pageIndex int) ([]*types.Image, error) 
 		return nil, err
 	}
 	// Get page dictionary
-	pageDict, err := e.reader.GetPage(pageIndex)
+	pageDict, err := e.reader.GetPageWithContext(e.ctx, pageIndex)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageIndex, err)
 	}
@@ -111,7 +111,7 @@ func (e *ImageExtractor) ExtractFromPage(pageIndex int) ([]*types.Image, error) 
 	if !ok {
 		// Try to resolve indirect reference
 		if ref, ok := resourcesObj.(*parser.IndirectReference); ok {
-			resolvedObj, err := e.reader.GetObject(ref.Number)
+			resolvedObj, err := e.reader.GetObjectWithContext(e.ctx, ref.Number)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve resources reference: %w", err)
 			}
@@ -135,7 +135,7 @@ func (e *ImageExtractor) ExtractFromPage(pageIndex int) ([]*types.Image, error) 
 	if !ok {
 		// Try to resolve indirect reference
 		if ref, ok := xobjectObj.(*parser.IndirectReference); ok {
-			resolvedObj, err := e.reader.GetObject(ref.Number)
+			resolvedObj, err := e.reader.GetObjectWithContext(e.ctx, ref.Number)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve XObject reference: %w", err)
 			}
@@ -155,6 +155,9 @@ func (e *ImageExtractor) ExtractFromPage(pageIndex int) ([]*types.Image, error) 
 	keys := xobjectDict.Keys()
 
 	for _, name := range keys {
+		if err := e.ctx.Err(); err != nil {
+			return nil, err
+		}
 		xobjRef := xobjectDict.Get(name)
 		if xobjRef == nil {
 			continue
@@ -163,8 +166,11 @@ func (e *ImageExtractor) ExtractFromPage(pageIndex int) ([]*types.Image, error) 
 		// Resolve XObject reference
 		var xobj parser.PdfObject
 		if ref, ok := xobjRef.(*parser.IndirectReference); ok {
-			resolvedObj, err := e.reader.GetObject(ref.Number)
+			resolvedObj, err := e.reader.GetObjectWithContext(e.ctx, ref.Number)
 			if err != nil {
+				if contextErr := e.ctx.Err(); contextErr != nil {
+					return nil, contextErr
+				}
 				continue // Skip this XObject on error
 			}
 			xobj = resolvedObj
@@ -226,8 +232,8 @@ func (e *ImageExtractor) extractImageFromStream(stream *parser.Stream, name stri
 	colorSpaceObj := dict.Get("ColorSpace")
 	colorSpace := e.getColorSpaceName(colorSpaceObj)
 
-	// Decode stream data. JPEG and JPEG 2000 payloads stay encoded for export,
-	// while preceding filters and all raw-pixel filters use the parser's
+	// Decode stream data. JPEG payloads stay encoded for export, while
+	// preceding filters and all raw-pixel filters use the parser's
 	// canonical bounded pipeline.
 	data, filter, err := e.decodeImageData(stream)
 	if err != nil {
@@ -247,14 +253,15 @@ func (e *ImageExtractor) extractImageFromStream(stream *parser.Stream, name stri
 }
 
 // decodeImageData decodes an image through the canonical bounded stream
-// pipeline. Terminal DCT/JPX data remains encoded so callers can export the
-// original image payload without a lossy decode/re-encode cycle.
+// pipeline. Terminal DCT data remains encoded so callers can export the
+// original JPEG payload without a lossy decode/re-encode cycle. JPXDecode is
+// rejected by the canonical pipeline until the Image value object has an
+// explicit JPEG 2000 representation; it must never fall through as raw pixels.
 func (e *ImageExtractor) decodeImageData(stream *parser.Stream) ([]byte, string, error) {
 	data, terminalFilter, err := stream.DecodePreservingTerminalWithContext(
 		contextOrBackground(e.ctx),
 		parser.DefaultStreamDecodeOptions(),
 		"DCTDecode",
-		"JPXDecode",
 	)
 	if err != nil {
 		return nil, "", err

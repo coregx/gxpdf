@@ -107,26 +107,42 @@ func (fe *FontExtractor) ExtractFromPage(pageNum int) ([]EmbeddedFont, error) {
 	if err := contextOrBackground(fe.ctx).Err(); err != nil {
 		return nil, err
 	}
-	page, err := fe.reader.GetPage(pageNum)
+	page, err := fe.reader.GetPageWithContext(fe.ctx, pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("font extractor: get page %d: %w", pageNum, err)
 	}
 
 	fontsDict, err := fe.getPageFontsDict(page)
-	if err != nil || fontsDict == nil {
+	if err != nil {
+		if contextErr := fe.ctx.Err(); contextErr != nil {
+			return nil, contextErr
+		}
+		// Missing or unsupported font resources are not fatal.
+		return nil, nil
+	}
+	if fontsDict == nil {
 		// No font resources on this page is a valid state.
-		return nil, nil //nolint:nilerr
+		return nil, nil
 	}
 
 	var result []EmbeddedFont
 	for _, fontKey := range fontsDict.Keys() {
+		if err := fe.ctx.Err(); err != nil {
+			return nil, err
+		}
 		fontObj := fontsDict.Get(fontKey)
 		if fontObj == nil {
 			continue
 		}
 
 		fontDict, err := fe.resolveDict(fontObj)
-		if err != nil || fontDict == nil {
+		if err != nil {
+			if contextErr := fe.ctx.Err(); contextErr != nil {
+				return nil, contextErr
+			}
+			continue
+		}
+		if fontDict == nil {
 			continue
 		}
 
@@ -332,7 +348,7 @@ func (fe *FontExtractor) resolve(obj parser.PdfObject) parser.PdfObject {
 	if !ok {
 		return obj
 	}
-	resolved, err := fe.reader.GetObject(ref.Number)
+	resolved, err := fe.reader.GetObjectWithContext(fe.ctx, ref.Number)
 	if err != nil {
 		return nil
 	}
