@@ -16,6 +16,10 @@ func TestStreamFilterFixturesExtractEquivalentText(t *testing.T) {
 		"runlength.pdf",
 		"lzw.pdf",
 		"ascii85_flate.pdf",
+		"indirect_decode_parms.pdf",
+		"indirect_filter.pdf",
+		"indirect_filter_array.pdf",
+		"decode_parms_alias.pdf",
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture, func(t *testing.T) {

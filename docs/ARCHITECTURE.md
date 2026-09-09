@@ -211,6 +211,13 @@ payloads when the original encoded image is required for export. JPXDecode
 currently fails explicitly because the Image value object has no JPEG 2000
 representation; encoded JPX bytes are never exposed as decoded pixels.
 
+Streams loaded through `Reader` resolve indirect `Filter`, `DecodeParms`, filter
+array, and parameter values through the same context-aware object lookup used by
+the rest of parsing. Standalone streams without a reader fail explicitly when a
+decode-control value is indirect. The compatibility key `DP` is accepted when
+`DecodeParms` is absent. TIFF and PNG predictors support the PDF component
+depths 1, 2, 4, 8, and 16, including packed multi-component samples.
+
 #### Fonts (`internal/fonts/`)
 
 Comprehensive font support:

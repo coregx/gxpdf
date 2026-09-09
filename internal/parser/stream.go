@@ -2,9 +2,12 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 )
+
+type streamObjectResolver func(context.Context, int) (PdfObject, error)
 
 // Stream represents a PDF stream object.
 // A stream consists of a dictionary followed by zero or more bytes bracketed
@@ -12,8 +15,9 @@ import (
 //
 // Reference: PDF 1.7 specification, Section 7.3.8 (Stream Objects).
 type Stream struct {
-	dict    *Dictionary // Stream dictionary
-	content []byte      // Raw or decoded stream data
+	dict           *Dictionary // Stream dictionary
+	content        []byte      // Raw or decoded stream data
+	objectResolver streamObjectResolver
 }
 
 // NewStream creates a new Stream with the given dictionary and content.
@@ -115,9 +119,14 @@ func (s *Stream) Clone() *Stream {
 	copy(clonedContent, s.content)
 
 	return &Stream{
-		dict:    clonedDict,
-		content: clonedContent,
+		dict:           clonedDict,
+		content:        clonedContent,
+		objectResolver: s.objectResolver,
 	}
+}
+
+func (s *Stream) setObjectResolver(resolver streamObjectResolver) {
+	s.objectResolver = resolver
 }
 
 // Encode encodes the stream content with the specified filters.
@@ -136,7 +145,12 @@ func (s *Stream) GetFilter() PdfObject {
 // GetDecodeParams returns the decode parameters for the filters.
 // Returns nil if no decode parameters are specified.
 func (s *Stream) GetDecodeParams() PdfObject {
-	return s.dict.Get("DecodeParms")
+	if parameters := s.dict.Get("DecodeParms"); parameters != nil {
+		return parameters
+	}
+	// Acrobat accepts DP as a compatibility abbreviation in stream
+	// dictionaries, not only in inline images.
+	return s.dict.Get("DP")
 }
 
 // Bytes returns the raw stream content as a byte slice.

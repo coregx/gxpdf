@@ -140,22 +140,103 @@ func TestStreamDecodeLZWEarlyChangeModes(t *testing.T) {
 
 func TestStreamDecodePredictors(t *testing.T) {
 	tests := []struct {
-		name      string
-		predictor int64
-		encoded   []byte
-		want      []byte
+		name             string
+		predictor        int64
+		colors           int64
+		bitsPerComponent int64
+		columns          int64
+		encoded          []byte
+		want             []byte
 	}{
 		{
-			name:      "TIFF horizontal differencing",
-			predictor: 2,
-			encoded:   []byte{10, 10, 10, 5, 2, 2},
-			want:      []byte{10, 20, 30, 5, 7, 9},
+			name:             "TIFF eight-bit horizontal differencing",
+			predictor:        2,
+			colors:           1,
+			bitsPerComponent: 8,
+			columns:          3,
+			encoded:          []byte{10, 10, 10, 5, 2, 2},
+			want:             []byte{10, 20, 30, 5, 7, 9},
 		},
 		{
-			name:      "PNG row filters",
-			predictor: 15,
-			encoded:   []byte{0, 10, 20, 30, 2, 5, 5, 5},
-			want:      []byte{10, 20, 30, 15, 25, 35},
+			name:             "TIFF one-bit packed samples",
+			predictor:        2,
+			colors:           1,
+			bitsPerComponent: 1,
+			columns:          8,
+			encoded:          []byte{0xeb},
+			want:             []byte{0xb2},
+		},
+		{
+			name:             "TIFF two-bit packed samples",
+			predictor:        2,
+			colors:           1,
+			bitsPerComponent: 2,
+			columns:          4,
+			encoded:          []byte{0x55},
+			want:             []byte{0x6c},
+		},
+		{
+			name:             "TIFF four-bit packed samples",
+			predictor:        2,
+			colors:           1,
+			bitsPerComponent: 4,
+			columns:          2,
+			encoded:          []byte{0x16},
+			want:             []byte{0x17},
+		},
+		{
+			name:             "TIFF four-bit RGB samples",
+			predictor:        2,
+			colors:           3,
+			bitsPerComponent: 4,
+			columns:          2,
+			encoded:          []byte{0x12, 0x33, 0x45},
+			want:             []byte{0x12, 0x34, 0x68},
+		},
+		{
+			name:             "TIFF sixteen-bit samples",
+			predictor:        2,
+			colors:           1,
+			bitsPerComponent: 16,
+			columns:          2,
+			encoded:          []byte{0x01, 0x00, 0x02, 0x00},
+			want:             []byte{0x01, 0x00, 0x03, 0x00},
+		},
+		{
+			name:             "PNG eight-bit row filters",
+			predictor:        15,
+			colors:           1,
+			bitsPerComponent: 8,
+			columns:          3,
+			encoded:          []byte{0, 10, 20, 30, 2, 5, 5, 5},
+			want:             []byte{10, 20, 30, 15, 25, 35},
+		},
+		{
+			name:             "PNG one-bit packed row",
+			predictor:        15,
+			colors:           1,
+			bitsPerComponent: 1,
+			columns:          8,
+			encoded:          []byte{0, 0xaa},
+			want:             []byte{0xaa},
+		},
+		{
+			name:             "PNG four-bit RGB Sub row",
+			predictor:        15,
+			colors:           3,
+			bitsPerComponent: 4,
+			columns:          2,
+			encoded:          []byte{1, 0x12, 0x34, 0x44},
+			want:             []byte{0x12, 0x34, 0x56},
+		},
+		{
+			name:             "PNG sixteen-bit row",
+			predictor:        15,
+			colors:           1,
+			bitsPerComponent: 16,
+			columns:          1,
+			encoded:          []byte{0, 0x12, 0x34},
+			want:             []byte{0x12, 0x34},
 		},
 	}
 
@@ -163,9 +244,9 @@ func TestStreamDecodePredictors(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			parameters := NewDictionary()
 			parameters.Set("Predictor", NewInteger(test.predictor))
-			parameters.Set("Colors", NewInteger(1))
-			parameters.Set("BitsPerComponent", NewInteger(8))
-			parameters.Set("Columns", NewInteger(3))
+			parameters.Set("Colors", NewInteger(test.colors))
+			parameters.Set("BitsPerComponent", NewInteger(test.bitsPerComponent))
+			parameters.Set("Columns", NewInteger(test.columns))
 			dictionary := NewDictionary()
 			dictionary.Set("Filter", NewName("FlateDecode"))
 			dictionary.Set("DecodeParms", parameters)
@@ -260,6 +341,19 @@ func TestStreamDecodeRejectsInvalidInputs(t *testing.T) {
 			options: DefaultStreamDecodeOptions(), wantDetail: "Predictor is *parser.Name, want Integer",
 		},
 		{
+			name: "invalid predictor component depth",
+			stream: func() *Stream {
+				parameters := NewDictionary()
+				parameters.Set("Predictor", NewInteger(2))
+				parameters.Set("BitsPerComponent", NewInteger(3))
+				dictionary := NewDictionary()
+				dictionary.Set("Filter", NewName("FlateDecode"))
+				dictionary.Set("DecodeParms", parameters)
+				return NewStream(dictionary, encodeFlateForTest(t, []byte("content")))
+			}(),
+			options: DefaultStreamDecodeOptions(), wantDetail: "want 1, 2, 4, 8, or 16",
+		},
+		{
 			name: "truncated run length",
 			stream: func() *Stream {
 				dictionary := NewDictionary()
@@ -280,6 +374,45 @@ func TestStreamDecodeRejectsInvalidInputs(t *testing.T) {
 			if test.wantDetail != "" {
 				assert.ErrorContains(t, err, test.wantDetail)
 			}
+		})
+	}
+}
+
+func TestStreamDecodeIndirectControlsFailClosed(t *testing.T) {
+	tests := []struct {
+		name       string
+		configure  func(*Stream)
+		wantDetail string
+	}{
+		{
+			name:       "missing resolver",
+			configure:  func(*Stream) {},
+			wantDetail: "no resolver is available",
+		},
+		{
+			name: "reference cycle",
+			configure: func(stream *Stream) {
+				stream.setObjectResolver(func(_ context.Context, objectNumber int) (PdfObject, error) {
+					if objectNumber == 6 {
+						return NewIndirectReference(7, 0), nil
+					}
+					return NewIndirectReference(6, 0), nil
+				})
+			},
+			wantDetail: "indirect-reference cycle",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dictionary := NewDictionary()
+			dictionary.Set("Filter", NewIndirectReference(6, 0))
+			stream := NewStream(dictionary, []byte("encoded"))
+			test.configure(stream)
+
+			_, err := stream.Decode()
+			require.Error(t, err)
+			assert.ErrorContains(t, err, test.wantDetail)
 		})
 	}
 }

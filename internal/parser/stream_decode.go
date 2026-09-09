@@ -93,11 +93,11 @@ func (s *Stream) decodeWithContext(
 	if int64(len(content)) > options.MaxDecodedBytes {
 		return nil, "", fmt.Errorf("%w: encoded stream is %d bytes", ErrStreamDecodeLimit, len(content))
 	}
-	filters, err := streamFilterNames(s.GetFilter(), options.MaxFilters)
+	filters, err := streamFilterNames(ctx, s.resolveDecodeObject, s.GetFilter(), options.MaxFilters)
 	if err != nil {
 		return nil, "", err
 	}
-	parameters, err := streamDecodeParameters(s.GetDecodeParams(), len(filters))
+	parameters, err := streamDecodeParameters(ctx, s.resolveDecodeObject, s.GetDecodeParams(), len(filters))
 	if err != nil {
 		return nil, "", err
 	}
@@ -115,7 +115,14 @@ func (s *Stream) decodeWithContext(
 		if err = ctx.Err(); err != nil {
 			return nil, "", err
 		}
-		decoded, err = applyStreamFilter(ctx, filter, decoded, parameters[index], options.MaxDecodedBytes)
+		decoded, err = applyStreamFilter(
+			ctx,
+			filter,
+			decoded,
+			parameters[index],
+			options.MaxDecodedBytes,
+			s.resolveDecodeObject,
+		)
 		if err != nil {
 			return nil, "", fmt.Errorf("decode filter %d (%s): %w", index, filter, err)
 		}
@@ -123,7 +130,43 @@ func (s *Stream) decodeWithContext(
 	return decoded, terminalFilter, nil
 }
 
-func streamFilterNames(filterObject PdfObject, maxFilters int) ([]string, error) {
+type streamDecodeResolver func(context.Context, PdfObject) (PdfObject, error)
+
+func (s *Stream) resolveDecodeObject(ctx context.Context, object PdfObject) (PdfObject, error) {
+	const maxReferenceDepth = 32
+	seen := make(map[int]struct{})
+	for depth := 0; depth < maxReferenceDepth; depth++ {
+		reference, ok := object.(*IndirectReference)
+		if !ok {
+			return object, nil
+		}
+		if s.objectResolver == nil {
+			return nil, fmt.Errorf("stream decode object %d is indirect but no resolver is available", reference.Number)
+		}
+		if _, duplicate := seen[reference.Number]; duplicate {
+			return nil, fmt.Errorf("stream decode object contains an indirect-reference cycle at object %d", reference.Number)
+		}
+		seen[reference.Number] = struct{}{}
+		resolved, err := s.objectResolver(ctx, reference.Number)
+		if err != nil {
+			return nil, fmt.Errorf("resolve stream decode object %d: %w", reference.Number, err)
+		}
+		object = resolved
+	}
+	return nil, fmt.Errorf("stream decode object exceeds %d indirect references", maxReferenceDepth)
+}
+
+func streamFilterNames(
+	ctx context.Context,
+	resolve streamDecodeResolver,
+	filterObject PdfObject,
+	maxFilters int,
+) ([]string, error) {
+	var err error
+	filterObject, err = resolve(ctx, filterObject)
+	if err != nil {
+		return nil, err
+	}
 	if filterObject == nil {
 		return nil, nil
 	}
@@ -138,9 +181,13 @@ func streamFilterNames(filterObject PdfObject, maxFilters int) ([]string, error)
 		}
 		filters := make([]string, value.Len())
 		for index := 0; index < value.Len(); index++ {
-			name, ok := value.Get(index).(*Name)
+			filter, resolveErr := resolve(ctx, value.Get(index))
+			if resolveErr != nil {
+				return nil, fmt.Errorf("resolve stream filter %d: %w", index, resolveErr)
+			}
+			name, ok := filter.(*Name)
 			if !ok {
-				return nil, fmt.Errorf("stream filter %d is %T, want Name", index, value.Get(index))
+				return nil, fmt.Errorf("stream filter %d is %T, want Name", index, filter)
 			}
 			filters[index] = canonicalStreamFilterName(name.Value())
 		}
@@ -169,8 +216,18 @@ func canonicalStreamFilterName(name string) string {
 	}
 }
 
-func streamDecodeParameters(parameterObject PdfObject, filterCount int) ([]*Dictionary, error) {
+func streamDecodeParameters(
+	ctx context.Context,
+	resolve streamDecodeResolver,
+	parameterObject PdfObject,
+	filterCount int,
+) ([]*Dictionary, error) {
 	parameters := make([]*Dictionary, filterCount)
+	var err error
+	parameterObject, err = resolve(ctx, parameterObject)
+	if err != nil {
+		return nil, err
+	}
 	if parameterObject == nil || filterCount == 0 {
 		return parameters, nil
 	}
@@ -192,7 +249,11 @@ func streamDecodeParameters(parameterObject PdfObject, filterCount int) ([]*Dict
 		return nil, fmt.Errorf("stream DecodeParms count %d does not match filter count %d", array.Len(), filterCount)
 	}
 	for index := 0; index < array.Len(); index++ {
-		switch value := array.Get(index).(type) {
+		value, resolveErr := resolve(ctx, array.Get(index))
+		if resolveErr != nil {
+			return nil, fmt.Errorf("resolve stream DecodeParms %d: %w", index, resolveErr)
+		}
+		switch value := value.(type) {
 		case *Dictionary:
 			parameters[index] = value
 		case *Null:
@@ -204,7 +265,14 @@ func streamDecodeParameters(parameterObject PdfObject, filterCount int) ([]*Dict
 	return parameters, nil
 }
 
-func applyStreamFilter(ctx context.Context, name string, data []byte, parameters *Dictionary, limit int64) ([]byte, error) {
+func applyStreamFilter(
+	ctx context.Context,
+	name string,
+	data []byte,
+	parameters *Dictionary,
+	limit int64,
+	resolve streamDecodeResolver,
+) ([]byte, error) {
 	var (
 		decoded       []byte
 		err           error
@@ -232,7 +300,7 @@ func applyStreamFilter(ctx context.Context, name string, data []byte, parameters
 	case "LZWDecode":
 		usesPredictor = true
 		var earlyChange int
-		earlyChange, err = decodeParameter(parameters, "EarlyChange", 1)
+		earlyChange, err = decodeParameter(ctx, resolve, parameters, "EarlyChange", 1)
 		if err == nil {
 			decoded, err = decodePDFLZW(ctx, data, earlyChange, limit)
 		}
@@ -244,7 +312,7 @@ func applyStreamFilter(ctx context.Context, name string, data []byte, parameters
 			break
 		}
 		var colorTransform int
-		colorTransform, err = decodeParameter(parameters, "ColorTransform", 1)
+		colorTransform, err = decodeParameter(ctx, resolve, parameters, "ColorTransform", 1)
 		if err == nil {
 			decoder := pdfencoding.NewDCTDecoderWithParams(colorTransform)
 			decoded, err = decoder.Decode(data)
@@ -262,7 +330,7 @@ func applyStreamFilter(ctx context.Context, name string, data []byte, parameters
 		return nil, err
 	}
 	if usesPredictor {
-		return applyStreamPredictor(ctx, decoded, parameters)
+		return applyStreamPredictor(ctx, decoded, parameters, resolve)
 	}
 	return decoded, nil
 }
@@ -509,59 +577,80 @@ func decodePDFLZW(ctx context.Context, data []byte, earlyChange int, limit int64
 	}
 }
 
-func applyStreamPredictor(ctx context.Context, data []byte, parameters *Dictionary) ([]byte, error) {
+func applyStreamPredictor(
+	ctx context.Context,
+	data []byte,
+	parameters *Dictionary,
+	resolve streamDecodeResolver,
+) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	predictor, err := decodeParameter(parameters, "Predictor", 1)
+	predictor, err := decodeParameter(ctx, resolve, parameters, "Predictor", 1)
 	if err != nil {
 		return nil, err
 	}
 	if predictor <= 1 {
 		return data, nil
 	}
-	colors, err := decodeParameter(parameters, "Colors", 1)
+	colors, err := decodeParameter(ctx, resolve, parameters, "Colors", 1)
 	if err != nil {
 		return nil, err
 	}
-	bitsPerComponent, err := decodeParameter(parameters, "BitsPerComponent", 8)
+	bitsPerComponent, err := decodeParameter(ctx, resolve, parameters, "BitsPerComponent", 8)
 	if err != nil {
 		return nil, err
 	}
-	columns, err := decodeParameter(parameters, "Columns", 1)
+	columns, err := decodeParameter(ctx, resolve, parameters, "Columns", 1)
 	if err != nil {
 		return nil, err
 	}
 	if colors <= 0 || columns <= 0 {
 		return nil, fmt.Errorf("predictor Colors and Columns must be positive")
 	}
-	if bitsPerComponent != 8 {
-		return nil, fmt.Errorf("predictor BitsPerComponent %d is not supported; want 8", bitsPerComponent)
+	switch bitsPerComponent {
+	case 1, 2, 4, 8, 16:
+	default:
+		return nil, fmt.Errorf("predictor BitsPerComponent %d is invalid; want 1, 2, 4, 8, or 16", bitsPerComponent)
 	}
 	if colors > 1_000_000 || columns > 1_000_000 || colors > 1_000_000/columns {
 		return nil, fmt.Errorf("predictor row size exceeds 1000000 bytes")
 	}
-	rowBytes := colors * columns
+	samplesPerRow := colors * columns
+	rowBits := int64(samplesPerRow) * int64(bitsPerComponent)
+	rowBytes := int((rowBits + 7) / 8)
 	if rowBytes > 1_000_000 {
 		return nil, fmt.Errorf("predictor row size %d is invalid", rowBytes)
 	}
+	bytesPerPixel := max(1, (colors*bitsPerComponent+7)/8)
 	switch {
 	case predictor == 2:
-		return applyTIFFPredictor(ctx, data, rowBytes, colors)
+		return applyTIFFPredictor(ctx, data, rowBytes, colors, columns, bitsPerComponent)
 	case predictor >= 10 && predictor <= 15:
-		return applyPNGPredictorBytesContext(ctx, data, rowBytes, colors)
+		return applyPNGPredictorBytesContext(ctx, data, rowBytes, bytesPerPixel)
 	default:
 		return nil, fmt.Errorf("unsupported predictor: %d", predictor)
 	}
 }
 
-func decodeParameter(parameters *Dictionary, key string, fallback int) (int, error) {
+func decodeParameter(
+	ctx context.Context,
+	resolve streamDecodeResolver,
+	parameters *Dictionary,
+	key string,
+	fallback int,
+) (int, error) {
 	if parameters == nil {
 		return fallback, nil
 	}
 	parameter := parameters.Get(key)
 	if parameter == nil {
 		return fallback, nil
+	}
+	var err error
+	parameter, err = resolve(ctx, parameter)
+	if err != nil {
+		return 0, fmt.Errorf("resolve stream DecodeParms %s: %w", key, err)
 	}
 	value, ok := parameter.(*Integer)
 	if !ok {
@@ -574,7 +663,14 @@ func decodeParameter(parameters *Dictionary, key string, fallback int) (int, err
 	return converted, nil
 }
 
-func applyTIFFPredictor(ctx context.Context, data []byte, rowBytes, bytesPerPixel int) ([]byte, error) {
+func applyTIFFPredictor(
+	ctx context.Context,
+	data []byte,
+	rowBytes int,
+	colors int,
+	columns int,
+	bitsPerComponent int,
+) ([]byte, error) {
 	if len(data)%rowBytes != 0 {
 		return nil, fmt.Errorf("TIFF predictor data length %d is not divisible by row size %d", len(data), rowBytes)
 	}
@@ -583,11 +679,43 @@ func applyTIFFPredictor(ctx context.Context, data []byte, rowBytes, bytesPerPixe
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		for index := bytesPerPixel; index < rowBytes; index++ {
-			decoded[row+index] += decoded[row+index-bytesPerPixel]
+		rowData := decoded[row : row+rowBytes]
+		for sample := colors; sample < colors*columns; sample++ {
+			if sample&4095 == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+			}
+			current := readPackedSample(rowData, sample, bitsPerComponent)
+			previous := readPackedSample(rowData, sample-colors, bitsPerComponent)
+			mask := uint32(1<<bitsPerComponent) - 1
+			writePackedSample(rowData, sample, bitsPerComponent, (current+previous)&mask)
 		}
 	}
 	return decoded, nil
+}
+
+func readPackedSample(data []byte, sample, bitsPerComponent int) uint32 {
+	bitOffset := sample * bitsPerComponent
+	var value uint32
+	for bit := 0; bit < bitsPerComponent; bit++ {
+		absoluteBit := bitOffset + bit
+		value = value<<1 | uint32(data[absoluteBit/8]>>(7-absoluteBit%8)&1)
+	}
+	return value
+}
+
+func writePackedSample(data []byte, sample, bitsPerComponent int, value uint32) {
+	bitOffset := sample * bitsPerComponent
+	for bit := 0; bit < bitsPerComponent; bit++ {
+		absoluteBit := bitOffset + bit
+		mask := byte(1 << (7 - absoluteBit%8))
+		if value>>uint(bitsPerComponent-1-bit)&1 == 1 {
+			data[absoluteBit/8] |= mask
+		} else {
+			data[absoluteBit/8] &^= mask
+		}
+	}
 }
 
 func applyPNGPredictorBytes(data []byte, rowBytes, bytesPerPixel int) ([]byte, error) {

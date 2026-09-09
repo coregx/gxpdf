@@ -18,9 +18,10 @@ import (
 )
 
 type fixture struct {
-	name       string
-	filterDict string
-	encode     func([]byte) []byte
+	name         string
+	filterDict   string
+	encode       func([]byte) []byte
+	extraObjects [][]byte
 }
 
 func main() {
@@ -37,6 +38,29 @@ func main() {
 			filterDict: "/Filter [/ASCII85Decode /FlateDecode] /DecodeParms [null null]",
 			encode:     func(data []byte) []byte { return ascii85Encode(flate(data)) },
 		},
+		{
+			name:         "indirect_decode_parms.pdf",
+			filterDict:   "/Filter /FlateDecode /DecodeParms 6 0 R",
+			encode:       flate,
+			extraObjects: [][]byte{[]byte("<< /Predictor 7 0 R >>"), []byte("1")},
+		},
+		{
+			name:         "indirect_filter.pdf",
+			filterDict:   "/Filter 6 0 R",
+			encode:       flate,
+			extraObjects: [][]byte{[]byte("/FlateDecode")},
+		},
+		{
+			name:         "indirect_filter_array.pdf",
+			filterDict:   "/Filter [6 0 R]",
+			encode:       flate,
+			extraObjects: [][]byte{[]byte("/FlateDecode")},
+		},
+		{
+			name:       "decode_parms_alias.pdf",
+			filterDict: fmt.Sprintf("/Filter /FlateDecode /DP << /Predictor 2 /Colors 1 /BitsPerComponent 8 /Columns %d >>", len(raw)),
+			encode:     func(data []byte) []byte { return flate(tiffPredictor(data)) },
+		},
 		{name: "malformed_ascii85.pdf", filterDict: "/Filter /ASCII85Decode", encode: func([]byte) []byte { return []byte("!!!!~x") }},
 		{name: "unsupported_filter.pdf", filterDict: "/Filter /CCITTFaxDecode", encode: clone},
 	}
@@ -45,10 +69,22 @@ func main() {
 		panic(err)
 	}
 	for _, item := range fixtures {
-		if err := os.WriteFile(filepath.Join(directory, item.name), buildPDF(item.encode(raw), item.filterDict), 0o644); err != nil {
+		if err := os.WriteFile(
+			filepath.Join(directory, item.name),
+			buildPDF(item.encode(raw), item.filterDict, item.extraObjects...),
+			0o644,
+		); err != nil {
 			panic(err)
 		}
 	}
+}
+
+func tiffPredictor(data []byte) []byte {
+	encoded := append([]byte(nil), data...)
+	for index := len(encoded) - 1; index > 0; index-- {
+		encoded[index] -= data[index-1]
+	}
+	return encoded
 }
 
 func clone(data []byte) []byte { return append([]byte(nil), data...) }
@@ -119,7 +155,7 @@ func literalLZW(data []byte) []byte {
 	return encoded
 }
 
-func buildPDF(content []byte, filterDictionary string) []byte {
+func buildPDF(content []byte, filterDictionary string, extraObjects ...[]byte) []byte {
 	objects := [][]byte{
 		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
 		[]byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
@@ -127,6 +163,7 @@ func buildPDF(content []byte, filterDictionary string) []byte {
 		streamObject(content, filterDictionary),
 		[]byte("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
 	}
+	objects = append(objects, extraObjects...)
 	var output bytes.Buffer
 	output.WriteString("%PDF-1.7\n%\xE2\xE3\xCF\xD3\n")
 	offsets := make([]int, len(objects)+1)

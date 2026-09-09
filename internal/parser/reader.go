@@ -732,6 +732,9 @@ func (r *Reader) getInUseObject(objectNum int, entry *XRefEntry) (PdfObject, err
 	if r.decryptor != nil && indirectObj.Number != r.encryptObjNum {
 		obj = r.decryptParsedObject(obj, indirectObj.Number, indirectObj.Generation)
 	}
+	if stream, ok := obj.(*Stream); ok {
+		stream.setObjectResolver(r.GetObjectWithContext)
+	}
 
 	// Cache the object (write lock)
 	r.mu.Lock()
@@ -843,6 +846,8 @@ func (r *Reader) scanDirection(startOffset int64, pattern []byte, maxSize int, f
 // with other objects for space efficiency.
 //
 // Reference: PDF 1.7 specification, Section 7.5.7 (Object Streams).
+type objectStreamDecodeStackKey struct{}
+
 func (r *Reader) getCompressedObjectWithContext(
 	ctx context.Context,
 	objectNum int,
@@ -852,6 +857,16 @@ func (r *Reader) getCompressedObjectWithContext(
 	// entry.Generation contains the index within that ObjStm
 	objStmNum := int(entry.Offset)
 	objIndex := entry.Generation
+	decodeStack, _ := ctx.Value(objectStreamDecodeStackKey{}).(map[int]struct{})
+	if _, recursive := decodeStack[objStmNum]; recursive {
+		return nil, fmt.Errorf("circular decode dependency through ObjStm %d", objStmNum)
+	}
+	nextDecodeStack := make(map[int]struct{}, len(decodeStack)+1)
+	for number := range decodeStack {
+		nextDecodeStack[number] = struct{}{}
+	}
+	nextDecodeStack[objStmNum] = struct{}{}
+	ctx = context.WithValue(ctx, objectStreamDecodeStackKey{}, nextDecodeStack)
 
 	// Check if we've already parsed this ObjStm (read lock)
 	r.mu.RLock()
@@ -864,18 +879,6 @@ func (r *Reader) getCompressedObjectWithContext(
 		return nil, fmt.Errorf("object %d not found in ObjStm %d at index %d", objectNum, objStmNum, objIndex)
 	}
 	r.mu.RUnlock()
-
-	// Need to load and parse the ObjStm (write lock for cache)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Double-check after acquiring write lock (another goroutine might have loaded it)
-	if objStmObjects, ok := r.objStmCache[objStmNum]; ok {
-		if obj, ok := objStmObjects[objectNum]; ok {
-			return obj, nil
-		}
-		return nil, fmt.Errorf("object %d not found in ObjStm %d at index %d", objectNum, objStmNum, objIndex)
-	}
 
 	// Load the ObjStm object (it must be in-use, not compressed itself)
 	objStmEntry, ok := r.xrefTable.GetEntry(objStmNum)
@@ -948,7 +951,21 @@ func (r *Reader) getCompressedObjectWithContext(
 		return nil, fmt.Errorf("failed to parse ObjStm %d: %w", objStmNum, err)
 	}
 
-	// Cache the parsed objects
+	// Resolve and decode without holding the cache lock: stream decode controls
+	// may themselves be indirect objects and therefore need GetObjectWithContext.
+	// Concurrent callers may parse the same immutable ObjStm, then converge on
+	// the first cached result below.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cached, exists := r.objStmCache[objStmNum]; exists {
+		obj, found := cached[objectNum]
+		if !found {
+			return nil, fmt.Errorf("object %d not found in ObjStm %d at index %d", objectNum, objStmNum, objIndex)
+		}
+		return obj, nil
+	}
+
+	// Cache the parsed objects.
 	r.objStmCache[objStmNum] = objStmObjects
 
 	// Also cache each individual object in objectCache
@@ -971,6 +988,7 @@ func (r *Reader) decodeStream(stream *Stream) ([]byte, error) {
 }
 
 func (r *Reader) decodeStreamWithContext(ctx context.Context, stream *Stream) ([]byte, error) {
+	stream.setObjectResolver(r.GetObjectWithContext)
 	return stream.DecodeWithContext(ctx, DefaultStreamDecodeOptions())
 }
 

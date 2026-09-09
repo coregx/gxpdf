@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -331,6 +332,71 @@ func TestGetCompressedObjectWithContext(t *testing.T) {
 		_, err := newReader().getCompressedObjectWithContext(ctx, 10, targetEntry)
 		if err == nil || !errors.Is(err, context.Canceled) {
 			t.Fatalf("error = %v, want context.Canceled", err)
+		}
+	})
+
+	t.Run("resolves indirect decode parameters without holding cache lock", func(t *testing.T) {
+		decodedObjectStream := []byte("10 0 42")
+		var compressed bytes.Buffer
+		writer := zlib.NewWriter(&compressed)
+		if _, err := writer.Write(decodedObjectStream); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		objectStream := []byte(fmt.Sprintf(
+			"5 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Length %d /Filter /FlateDecode /DecodeParms 6 0 R >>\nstream\n%s\nendstream\nendobj\n",
+			compressed.Len(),
+			compressed.Bytes(),
+		))
+		parametersOffset := int64(len(objectStream))
+		source := append(objectStream, []byte("6 0 obj\n<< /Predictor 1 >>\nendobj")...)
+
+		xref := NewXRefTable()
+		xref.AddEntry(NewXRefEntry(5, XRefEntryInUse, 0, 0))
+		xref.AddEntry(NewXRefEntry(6, XRefEntryInUse, parametersOffset, 0))
+		xref.AddEntry(targetEntry)
+		reader := &Reader{
+			src:         bytes.NewReader(source),
+			fileSize:    int64(len(source)),
+			xrefTable:   xref,
+			objectCache: make(map[int]PdfObject),
+			objStmCache: make(map[int]map[int]PdfObject),
+		}
+
+		object, err := reader.GetObjectWithContext(context.Background(), 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		integer, ok := object.(*Integer)
+		if !ok || integer.Value() != 42 {
+			t.Fatalf("object = %#v, want integer 42", object)
+		}
+	})
+
+	t.Run("rejects circular decode parameters in the same object stream", func(t *testing.T) {
+		objectStream := []byte(
+			"5 0 obj\n<< /Type /ObjStm /N 1 /First 5 /Length 7 /Filter /FlateDecode /DecodeParms 10 0 R >>\nstream\ninvalid\nendstream\nendobj",
+		)
+		xref := NewXRefTable()
+		xref.AddEntry(NewXRefEntry(5, XRefEntryInUse, 0, 0))
+		xref.AddEntry(targetEntry)
+		reader := &Reader{
+			src:         bytes.NewReader(objectStream),
+			fileSize:    int64(len(objectStream)),
+			xrefTable:   xref,
+			objectCache: make(map[int]PdfObject),
+			objStmCache: make(map[int]map[int]PdfObject),
+		}
+
+		_, err := reader.GetObjectWithContext(context.Background(), 10)
+		if err == nil {
+			t.Fatal("GetObjectWithContext() error = nil, want circular dependency error")
+		}
+		if !strings.Contains(err.Error(), "circular decode dependency through ObjStm 5") {
+			t.Fatalf("GetObjectWithContext() error = %v, want circular dependency detail", err)
 		}
 	})
 }
