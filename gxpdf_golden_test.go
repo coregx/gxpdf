@@ -319,3 +319,22 @@ func TestGolden_Issue79_AutoMode(t *testing.T) {
 		opts,
 	)
 }
+
+// TestGolden_FormLargeText_Table snapshots a ruled table whose 12-point text
+// lives inside a Form XObject while the ruling lines live on the page. This
+// freezes the public table handoff above the former two-unit compatibility
+// threshold; the snapshot is intentionally reviewed independently from text
+// geometry assertions.
+func TestGolden_FormLargeText_Table(t *testing.T) {
+	opts := DefaultExtractionOptions().
+		WithMethod(MethodLattice).
+		WithPages(0)
+
+	runGoldenTest(t,
+		"form_large_text_table0",
+		"testdata/pdfs/form_large_text_table.pdf",
+		0,
+		0,
+		opts,
+	)
+}
