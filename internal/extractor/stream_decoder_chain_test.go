@@ -111,3 +111,57 @@ func TestImageExtractorPreservesTerminalDCT(t *testing.T) {
 	assert.Equal(t, payload, data)
 	assert.Equal(t, "/DCTDecode", filter)
 }
+
+func TestImageExtractorDecodesPackedPredictorSamples(t *testing.T) {
+	tests := []struct {
+		name             string
+		predictor        int64
+		bitsPerComponent int64
+		columns          int64
+		encoded          []byte
+		want             []byte
+	}{
+		{
+			name:             "one-bit TIFF rows with padding",
+			predictor:        2,
+			bitsPerComponent: 1,
+			columns:          3,
+			encoded:          []byte{0xe0, 0x40},
+			want:             []byte{0xa0, 0x60},
+		},
+		{
+			name:             "sixteen-bit PNG Sub row",
+			predictor:        15,
+			bitsPerComponent: 16,
+			columns:          2,
+			encoded:          []byte{1, 0x01, 0x00, 0x01, 0x00},
+			want:             []byte{0x01, 0x00, 0x02, 0x00},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var compressed bytes.Buffer
+			writer := zlib.NewWriter(&compressed)
+			_, err := writer.Write(test.encoded)
+			require.NoError(t, err)
+			require.NoError(t, writer.Close())
+
+			parameters := parser.NewDictionary()
+			parameters.Set("Predictor", parser.NewInteger(test.predictor))
+			parameters.Set("Colors", parser.NewInteger(1))
+			parameters.Set("BitsPerComponent", parser.NewInteger(test.bitsPerComponent))
+			parameters.Set("Columns", parser.NewInteger(test.columns))
+			dictionary := parser.NewDictionary()
+			dictionary.Set("Filter", parser.NewName("FlateDecode"))
+			dictionary.Set("DecodeParms", parameters)
+
+			data, terminalFilter, decodeErr := (&ImageExtractor{}).decodeImageData(
+				parser.NewStream(dictionary, compressed.Bytes()),
+			)
+			require.NoError(t, decodeErr)
+			assert.Equal(t, "/FlateDecode", terminalFilter)
+			assert.Equal(t, test.want, data)
+		})
+	}
+}

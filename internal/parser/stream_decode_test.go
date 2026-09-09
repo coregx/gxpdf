@@ -167,6 +167,15 @@ func TestStreamDecodePredictors(t *testing.T) {
 			want:             []byte{0xb2},
 		},
 		{
+			name:             "TIFF one-bit padded rows",
+			predictor:        2,
+			colors:           1,
+			bitsPerComponent: 1,
+			columns:          3,
+			encoded:          []byte{0xe0, 0x40},
+			want:             []byte{0xa0, 0x60},
+		},
+		{
 			name:             "TIFF two-bit packed samples",
 			predictor:        2,
 			colors:           1,
@@ -221,6 +230,15 @@ func TestStreamDecodePredictors(t *testing.T) {
 			want:             []byte{0xaa},
 		},
 		{
+			name:             "PNG one-bit padded rows with Up filter",
+			predictor:        15,
+			colors:           1,
+			bitsPerComponent: 1,
+			columns:          3,
+			encoded:          []byte{0, 0xa0, 2, 0x40},
+			want:             []byte{0xa0, 0xe0},
+		},
+		{
 			name:             "PNG four-bit RGB Sub row",
 			predictor:        15,
 			colors:           3,
@@ -237,6 +255,15 @@ func TestStreamDecodePredictors(t *testing.T) {
 			columns:          1,
 			encoded:          []byte{0, 0x12, 0x34},
 			want:             []byte{0x12, 0x34},
+		},
+		{
+			name:             "PNG sixteen-bit Sub row",
+			predictor:        15,
+			colors:           1,
+			bitsPerComponent: 16,
+			columns:          2,
+			encoded:          []byte{1, 0x01, 0x00, 0x01, 0x00},
+			want:             []byte{0x01, 0x00, 0x02, 0x00},
 		},
 	}
 
