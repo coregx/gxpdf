@@ -303,6 +303,29 @@ func buildTransformedGlyphXObjectPDF(t *testing.T, rotation int, textOperator st
 	return b.finalize(catalogN)
 }
 
+// buildRepeatedFormXObjectPDF invokes the same Form twice under different page
+// transforms. Reusing the cached Form must compose with each caller independently.
+func buildRepeatedFormXObjectPDF(t *testing.T) []byte {
+	t.Helper()
+	b := newXObjPDFBuilder(15)
+	fontN := b.addRaw("<< /Type /Font /Subtype /TrueType /BaseFont /Test /FirstChar 65 /LastChar 65 /Widths [600] >>")
+	formN := b.addStream(
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Resources << /Font << /F1 %d 0 R >> >>", fontN),
+		[]byte("BT /F1 10 Tf 1 0 0 1 0 0 Tm (A) Tj ET"),
+	)
+	pageContentN := b.addStream("", []byte(strings.Join([]string{
+		"q 1 0 0 1 10 20 cm /Fm Do Q",
+		"q 2 0 0 3 100 200 cm /Fm Do Q",
+	}, "\n")))
+	pageN := b.addRaw(fmt.Sprintf(
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Fm %d 0 R >> >> /Contents %d 0 R >>",
+		formN, pageContentN,
+	))
+	pagesN := b.addRaw(fmt.Sprintf("<< /Type /Pages /Kids [%d 0 R] /Count 1 >>", pageN))
+	catalogN := b.addRaw(fmt.Sprintf("<< /Type /Catalog /Pages %d 0 R >>", pagesN))
+	return b.finalize(catalogN)
+}
+
 func positionedText(text, operator string) string {
 	if operator == "TJ" {
 		return fmt.Sprintf("[(%s)] TJ", text)
@@ -490,7 +513,7 @@ func TestFormXObject_SimpleFont_ExtractsText(t *testing.T) {
 
 func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
 	for _, textOperator := range []string{"Tj", "TJ"} {
-		for _, rotation := range []int{0, 90} {
+		for _, rotation := range []int{0, 90, 180, 270} {
 			t.Run(fmt.Sprintf("%s/page-rotate-%d", textOperator, rotation), func(t *testing.T) {
 				reader := openPDFBytes(t, buildTransformedGlyphXObjectPDF(t, rotation, textOperator))
 				extractor := NewTextExtractor(reader)
@@ -525,6 +548,27 @@ func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestFormXObject_RepeatedInvocationUsesEachCallerTransform(t *testing.T) {
+	reader := openPDFBytes(t, buildRepeatedFormXObjectPDF(t))
+	extractor := NewTextExtractor(reader)
+
+	elements, err := extractor.ExtractFromPage(0)
+	require.NoError(t, err)
+	require.Len(t, elements, 2)
+
+	assert.Equal(t, "A", elements[0].Text)
+	assert.InDelta(t, 10, elements[0].X, 0.001)
+	assert.InDelta(t, 20, elements[0].Y, 0.001)
+	assert.InDelta(t, 6, elements[0].Width, 0.001)
+	assert.InDelta(t, 10, elements[0].Height, 0.001)
+
+	assert.Equal(t, "A", elements[1].Text)
+	assert.InDelta(t, 100, elements[1].X, 0.001)
+	assert.InDelta(t, 200, elements[1].Y, 0.001)
+	assert.InDelta(t, 12, elements[1].Width, 0.001)
+	assert.InDelta(t, 30, elements[1].Height, 0.001)
 }
 
 func TestFormXObject_FontCachesAreScopedToResources(t *testing.T) {
