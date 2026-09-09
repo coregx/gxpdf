@@ -149,20 +149,33 @@ func TestDetectBoundariesKeepsSparseTerminalValueOnAdjacentRow(t *testing.T) {
 }
 
 func TestDetectBoundariesKeepsSparseTerminalValueAfterSectionGap(t *testing.T) {
-	elements := []*extractor.TextElement{
-		extractor.NewTextElement("Line Item", 20, 120, 60, 10, "F1", 10),
-		extractor.NewTextElement("2023", 176, 120, 24, 10, "F1", 10),
-		extractor.NewTextElement("Revenue", 20, 100, 50, 10, "F1", 10),
-		extractor.NewTextElement("1200", 176, 100, 24, 10, "F1", 10),
-		extractor.NewTextElement("Cost", 20, 80, 30, 10, "F1", 10),
-		extractor.NewTextElement("(400)", 170, 80, 30, 10, "F1", 10),
-		extractor.NewTextElement("Other", 20, 40, 30, 10, "F1", 10),
-		extractor.NewTextElement("900", 382, 40, 18, 10, "F1", 10),
+	tests := []struct {
+		name  string
+		value string
+		width float64
+	}{
+		{name: "integer", value: "900", width: 18},
+		{name: "Unicode minus", value: "−570", width: 24},
+		{name: "European currency", value: "€ 1.450,00", width: 54},
 	}
 
-	boundaries := NewColumnBoundaryDetector().DetectBoundaries(elements)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			elements := []*extractor.TextElement{
+				extractor.NewTextElement("Line Item", 20, 120, 60, 10, "F1", 10),
+				extractor.NewTextElement("2023", 176, 120, 24, 10, "F1", 10),
+				extractor.NewTextElement("Revenue", 20, 100, 50, 10, "F1", 10),
+				extractor.NewTextElement("1200", 176, 100, 24, 10, "F1", 10),
+				extractor.NewTextElement("Cost", 20, 80, 30, 10, "F1", 10),
+				extractor.NewTextElement("(400)", 170, 80, 30, 10, "F1", 10),
+				extractor.NewTextElement("Other", 20, 40, 30, 10, "F1", 10),
+				extractor.NewTextElement(test.value, 400-test.width, 40, test.width, 10, "F1", 10),
+			}
 
-	assert.Equal(t, []float64{20, 170, 382, 400}, boundaries)
+			boundaries := NewColumnBoundaryDetector().DetectBoundaries(elements)
+			assert.Equal(t, []float64{20, 170, 400 - test.width, 400}, boundaries)
+		})
+	}
 }
 
 func TestDetectBoundariesRejectsNearbyPageNumberRows(t *testing.T) {

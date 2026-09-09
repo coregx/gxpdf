@@ -309,7 +309,8 @@ func rowContainsNumericValue(row []*extractor.TextElement) bool {
 			switch {
 			case unicode.IsDigit(value):
 				hasDigit = true
-			case unicode.IsSpace(value), strings.ContainsRune("+-(),.'’$€£¥₹%", value):
+			case unicode.IsSpace(value), unicode.Is(unicode.Dash, value),
+				strings.ContainsRune("+(),.'’$€£¥₹%", value):
 			default:
 				valid = false
 			}

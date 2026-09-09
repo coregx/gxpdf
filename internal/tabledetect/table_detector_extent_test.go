@@ -24,6 +24,32 @@ func TestSupportedRowAdjacencyUsesLowerMedianGap(t *testing.T) {
 	assert.Equal(t, 30.0, supportedRowAdjacency([]float64{80, 100, 200}))
 }
 
+func TestRowContainsNumericValueRecognizesFinancialFormatsConservatively(t *testing.T) {
+	tests := []struct {
+		text string
+		want bool
+	}{
+		{text: "1,234", want: true},
+		{text: "(400)", want: true},
+		{text: "−570", want: true},
+		{text: "€ 1.450,00", want: true},
+		{text: "12.5%", want: true},
+		{text: "Page 1", want: false},
+		{text: "Annual report 2024", want: false},
+		{text: "—", want: false},
+		{text: "K-68", want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.text, func(t *testing.T) {
+			row := []*extractor.TextElement{
+				extractor.NewTextElement(test.text, 20, 80, 40, 10, "F1", 10),
+			}
+			assert.Equal(t, test.want, rowContainsNumericValue(row))
+		})
+	}
+}
+
 func TestElementsWithinColumnExtentHandlesPageLabels(t *testing.T) {
 	tableLabel := extractor.NewTextElement("Revenue", 20, 100, 50, 10, "F1", 10)
 	tableValue := extractor.NewTextElement("1450", 376, 100, 24, 10, "F1", 10)
