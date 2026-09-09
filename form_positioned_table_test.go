@@ -56,7 +56,13 @@ func TestFormPositionedTableIgnoresFarRightPageText(t *testing.T) {
 		t.Fatalf("columns = %d, want 3", got)
 	}
 	rows := tables[0].Rows()
-	if len(rows) < 4 || rows[2][2] != "1450" || rows[3][2] != "(570)" {
-		t.Fatalf("terminal table values were not retained: %#v", rows)
+	want := [][]string{
+		{"Income Statement", "", ""},
+		{"Line Item", "2023", "2024"},
+		{"Revenue", "1200", "1450"},
+		{"Cost of Sales", "(400)", "(570)"},
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("table rows = %#v, want %#v", rows, want)
 	}
 }

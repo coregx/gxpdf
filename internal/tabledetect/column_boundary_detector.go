@@ -193,24 +193,82 @@ func (cbd *ColumnBoundaryDetector) elementsInSupportedRows(
 		start = end
 	}
 
-	result := make([]*extractor.TextElement, 0, len(elements))
-	for _, row := range cbd.groupElementsByRow(elements) {
+	type supportedRow struct {
+		elements []*extractor.TextElement
+		y        float64
+		aligned  int
+		core     bool
+	}
+	groupedRows := cbd.groupElementsByRow(elements)
+	rows := make([]supportedRow, 0, len(groupedRows))
+	coreY := make([]float64, 0, len(groupedRows))
+	for _, row := range groupedRows {
 		aligned := 0
+		y := 0.0
 		for _, element := range row {
+			y += element.Y
 			if supportedElements[element] {
 				aligned++
 			}
 		}
-		if aligned < 2 {
-			continue
+		y /= float64(len(row))
+		isCore := aligned >= 2
+		rows = append(rows, supportedRow{elements: row, y: y, aligned: aligned, core: isCore})
+		if isCore {
+			coreY = append(coreY, y)
 		}
-		result = append(result, row...)
+	}
+
+	// A sparse row may contain a value only in a terminal column. It will then
+	// share just its label edge with the established table and must not be
+	// mistaken for unrelated page text. Admit one-edge rows when they continue
+	// the table's vertical rhythm; distant headers and footers remain excluded.
+	adjacency := supportedRowAdjacency(coreY)
+	result := make([]*extractor.TextElement, 0, len(elements))
+	for _, row := range rows {
+		if row.core || (row.aligned == 1 && rowIsAdjacentToCore(row.y, coreY, adjacency)) {
+			result = append(result, row.elements...)
+		}
 	}
 
 	if len(result) == 0 || len(result) == len(elements) {
 		return elements, false
 	}
 	return result, true
+}
+
+func supportedRowAdjacency(coreY []float64) float64 {
+	if len(coreY) < 2 {
+		return 0
+	}
+	sorted := append([]float64(nil), coreY...)
+	sort.Float64s(sorted)
+	gaps := make([]float64, 0, len(sorted)-1)
+	for index := 1; index < len(sorted); index++ {
+		if gap := sorted[index] - sorted[index-1]; gap > 0 {
+			gaps = append(gaps, gap)
+		}
+	}
+	if len(gaps) == 0 {
+		return 0
+	}
+	sort.Float64s(gaps)
+	// Prefer the lower median when only a few rows establish the rhythm. One
+	// large section gap must not make a distant page header look adjacent.
+	medianGap := gaps[(len(gaps)-1)/2]
+	return medianGap * 1.5
+}
+
+func rowIsAdjacentToCore(y float64, coreY []float64, adjacency float64) bool {
+	if adjacency <= 0 {
+		return false
+	}
+	for _, candidate := range coreY {
+		if math.Abs(y-candidate) <= adjacency {
+			return true
+		}
+	}
+	return false
 }
 
 func boundariesWithinExtent(boundaries []float64, minX, maxX, tolerance float64) []float64 {

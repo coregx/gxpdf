@@ -130,6 +130,24 @@ func TestDetectBoundariesIgnoresUnrelatedFarRightPageText(t *testing.T) {
 	}
 }
 
+func TestDetectBoundariesKeepsSparseTerminalValueOnAdjacentRow(t *testing.T) {
+	elements := []*extractor.TextElement{
+		extractor.NewTextElement("Line Item", 20, 120, 60, 10, "F1", 10),
+		extractor.NewTextElement("2023", 176, 120, 24, 10, "F1", 10),
+		extractor.NewTextElement("Revenue", 20, 100, 50, 10, "F1", 10),
+		extractor.NewTextElement("1200", 176, 100, 24, 10, "F1", 10),
+		extractor.NewTextElement("Cost", 20, 80, 30, 10, "F1", 10),
+		extractor.NewTextElement("(400)", 170, 80, 30, 10, "F1", 10),
+		extractor.NewTextElement("Other", 20, 60, 30, 10, "F1", 10),
+		extractor.NewTextElement("1450", 376, 60, 24, 10, "F1", 10),
+	}
+
+	detector := NewColumnBoundaryDetector()
+	boundaries := detector.DetectBoundaries(elements)
+
+	assert.Equal(t, []float64{20, 170, 376, 400}, boundaries)
+}
+
 func rightAlignedTableElements(numericCols int, missingValue bool) []*extractor.TextElement {
 	elements := []*extractor.TextElement{
 		extractor.NewTextElement("Line Item", 20, 120, 60, 10, "F1", 10),
