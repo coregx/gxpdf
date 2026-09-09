@@ -614,7 +614,7 @@ func applyStreamPredictor(
 		return nil, fmt.Errorf("predictor BitsPerComponent %d is invalid; want 1, 2, 4, 8, or 16", bitsPerComponent)
 	}
 	if colors > 1_000_000 || columns > 1_000_000 || colors > 1_000_000/columns {
-		return nil, fmt.Errorf("predictor row size exceeds 1000000 bytes")
+		return nil, fmt.Errorf("predictor row exceeds 1000000 samples")
 	}
 	samplesPerRow := colors * columns
 	rowBits := int64(samplesPerRow) * int64(bitsPerComponent)
