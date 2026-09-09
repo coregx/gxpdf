@@ -172,7 +172,7 @@ func (fe *FontExtractor) extractFontData(fontDict *parser.Dictionary) (*Embedded
 	var err error
 
 	switch subtype {
-	case "Type0":
+	case type0FontSubtype:
 		// Composite font: descriptor lives inside DescendantFonts.
 		descriptorDict, err = fe.descriptorFromType0(fontDict)
 		if err != nil || descriptorDict == nil {
@@ -268,7 +268,7 @@ func (fe *FontExtractor) fontFileData(descriptor *parser.Dictionary) ([]byte, er
 
 // resolveDict resolves an indirect reference and casts to *parser.Dictionary.
 func (fe *FontExtractor) resolveDict(obj parser.PdfObject) (*parser.Dictionary, error) {
-	obj = fe.resolve(obj)
+	obj = resolveObject(fe.reader, obj)
 	if obj == nil {
 		return nil, nil
 	}
@@ -281,7 +281,7 @@ func (fe *FontExtractor) resolveDict(obj parser.PdfObject) (*parser.Dictionary, 
 
 // resolveArray resolves an indirect reference and casts to *parser.Array.
 func (fe *FontExtractor) resolveArray(obj parser.PdfObject) (*parser.Array, error) {
-	obj = fe.resolve(obj)
+	obj = resolveObject(fe.reader, obj)
 	if obj == nil {
 		return nil, nil
 	}
@@ -294,7 +294,7 @@ func (fe *FontExtractor) resolveArray(obj parser.PdfObject) (*parser.Array, erro
 
 // resolveStream resolves an indirect reference and casts to *parser.Stream.
 func (fe *FontExtractor) resolveStream(obj parser.PdfObject) (*parser.Stream, error) {
-	obj = fe.resolve(obj)
+	obj = resolveObject(fe.reader, obj)
 	if obj == nil {
 		return nil, nil
 	}
@@ -303,20 +303,6 @@ func (fe *FontExtractor) resolveStream(obj parser.PdfObject) (*parser.Stream, er
 		return nil, nil
 	}
 	return stream, nil
-}
-
-// resolve follows a single indirect reference using the reader's object table.
-// Non-reference objects are returned as-is. Returns nil on resolution error.
-func (fe *FontExtractor) resolve(obj parser.PdfObject) parser.PdfObject {
-	ref, ok := obj.(*parser.IndirectReference)
-	if !ok {
-		return obj
-	}
-	resolved, err := fe.reader.GetObject(ref.Number)
-	if err != nil {
-		return nil
-	}
-	return resolved
 }
 
 // nameValue extracts the string value from a *parser.Name object.
@@ -353,7 +339,7 @@ func (fe *FontExtractor) encodingValue(obj parser.PdfObject) string {
 	if obj == nil {
 		return ""
 	}
-	obj = fe.resolve(obj)
+	obj = resolveObject(fe.reader, obj)
 	if obj == nil {
 		return ""
 	}

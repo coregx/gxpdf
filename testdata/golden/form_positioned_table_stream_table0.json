@@ -1,0 +1,79 @@
+{
+  "pdf": "testdata/pdfs/form_positioned_table.pdf",
+  "page": 0,
+  "method": "Stream",
+  "rows": 4,
+  "cols": 3,
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "text": "Income Statement",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "text": "Line Item",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "text": "2023",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "text": "2024",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "text": "Revenue",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "text": "1200",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "text": "1450",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "text": "Cost of Sales",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "text": "(400)",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "text": "(570)",
+      "rowSpan": 1,
+      "colSpan": 1
+    }
+  ]
+}
