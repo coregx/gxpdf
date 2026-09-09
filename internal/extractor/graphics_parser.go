@@ -2,6 +2,7 @@
 package extractor
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/coregx/gxpdf/internal/parser"
@@ -101,6 +102,7 @@ func (c Color) String() string {
 // Reference: PDF 1.7 specification, Section 8 (Graphics).
 type GraphicsParser struct {
 	reader     *parser.Reader
+	ctx        context.Context
 	elements   []*GraphicsElement
 	state      *GraphicsState
 	stateStack []*GraphicsState // graphics state stack for q/Q operators
@@ -132,8 +134,15 @@ func NewGraphicsState() *GraphicsState {
 
 // NewGraphicsParser creates a new GraphicsParser for the given PDF reader.
 func NewGraphicsParser(reader *parser.Reader) *GraphicsParser {
+	return NewGraphicsParserWithContext(reader, context.Background())
+}
+
+// NewGraphicsParserWithContext creates a GraphicsParser whose stream decoding
+// observes ctx.
+func NewGraphicsParserWithContext(reader *parser.Reader, ctx context.Context) *GraphicsParser {
 	return &GraphicsParser{
 		reader:   reader,
+		ctx:      contextOrBackground(ctx),
 		elements: []*GraphicsElement{},
 		state:    NewGraphicsState(),
 	}
@@ -145,13 +154,16 @@ func NewGraphicsParser(reader *parser.Reader) *GraphicsParser {
 //
 // Returns a slice of GraphicsElements, or error if extraction fails.
 func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error) {
+	if err := contextOrBackground(gp.ctx).Err(); err != nil {
+		return nil, err
+	}
 	// Reset state
 	gp.elements = []*GraphicsElement{}
 	gp.state = NewGraphicsState()
 	gp.stateStack = nil
 
 	// Get page
-	page, err := gp.reader.GetPage(pageNum)
+	page, err := gp.reader.GetPageWithContext(gp.ctx, pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
@@ -182,7 +194,13 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 
 	// Process operators to extract graphics
 	for _, op := range operators {
+		if err := gp.ctx.Err(); err != nil {
+			return nil, err
+		}
 		gp.processOperator(op)
+		if err := gp.ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Normalize coordinates: align graphics Y-space with text Y-space.
@@ -209,7 +227,7 @@ func (gp *GraphicsParser) getPageContent(page *parser.Dictionary) ([]byte, error
 
 	// Resolve if it's an indirect reference
 	if ref, ok := contentsObj.(*parser.IndirectReference); ok {
-		resolved, err := gp.reader.GetObject(ref.Number)
+		resolved, err := gp.reader.GetObjectWithContext(gp.ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve contents reference: %w", err)
 		}
@@ -233,28 +251,30 @@ func (gp *GraphicsParser) getPageContent(page *parser.Dictionary) ([]byte, error
 		for i := 0; i < obj.Len(); i++ {
 			streamRef := obj.Get(i)
 			if streamRef == nil {
-				continue
+				return nil, fmt.Errorf("content stream %d is null", i)
 			}
 
 			// Resolve indirect reference
 			if ref, ok := streamRef.(*parser.IndirectReference); ok {
-				resolved, err := gp.reader.GetObject(ref.Number)
+				resolved, err := gp.reader.GetObjectWithContext(gp.ctx, ref.Number)
 				if err != nil {
-					continue
+					return nil, fmt.Errorf("failed to resolve content stream %d: %w", i, err)
 				}
 				streamRef = resolved
 			}
 
 			// Decode stream
-			if stream, ok := streamRef.(*parser.Stream); ok {
-				content, err := gp.decodeStream(stream)
-				if err != nil {
-					continue
-				}
-				allContent = append(allContent, content...)
-				// Add space between streams for safety
-				allContent = append(allContent, ' ')
+			stream, ok := streamRef.(*parser.Stream)
+			if !ok {
+				return nil, fmt.Errorf("content stream %d is %T, want Stream", i, streamRef)
 			}
+			content, err := gp.decodeStream(stream)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode content stream %d: %w", i, err)
+			}
+			allContent = append(allContent, content...)
+			// Add space between streams for safety
+			allContent = append(allContent, ' ')
 		}
 
 	default:
@@ -264,47 +284,9 @@ func (gp *GraphicsParser) getPageContent(page *parser.Dictionary) ([]byte, error
 	return allContent, nil
 }
 
-// decodeStream decodes a PDF stream based on its filters.
-//
-// For now, we handle FlateDecode (most common).
-//
-//nolint:dupl // Similar to TextExtractor.decodeStream, refactoring later
+// decodeStream delegates to the parser's canonical bounded filter pipeline.
 func (gp *GraphicsParser) decodeStream(stream *parser.Stream) ([]byte, error) {
-	// Get filter
-	filterObj := stream.Dictionary().Get("Filter")
-	if filterObj == nil {
-		// No filter - return raw content
-		return stream.Content(), nil
-	}
-
-	// Get filter name
-	var filterName string
-	if name, ok := filterObj.(*parser.Name); ok {
-		filterName = name.Value()
-	} else if arr, ok := filterObj.(*parser.Array); ok {
-		// Array of filters - for now, just handle first one
-		if arr.Len() > 0 {
-			if name, ok := arr.Get(0).(*parser.Name); ok {
-				filterName = name.Value()
-			}
-		}
-	}
-
-	// Apply filter
-	switch filterName {
-	case filterFlateDecode:
-		// Use shared decoding logic from text extractor
-		te := &TextExtractor{reader: gp.reader}
-		return te.decodeFlateDecode(stream.Content())
-
-	case "":
-		// No filter
-		return stream.Content(), nil
-
-	default:
-		// Unsupported filter - return raw content
-		return stream.Content(), nil
-	}
+	return stream.DecodeWithContext(contextOrBackground(gp.ctx), parser.DefaultStreamDecodeOptions())
 }
 
 // processOperator processes a single graphics operator.
@@ -595,7 +577,7 @@ func (gp *GraphicsParser) readPageHeight(page *parser.Dictionary) float64 {
 
 	// Resolve indirect reference
 	if ref, ok := mb.(*parser.IndirectReference); ok {
-		resolved, err := gp.reader.GetObject(ref.Number)
+		resolved, err := gp.reader.GetObjectWithContext(gp.ctx, ref.Number)
 		if err != nil {
 			return 0
 		}

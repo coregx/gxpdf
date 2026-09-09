@@ -211,7 +211,7 @@ func (d *Document) GetVectorGraphicsForPage(pageNum int) ([]*VectorPath, error) 
 		return nil, fmt.Errorf("gxpdf: page %d out of range (0-%d)", pageNum, d.PageCount()-1)
 	}
 
-	vparser := extractor.NewVectorParser(d.reader)
+	vparser := extractor.NewVectorParserWithContext(d.reader, d.ctx)
 	internalPaths, err := vparser.ParseFromPage(pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("gxpdf: failed to extract vector graphics from page %d: %w", pageNum, err)

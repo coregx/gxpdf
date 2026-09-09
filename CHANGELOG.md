@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **PDF stream filter chains** — decode ordered filter arrays, aliases, indirect decode controls, LZW, ASCII85, ASCIIHex, RunLength, and Flate/LZW predictors (1-, 2-, 4-, 8-, and 16-bit components) through one bounded pipeline; image export uses the same path while preserving terminal DCT payloads and explicitly rejecting unsupported JPX payloads (#95)
+
+### Fixed
+- **Unsupported stream filters fail closed** — malformed or unsupported filters now return a decode error instead of exposing compressed bytes as content (#95)
+
 ---
 
 ## [0.9.4] - 2026-08-02

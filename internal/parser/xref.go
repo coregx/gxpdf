@@ -4,7 +4,6 @@ package parser
 
 import (
 	"bytes"
-	"compress/zlib"
 	"fmt"
 	"io"
 	"strconv"
@@ -523,61 +522,9 @@ func (p *Parser) ParseXRefStreamWithFileAccess(file io.ReadSeeker, xrefOffset in
 		return nil, fmt.Errorf("failed to read stream data: %w", err)
 	}
 
-	// Decode the stream based on filter
-	filterObj := dict.Get("Filter")
-	var decodedData []byte
-
-	if filterObj != nil {
-		var filterName string
-		if nameObj, ok := filterObj.(*Name); ok {
-			filterName = nameObj.Value()
-		}
-
-		if filterName == filterFlateDecode {
-			decoder := &flateDecoder{}
-
-			// Check for predictor in DecodeParms
-			predictor := 1 // default: no predictor
-			columns := 1   // default columns
-			decodeParmsObj := dict.Get("DecodeParms")
-			if decodeParmsObj != nil {
-				if parmsDict, ok := decodeParmsObj.(*Dictionary); ok {
-					if predObj := parmsDict.Get("Predictor"); predObj != nil {
-						if predInt, ok := predObj.(*Integer); ok {
-							predictor = int(predInt.Value())
-						}
-					}
-					if colObj := parmsDict.Get("Columns"); colObj != nil {
-						if colInt, ok := colObj.(*Integer); ok {
-							columns = int(colInt.Value())
-						}
-					}
-					// Validate BitsPerComponent if present (must be 8 for PNG predictors)
-					if bpcObj := parmsDict.Get("BitsPerComponent"); bpcObj != nil {
-						if bpcInt, ok := bpcObj.(*Integer); ok {
-							bpc := int(bpcInt.Value())
-							if bpc != 8 && predictor >= 10 {
-								return nil, fmt.Errorf("PNG predictor requires BitsPerComponent=8, got %d", bpc)
-							}
-						}
-					}
-				}
-			}
-
-			if predictor > 1 {
-				decodedData, err = decoder.DecodeWithPredictor(streamData, predictor, columns)
-			} else {
-				decodedData, err = decoder.Decode(streamData)
-			}
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode %s stream: %w", filterFlateDecode, err)
-			}
-		} else {
-			return nil, fmt.Errorf("unsupported xref stream filter: %s", filterName)
-		}
-	} else {
-		// No filter, use data as-is
-		decodedData = streamData
+	decodedData, err := NewStream(dict, streamData).Decode()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode xref stream: %w", err)
 	}
 
 	// Parse binary xref entries (using Parser method)
@@ -764,93 +711,34 @@ func (p *Parser) parseStreamData(dict *Dictionary) ([]byte, error) {
 
 // decodeXRefStream decodes a compressed xref stream.
 func (p *Parser) decodeXRefStream(dict *Dictionary, data []byte) ([]byte, error) {
-	// Check for /Filter entry
-	filterObj := dict.Get("Filter")
-	if filterObj == nil {
-		// No filter, data is uncompressed
-		return data, nil
+	decoded, err := NewStream(dict, data).Decode()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode xref stream: %w", err)
 	}
-
-	// Get filter name
-	var filterName string
-	switch obj := filterObj.(type) {
-	case *Name:
-		filterName = obj.Value()
-	case *Array:
-		// Multiple filters (apply in order)
-		// For now, handle single filter case
-		if obj.Len() > 0 {
-			if nameObj, ok := obj.Get(0).(*Name); ok {
-				filterName = nameObj.Value()
-			}
-		}
-	}
-
-	// Decode based on filter type
-	switch filterName {
-	case "FlateDecode":
-		// Use embedded decoder to avoid import cycles
-		decoder := &flateDecoder{}
-		decoded, err := decoder.Decode(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode FlateDecode stream: %w", err)
-		}
-		return decoded, nil
-
-	case "":
-		// No filter
-		return data, nil
-
-	default:
-		return nil, fmt.Errorf("unsupported xref stream filter: %s", filterName)
-	}
+	return decoded, nil
 }
 
-// flateDecoder is a simple Flate decoder embedded here to avoid import cycles.
-// This uses standard library compress/zlib.
+// flateDecoder is retained as a compatibility adapter for parser tests and
+// callers inside this package. Stream.Decode owns the decoding implementation.
 type flateDecoder struct{}
 
 func (d *flateDecoder) Decode(data []byte) ([]byte, error) {
-	reader, err := zlib.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create zlib reader: %w", err)
-	}
-	defer func() { _ = reader.Close() }()
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, reader); err != nil {
-		return nil, fmt.Errorf("failed to decompress data: %w", err)
-	}
-
-	return buf.Bytes(), nil
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", NewName("FlateDecode"))
+	return NewStream(dictionary, data).Decode()
 }
 
 // DecodeWithPredictor decompresses data and applies PNG predictor filter.
 // predictor: 1=none, 10-15=PNG predictors
 // columns: number of columns (bytes per row excluding filter byte)
 func (d *flateDecoder) DecodeWithPredictor(data []byte, predictor, columns int) ([]byte, error) {
-	// First, decompress the data
-	decompressed, err := d.Decode(data)
-	if err != nil {
-		return nil, err
-	}
-
-	// If no predictor or predictor=1 (none), return as-is
-	if predictor <= 1 {
-		return decompressed, nil
-	}
-
-	// PNG predictors (10-15)
-	if predictor >= 10 && predictor <= 15 {
-		return applyPNGPredictor(decompressed, columns)
-	}
-
-	// TIFF predictor (2) - not implemented yet
-	if predictor == 2 {
-		return nil, fmt.Errorf("TIFF predictor not implemented")
-	}
-
-	return nil, fmt.Errorf("unsupported predictor: %d", predictor)
+	parameters := NewDictionary()
+	parameters.Set("Predictor", NewInteger(int64(predictor)))
+	parameters.Set("Columns", NewInteger(int64(columns)))
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", NewName("FlateDecode"))
+	dictionary.Set("DecodeParms", parameters)
+	return NewStream(dictionary, data).Decode()
 }
 
 // applyPNGPredictor reverses PNG prediction filters.
@@ -860,79 +748,10 @@ func (d *flateDecoder) DecodeWithPredictor(data []byte, predictor, columns int) 
 // This implementation requires BitsPerComponent=8 (one byte per component).
 // The caller must validate BitsPerComponent before calling this function.
 func applyPNGPredictor(data []byte, columns int) ([]byte, error) {
-	// Sanity check: prevent excessive memory allocation on malformed PDFs
-	const maxColumns = 100_000
-	if columns <= 0 || columns > maxColumns {
-		return nil, fmt.Errorf("PNG predictor: columns %d out of valid range (1-%d)", columns, maxColumns)
+	if columns <= 0 || columns > 100_000 {
+		return nil, fmt.Errorf("PNG predictor: columns %d out of valid range (1-100000)", columns)
 	}
-
-	rowSize := columns + 1 // +1 for filter byte
-	if len(data)%rowSize != 0 {
-		return nil, fmt.Errorf("PNG predictor: data length %d not divisible by row size %d", len(data), rowSize)
-	}
-
-	numRows := len(data) / rowSize
-	result := make([]byte, 0, numRows*columns)
-	prevRow := make([]byte, columns)
-
-	for row := 0; row < numRows; row++ {
-		rowStart := row * rowSize
-		filterByte := data[rowStart]
-		rowData := data[rowStart+1 : rowStart+rowSize]
-		decodedRow := make([]byte, columns)
-
-		switch filterByte {
-		case 0: // None
-			copy(decodedRow, rowData)
-
-		case 1: // Sub: each byte depends on the byte to its left
-			for i := 0; i < columns; i++ {
-				left := byte(0)
-				if i > 0 {
-					left = decodedRow[i-1]
-				}
-				decodedRow[i] = rowData[i] + left
-			}
-
-		case 2: // Up: each byte depends on the byte above
-			for i := 0; i < columns; i++ {
-				decodedRow[i] = rowData[i] + prevRow[i]
-			}
-
-		case 3: // Average: each byte depends on average of left and above
-			for i := 0; i < columns; i++ {
-				left := byte(0)
-				if i > 0 {
-					left = decodedRow[i-1]
-				}
-				up := prevRow[i]
-				avg := (int(left) + int(up)) / 2
-				decodedRow[i] = rowData[i] + byte(avg)
-			}
-
-		case 4: // Paeth: each byte uses Paeth predictor
-			for i := 0; i < columns; i++ {
-				left := byte(0)
-				if i > 0 {
-					left = decodedRow[i-1]
-				}
-				up := prevRow[i]
-				upLeft := byte(0)
-				if i > 0 {
-					upLeft = prevRow[i-1]
-				}
-				decodedRow[i] = rowData[i] + paethPredictor(left, up, upLeft)
-			}
-
-		default:
-			return nil, fmt.Errorf("unknown PNG filter type: %d", filterByte)
-		}
-
-		result = append(result, decodedRow...)
-		copy(prevRow, decodedRow)
-	}
-
-	return result, nil
+	return applyPNGPredictorBytes(data, columns, 1)
 }
 
 // paethPredictor implements the Paeth predictor algorithm from PNG spec.

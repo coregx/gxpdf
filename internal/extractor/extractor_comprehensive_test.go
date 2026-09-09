@@ -3,7 +3,10 @@ package extractor
 import (
 	"bytes"
 	"compress/zlib"
+	"encoding/ascii85"
+	"errors"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/coregx/gxpdf/internal/parser"
@@ -745,44 +748,6 @@ func TestIsDelimiter_NonDelimiters(t *testing.T) {
 	}
 }
 
-// ---------- decodeFlateDecode tests ----------
-
-func TestDecodeFlateDecode_ValidData(t *testing.T) {
-	r := openExtractorTestReader(t, "../../testdata/pdfs/minimal.pdf")
-	defer r.Close()
-
-	te := NewTextExtractor(r)
-
-	// Compress "Hello World" with zlib
-	compress := func(data []byte) []byte {
-		var buf bytes.Buffer
-		w := zlib.NewWriter(&buf)
-		_, _ = w.Write(data)
-		_ = w.Close()
-		return buf.Bytes()
-	}
-	compressed := compress([]byte("Hello World"))
-
-	decoded, err := te.decodeFlateDecode(compressed)
-	if err != nil {
-		t.Fatalf("decodeFlateDecode error = %v", err)
-	}
-	if string(decoded) != "Hello World" {
-		t.Errorf("decodeFlateDecode = %q, want Hello World", string(decoded))
-	}
-}
-
-func TestDecodeFlateDecode_InvalidData(t *testing.T) {
-	r := openExtractorTestReader(t, "../../testdata/pdfs/minimal.pdf")
-	defer r.Close()
-
-	te := NewTextExtractor(r)
-	_, err := te.decodeFlateDecode([]byte("not valid zlib data"))
-	if err == nil {
-		t.Error("decodeFlateDecode(invalid) should return error")
-	}
-}
-
 // ---------- parseDifferencesArray tests ----------
 
 func TestParseDifferencesArray_NoDifferences(t *testing.T) {
@@ -823,28 +788,6 @@ func TestParseDifferencesArray_WithDifferences(t *testing.T) {
 	result := te.parseDifferencesArray(encodingDict)
 	if len(result) == 0 {
 		t.Error("parseDifferencesArray with valid data should return non-empty map")
-	}
-}
-
-// ---------- bytesReaderCloser tests ----------
-
-func TestBytesReaderCloser_ReadAndClose(t *testing.T) {
-	b := &bytesReaderCloser{data: []byte("hello"), pos: 0}
-	buf := make([]byte, 5)
-	n, err := b.Read(buf)
-	if err != nil {
-		t.Fatalf("Read error = %v", err)
-	}
-	if n != 5 || string(buf[:n]) != "hello" {
-		t.Errorf("Read = %q (n=%d), want hello", string(buf[:n]), n)
-	}
-	// Read again should return EOF
-	n2, err2 := b.Read(buf)
-	if err2 == nil || n2 != 0 {
-		t.Errorf("Read at EOF: n=%d err=%v, want 0/EOF", n2, err2)
-	}
-	if err := b.Close(); err != nil {
-		t.Errorf("Close error = %v", err)
 	}
 }
 
@@ -1121,48 +1064,16 @@ func TestGetColorSpaceName_WrongType(t *testing.T) {
 	}
 }
 
-func TestGetFilterName_Nil(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	result := ie.getFilterName(nil)
-	if result != "" {
-		t.Errorf("getFilterName(nil) = %q, want empty", result)
-	}
-}
-
-func TestGetFilterName_DirectName(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	result := ie.getFilterName(parser.NewName("DCTDecode"))
-	if result != "DCTDecode" {
-		t.Errorf("getFilterName(Name) = %q, want DCTDecode", result)
-	}
-}
-
-func TestGetFilterName_Array(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	arr := parser.NewArray()
-	arr.Append(parser.NewName(filterFlateDecode))
-	result := ie.getFilterName(arr)
-	if result != filterFlateDecode {
-		t.Errorf("getFilterName(Array) = %q, want FlateDecode", result)
-	}
-}
-
-func TestGetFilterName_EmptyArray(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	arr := parser.NewArray()
-	result := ie.getFilterName(arr)
-	if result != "" {
-		t.Errorf("getFilterName(empty array) = %q, want empty", result)
-	}
-}
-
 func TestDecodeImageData_NoFilter(t *testing.T) {
 	ie := newTestImageExtractor(t)
 	dict := parser.NewDictionary()
 	stream := parser.NewStream(dict, []byte{0xFF, 0xD8, 0xFF})
-	data, err := ie.decodeImageData(stream, "")
+	data, filter, err := ie.decodeImageData(stream)
 	if err != nil {
 		t.Fatalf("decodeImageData(no filter) error = %v", err)
+	}
+	if filter != "" {
+		t.Errorf("filter = %q, want empty", filter)
 	}
 	if len(data) != 3 {
 		t.Errorf("data len = %d, want 3", len(data))
@@ -1172,24 +1083,57 @@ func TestDecodeImageData_NoFilter(t *testing.T) {
 func TestDecodeImageData_DCTDecode(t *testing.T) {
 	ie := newTestImageExtractor(t)
 	dict := parser.NewDictionary()
+	dict.Set("Filter", parser.NewName("DCTDecode"))
 	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0}
 	stream := parser.NewStream(dict, jpegData)
-	data, err := ie.decodeImageData(stream, "/DCTDecode")
+	data, filter, err := ie.decodeImageData(stream)
 	if err != nil {
 		t.Fatalf("decodeImageData(DCT) error = %v", err)
 	}
-	if len(data) == 0 {
-		t.Error("DCT decode should return data")
+	if filter != "/DCTDecode" {
+		t.Errorf("filter = %q, want /DCTDecode", filter)
+	}
+	if !bytes.Equal(data, jpegData) {
+		t.Errorf("DCT image path changed encoded payload: got %x, want %x", data, jpegData)
 	}
 }
 
 func TestDecodeImageData_UnsupportedFilter(t *testing.T) {
 	ie := newTestImageExtractor(t)
 	dict := parser.NewDictionary()
+	dict.Set("Filter", parser.NewName("JBIG2Decode"))
 	stream := parser.NewStream(dict, []byte{0x01, 0x02})
-	_, err := ie.decodeImageData(stream, "/JBIG2Decode")
+	_, _, err := ie.decodeImageData(stream)
 	if err == nil {
 		t.Error("decodeImageData(unsupported) should return error")
+	}
+}
+
+func TestExtractImageFromStream_DecodesFilterChainBeforeDCT(t *testing.T) {
+	ie := newTestImageExtractor(t)
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0}
+	encoded := make([]byte, ascii85.MaxEncodedLen(len(jpegData)))
+	written := ascii85.Encode(encoded, jpegData)
+	encoded = append(encoded[:written], '~', '>')
+	filters := parser.NewArray()
+	filters.Append(parser.NewName("ASCII85Decode"))
+	filters.Append(parser.NewName("DCTDecode"))
+	dict := parser.NewDictionary()
+	dict.Set("Width", parser.NewInteger(1))
+	dict.Set("Height", parser.NewInteger(1))
+	dict.Set("BitsPerComponent", parser.NewInteger(8))
+	dict.Set("ColorSpace", parser.NewName(colorSpaceDeviceRGB))
+	dict.Set("Filter", filters)
+
+	image, err := ie.extractImageFromStream(parser.NewStream(dict, encoded), "Im1")
+	if err != nil {
+		t.Fatalf("extractImageFromStream() error = %v", err)
+	}
+	if !bytes.Equal(image.Data(), jpegData) {
+		t.Errorf("image data = %x, want %x", image.Data(), jpegData)
+	}
+	if image.Filter() != "/DCTDecode" {
+		t.Errorf("filter = %q, want /DCTDecode", image.Filter())
 	}
 }
 
@@ -1411,13 +1355,8 @@ func TestDecodeStream_UnsupportedFilter(t *testing.T) {
 	dict := parser.NewDictionary()
 	dict.Set("Filter", parser.NewName("JBIG2Decode"))
 	stream := parser.NewStream(dict, []byte("raw"))
-	// Unsupported filter returns raw content, no error
-	data, err := te.decodeStream(stream)
-	if err != nil {
-		t.Fatalf("decodeStream(unsupported) unexpected error = %v", err)
-	}
-	if string(data) != "raw" {
-		t.Errorf("decodeStream(unsupported) = %q, want raw", string(data))
+	if _, err := te.decodeStream(stream); err == nil {
+		t.Fatal("decodeStream(unsupported) error = nil, want error")
 	}
 }
 
@@ -1469,6 +1408,28 @@ func TestGetPageContent_ArrayOfStreams(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Error("getPageContent(array) should return non-empty data")
+	}
+}
+
+func TestGetPageContent_ArrayFailsClosedOnUndecodableStream(t *testing.T) {
+	te := newExtractorWithResources(t)
+	page := parser.NewDictionary()
+	unsupportedDictionary := parser.NewDictionary()
+	unsupportedDictionary.Set("Filter", parser.NewName("CCITTFaxDecode"))
+	contents := parser.NewArray()
+	contents.Append(parser.NewStream(parser.NewDictionary(), []byte("BT ET")))
+	contents.Append(parser.NewStream(unsupportedDictionary, []byte("encoded")))
+	page.Set("Contents", contents)
+
+	_, err := te.getPageContent(page)
+	if err == nil {
+		t.Fatal("getPageContent() error = nil, want unsupported-filter error")
+	}
+	if !strings.Contains(err.Error(), "content stream 1") {
+		t.Errorf("getPageContent() error = %q, want stream index", err)
+	}
+	if !errors.Is(err, parser.ErrUnsupportedStreamFilter) {
+		t.Errorf("getPageContent() error = %v, want ErrUnsupportedStreamFilter", err)
 	}
 }
 
@@ -1567,10 +1528,14 @@ func TestDecodeImageData_FlateDecode(t *testing.T) {
 	_ = w.Close()
 
 	dict := parser.NewDictionary()
+	dict.Set("Filter", parser.NewName("FlateDecode"))
 	stream := parser.NewStream(dict, buf.Bytes())
-	data, err := ie.decodeImageData(stream, "/FlateDecode")
+	data, filter, err := ie.decodeImageData(stream)
 	if err != nil {
 		t.Fatalf("decodeImageData(FlateDecode) error = %v", err)
+	}
+	if filter != "/FlateDecode" {
+		t.Errorf("filter = %q, want /FlateDecode", filter)
 	}
 	if len(data) == 0 {
 		t.Error("FlateDecode should return non-empty data")
@@ -1654,12 +1619,8 @@ func TestGraphicsParser_DecodeStream_UnsupportedFilter(t *testing.T) {
 	dict := parser.NewDictionary()
 	dict.Set("Filter", parser.NewName("JBIG2Decode"))
 	stream := parser.NewStream(dict, []byte("raw"))
-	data, err := gp.decodeStream(stream)
-	if err != nil {
-		t.Fatalf("graphics decodeStream(unsupported) error = %v", err)
-	}
-	if string(data) != "raw" {
-		t.Errorf("graphics decodeStream(unsupported) = %q, want raw", string(data))
+	if _, err := gp.decodeStream(stream); err == nil {
+		t.Fatal("graphics decodeStream(unsupported) error = nil, want error")
 	}
 }
 

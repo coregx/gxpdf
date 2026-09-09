@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"context"
 	"fmt"
 	"math"
 
@@ -109,6 +110,7 @@ type pathSegment struct {
 //	paths, err := vp.ParseFromPage(0)
 type VectorParser struct {
 	reader   *parser.Reader
+	ctx      context.Context
 	state    vectorGraphicsState
 	stack    vectorStateStack
 	curPath  []pathSegment // path being assembled between m..h and S/f/B
@@ -122,8 +124,15 @@ type VectorParser struct {
 
 // NewVectorParser creates a VectorParser for the given PDF reader.
 func NewVectorParser(reader *parser.Reader) *VectorParser {
+	return NewVectorParserWithContext(reader, context.Background())
+}
+
+// NewVectorParserWithContext creates a VectorParser whose stream decoding
+// observes ctx.
+func NewVectorParserWithContext(reader *parser.Reader, ctx context.Context) *VectorParser {
 	return &VectorParser{
 		reader: reader,
+		ctx:    contextOrBackground(ctx),
 		state:  newVectorGraphicsState(),
 	}
 }
@@ -135,6 +144,9 @@ func NewVectorParser(reader *parser.Reader) *VectorParser {
 // Returns a slice of VectorPath values, or an error if extraction fails.
 // An empty page returns an empty (non-nil) slice.
 func (vp *VectorParser) ParseFromPage(pageNum int) ([]*VectorPath, error) {
+	if err := contextOrBackground(vp.ctx).Err(); err != nil {
+		return nil, err
+	}
 	// Reset per-page state.
 	vp.state = newVectorGraphicsState()
 	vp.stack = vectorStateStack{}
@@ -143,7 +155,7 @@ func (vp *VectorParser) ParseFromPage(pageNum int) ([]*VectorPath, error) {
 	vp.paths = nil
 	vp.pageNum = pageNum
 
-	page, err := vp.reader.GetPage(pageNum)
+	page, err := vp.reader.GetPageWithContext(vp.ctx, pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
@@ -167,7 +179,13 @@ func (vp *VectorParser) ParseFromPage(pageNum int) ([]*VectorPath, error) {
 	}
 
 	for _, op := range operators {
+		if err := vp.ctx.Err(); err != nil {
+			return nil, err
+		}
 		vp.processVectorOperator(op)
+		if err := vp.ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	return vp.paths, nil
@@ -185,7 +203,7 @@ func (vp *VectorParser) getPageResources(page *parser.Dictionary) *parser.Dictio
 		return parser.NewDictionary()
 	}
 	if ref, ok := resObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err == nil {
 			if d, ok := resolved.(*parser.Dictionary); ok {
 				return d
@@ -208,7 +226,7 @@ func (vp *VectorParser) getPageContent(page *parser.Dictionary) ([]byte, error) 
 	}
 
 	if ref, ok := contentsObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve contents reference: %w", err)
 		}
@@ -224,23 +242,25 @@ func (vp *VectorParser) getPageContent(page *parser.Dictionary) ([]byte, error) 
 		for i := 0; i < obj.Len(); i++ {
 			streamRef := obj.Get(i)
 			if streamRef == nil {
-				continue
+				return nil, fmt.Errorf("content stream %d is null", i)
 			}
 			if ref, ok := streamRef.(*parser.IndirectReference); ok {
-				resolved, err := vp.reader.GetObject(ref.Number)
+				resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 				if err != nil {
-					continue
+					return nil, fmt.Errorf("failed to resolve content stream %d: %w", i, err)
 				}
 				streamRef = resolved
 			}
-			if stream, ok := streamRef.(*parser.Stream); ok {
-				content, err := vp.decodeStream(stream)
-				if err != nil {
-					continue
-				}
-				all = append(all, content...)
-				all = append(all, ' ')
+			stream, ok := streamRef.(*parser.Stream)
+			if !ok {
+				return nil, fmt.Errorf("content stream %d is %T, want Stream", i, streamRef)
 			}
+			content, err := vp.decodeStream(stream)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode content stream %d: %w", i, err)
+			}
+			all = append(all, content...)
+			all = append(all, ' ')
 		}
 		return all, nil
 
@@ -249,35 +269,9 @@ func (vp *VectorParser) getPageContent(page *parser.Dictionary) ([]byte, error) 
 	}
 }
 
-// decodeStream decodes a PDF content stream using its filter chain.
-//
-//nolint:dupl // Similar to GraphicsParser.decodeStream, refactoring later.
+// decodeStream delegates to the parser's canonical bounded filter pipeline.
 func (vp *VectorParser) decodeStream(stream *parser.Stream) ([]byte, error) {
-	filterObj := stream.Dictionary().Get("Filter")
-	if filterObj == nil {
-		return stream.Content(), nil
-	}
-
-	var filterName string
-	if name, ok := filterObj.(*parser.Name); ok {
-		filterName = name.Value()
-	} else if arr, ok := filterObj.(*parser.Array); ok {
-		if arr.Len() > 0 {
-			if name, ok := arr.Get(0).(*parser.Name); ok {
-				filterName = name.Value()
-			}
-		}
-	}
-
-	switch filterName {
-	case filterFlateDecode:
-		te := &TextExtractor{reader: vp.reader}
-		return te.decodeFlateDecode(stream.Content())
-	case "":
-		return stream.Content(), nil
-	default:
-		return stream.Content(), nil
-	}
+	return stream.DecodeWithContext(contextOrBackground(vp.ctx), parser.DefaultStreamDecodeOptions())
 }
 
 // processVectorOperator dispatches a single content-stream operator.
@@ -659,7 +653,7 @@ func (vp *VectorParser) applyExtGState(name string) {
 
 	// Resolve indirect reference if needed.
 	if ref, ok := extGObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err != nil {
 			return
 		}
@@ -678,7 +672,7 @@ func (vp *VectorParser) applyExtGState(name string) {
 
 	// Resolve indirect reference for the graphics state dict itself.
 	if ref, ok := gsObj.(*parser.IndirectReference); ok {
-		resolved, err := vp.reader.GetObject(ref.Number)
+		resolved, err := vp.reader.GetObjectWithContext(vp.ctx, ref.Number)
 		if err != nil {
 			return
 		}

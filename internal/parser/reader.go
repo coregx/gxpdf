@@ -3,6 +3,7 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,15 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/coregx/gxpdf/internal/encoding"
 	"github.com/coregx/gxpdf/internal/security"
 	"github.com/coregx/gxpdf/logging"
-)
-
-// PDF filter name constants.
-const (
-	filterFlateDecode = "FlateDecode"
-	filterDCTDecode   = "DCTDecode"
 )
 
 // Page tree node type constants.
@@ -630,6 +624,19 @@ func (r *Reader) loadCatalog() error {
 //
 // Returns error if object is not found or cannot be parsed.
 func (r *Reader) GetObject(objectNum int) (PdfObject, error) {
+	return r.GetObjectWithContext(context.Background(), objectNum)
+}
+
+// GetObjectWithContext retrieves and resolves an indirect object while
+// propagating cancellation to any object-stream decoding required to load it.
+func (r *Reader) GetObjectWithContext(ctx context.Context, objectNum int) (PdfObject, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// Check cache first (read lock)
 	r.mu.RLock()
 	if obj, ok := r.objectCache[objectNum]; ok {
@@ -652,7 +659,7 @@ func (r *Reader) GetObject(objectNum int) (PdfObject, error) {
 
 	case XRefEntryCompressed:
 		// PDF 1.5+ compressed object (in Object Stream)
-		return r.getCompressedObject(objectNum, entry)
+		return r.getCompressedObjectWithContext(ctx, objectNum, entry)
 
 	case XRefEntryFree:
 		return nil, fmt.Errorf("object %d is free (deleted)", objectNum)
@@ -724,6 +731,9 @@ func (r *Reader) getInUseObject(objectNum int, entry *XRefEntry) (PdfObject, err
 	// Decrypt the object if the PDF is encrypted (skip the /Encrypt dict itself)
 	if r.decryptor != nil && indirectObj.Number != r.encryptObjNum {
 		obj = r.decryptParsedObject(obj, indirectObj.Number, indirectObj.Generation)
+	}
+	if stream, ok := obj.(*Stream); ok {
+		stream.setObjectResolver(r.GetObjectWithContext)
 	}
 
 	// Cache the object (write lock)
@@ -830,17 +840,33 @@ func (r *Reader) scanDirection(startOffset int64, pattern []byte, maxSize int, f
 	return obj
 }
 
-// getCompressedObject retrieves a compressed object from an Object Stream (PDF 1.5+).
+// getCompressedObjectWithContext retrieves a compressed object from an Object Stream (PDF 1.5+).
 //
 // Compressed objects are stored in special stream objects (Type /ObjStm) along
 // with other objects for space efficiency.
 //
 // Reference: PDF 1.7 specification, Section 7.5.7 (Object Streams).
-func (r *Reader) getCompressedObject(objectNum int, entry *XRefEntry) (PdfObject, error) {
+type objectStreamDecodeStackKey struct{}
+
+func (r *Reader) getCompressedObjectWithContext(
+	ctx context.Context,
+	objectNum int,
+	entry *XRefEntry,
+) (PdfObject, error) {
 	// entry.Offset contains the ObjStm object number
 	// entry.Generation contains the index within that ObjStm
 	objStmNum := int(entry.Offset)
 	objIndex := entry.Generation
+	decodeStack, _ := ctx.Value(objectStreamDecodeStackKey{}).(map[int]struct{})
+	if _, recursive := decodeStack[objStmNum]; recursive {
+		return nil, fmt.Errorf("circular decode dependency through ObjStm %d", objStmNum)
+	}
+	nextDecodeStack := make(map[int]struct{}, len(decodeStack)+1)
+	for number := range decodeStack {
+		nextDecodeStack[number] = struct{}{}
+	}
+	nextDecodeStack[objStmNum] = struct{}{}
+	ctx = context.WithValue(ctx, objectStreamDecodeStackKey{}, nextDecodeStack)
 
 	// Check if we've already parsed this ObjStm (read lock)
 	r.mu.RLock()
@@ -853,18 +879,6 @@ func (r *Reader) getCompressedObject(objectNum int, entry *XRefEntry) (PdfObject
 		return nil, fmt.Errorf("object %d not found in ObjStm %d at index %d", objectNum, objStmNum, objIndex)
 	}
 	r.mu.RUnlock()
-
-	// Need to load and parse the ObjStm (write lock for cache)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Double-check after acquiring write lock (another goroutine might have loaded it)
-	if objStmObjects, ok := r.objStmCache[objStmNum]; ok {
-		if obj, ok := objStmObjects[objectNum]; ok {
-			return obj, nil
-		}
-		return nil, fmt.Errorf("object %d not found in ObjStm %d at index %d", objectNum, objStmNum, objIndex)
-	}
 
 	// Load the ObjStm object (it must be in-use, not compressed itself)
 	objStmEntry, ok := r.xrefTable.GetEntry(objStmNum)
@@ -926,7 +940,7 @@ func (r *Reader) getCompressedObject(objectNum int, entry *XRefEntry) (PdfObject
 	}
 
 	// Decode the stream
-	decodedData, err := r.decodeStream(stream)
+	decodedData, err := r.decodeStreamWithContext(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode ObjStm %d: %w", objStmNum, err)
 	}
@@ -937,7 +951,21 @@ func (r *Reader) getCompressedObject(objectNum int, entry *XRefEntry) (PdfObject
 		return nil, fmt.Errorf("failed to parse ObjStm %d: %w", objStmNum, err)
 	}
 
-	// Cache the parsed objects
+	// Resolve and decode without holding the cache lock: stream decode controls
+	// may themselves be indirect objects and therefore need GetObjectWithContext.
+	// Concurrent callers may parse the same immutable ObjStm, then converge on
+	// the first cached result below.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cached, exists := r.objStmCache[objStmNum]; exists {
+		obj, found := cached[objectNum]
+		if !found {
+			return nil, fmt.Errorf("object %d not found in ObjStm %d at index %d", objectNum, objStmNum, objIndex)
+		}
+		return obj, nil
+	}
+
+	// Cache the parsed objects.
 	r.objStmCache[objStmNum] = objStmObjects
 
 	// Also cache each individual object in objectCache
@@ -954,86 +982,14 @@ func (r *Reader) getCompressedObject(objectNum int, entry *XRefEntry) (PdfObject
 	return obj, nil
 }
 
-// createDCTDecoder creates a DCT decoder with parameters from the stream dictionary.
-func (r *Reader) createDCTDecoder(dict *Dictionary) *encoding.DCTDecoder {
-	// Check for decode parameters
-	decodeParmsObj := dict.Get("DecodeParms")
-	if decodeParmsObj == nil {
-		// No parameters - use defaults
-		return encoding.NewDCTDecoder()
-	}
-
-	// Extract ColorTransform parameter
-	colorTransform := 1 // Default: YCbCr to RGB
-	if parmsDict, ok := decodeParmsObj.(*Dictionary); ok {
-		if ctObj := parmsDict.Get("ColorTransform"); ctObj != nil {
-			if ctInt, ok := ctObj.(*Integer); ok {
-				colorTransform = int(ctInt.Value())
-			}
-		}
-	}
-
-	return encoding.NewDCTDecoderWithParams(colorTransform)
-}
-
 // decodeStream decodes a stream object based on its filters.
 func (r *Reader) decodeStream(stream *Stream) ([]byte, error) {
-	dict := stream.Dictionary()
-	filterObj := dict.Get("Filter")
-
-	// No filter - return raw content
-	if filterObj == nil {
-		return stream.Content(), nil
-	}
-
-	// Extract filter name from Filter entry
-	filterName := r.extractFilterName(filterObj)
-	if filterName == "" {
-		return stream.Content(), nil
-	}
-
-	// Apply the filter
-	return r.applyFilter(filterName, dict, stream.Content())
+	return r.decodeStreamWithContext(context.Background(), stream)
 }
 
-// extractFilterName extracts the filter name from a Filter object.
-func (r *Reader) extractFilterName(filterObj PdfObject) string {
-	switch obj := filterObj.(type) {
-	case *Name:
-		return obj.Value()
-	case *Array:
-		// Multiple filters - for now, handle single filter case
-		if obj.Len() > 0 {
-			if nameObj, ok := obj.Get(0).(*Name); ok {
-				return nameObj.Value()
-			}
-		}
-	}
-	return ""
-}
-
-// applyFilter applies the specified filter to stream content.
-func (r *Reader) applyFilter(filterName string, dict *Dictionary, content []byte) ([]byte, error) {
-	switch filterName {
-	case filterFlateDecode:
-		decoder := encoding.NewFlateDecoder()
-		decoded, err := decoder.Decode(content)
-		if err != nil {
-			return nil, fmt.Errorf("%s failed: %w", filterFlateDecode, err)
-		}
-		return decoded, nil
-
-	case filterDCTDecode:
-		decoder := r.createDCTDecoder(dict)
-		decoded, err := decoder.Decode(content)
-		if err != nil {
-			return nil, fmt.Errorf("DCTDecode failed: %w", err)
-		}
-		return decoded, nil
-
-	default:
-		return nil, fmt.Errorf("unsupported filter: %s", filterName)
-	}
+func (r *Reader) decodeStreamWithContext(ctx context.Context, stream *Stream) ([]byte, error) {
+	stream.setObjectResolver(r.GetObjectWithContext)
+	return stream.DecodeWithContext(ctx, DefaultStreamDecodeOptions())
 }
 
 // resolveReferences recursively resolves indirect references.
@@ -1088,9 +1044,13 @@ func (r *Reader) resolveReferences(obj PdfObject) PdfObject {
 
 // resolveDictionary is a helper that resolves an object and ensures it's a dictionary.
 func (r *Reader) resolveDictionary(obj PdfObject) (*Dictionary, error) {
+	return r.resolveDictionaryWithContext(context.Background(), obj)
+}
+
+func (r *Reader) resolveDictionaryWithContext(ctx context.Context, obj PdfObject) (*Dictionary, error) {
 	// If it's an indirect reference, resolve it
 	if ref, ok := obj.(*IndirectReference); ok {
-		resolved, err := r.GetObject(ref.Number)
+		resolved, err := r.GetObjectWithContext(ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve reference %d %d R: %w",
 				ref.Number, ref.Generation, err)
@@ -1186,6 +1146,18 @@ func (r *Reader) GetPageCount() (int, error) {
 //
 // Reference: PDF 1.7 specification, Section 7.7.3 (Page Tree).
 func (r *Reader) GetPage(pageNum int) (*Dictionary, error) {
+	return r.GetPageWithContext(context.Background(), pageNum)
+}
+
+// GetPageWithContext returns a page dictionary while propagating cancellation
+// through indirect page-tree and object-stream resolution.
+func (r *Reader) GetPageWithContext(ctx context.Context, pageNum int) (*Dictionary, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if r.pages == nil {
 		return nil, fmt.Errorf("pages not loaded (call Open first)")
 	}
@@ -1195,7 +1167,7 @@ func (r *Reader) GetPage(pageNum int) (*Dictionary, error) {
 	}
 
 	// Traverse page tree
-	page, err := r.getPageFromNode(r.pages, &pageNum)
+	page, err := r.getPageFromNodeWithContext(ctx, r.pages, &pageNum)
 	if err != nil {
 		return nil, err
 	}
@@ -1207,7 +1179,7 @@ func (r *Reader) GetPage(pageNum int) (*Dictionary, error) {
 	return page, nil
 }
 
-// getPageFromNode recursively traverses the page tree to find a page.
+// getPageFromNodeWithContext recursively traverses the page tree to find a page.
 //
 // The pageNum pointer is decremented as we traverse leaf pages,
 // so when it reaches 0, we've found the target page.
@@ -1217,7 +1189,14 @@ func (r *Reader) GetPage(pageNum int) (*Dictionary, error) {
 //   - Leaf nodes: /Type /Page
 //
 // Reference: PDF 1.7 specification, Section 7.7.3.2 (Page Tree Nodes).
-func (r *Reader) getPageFromNode(node *Dictionary, pageNum *int) (*Dictionary, error) {
+func (r *Reader) getPageFromNodeWithContext(
+	ctx context.Context,
+	node *Dictionary,
+	pageNum *int,
+) (*Dictionary, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	typeObj := node.GetName("Type")
 	if typeObj == nil {
 		return nil, fmt.Errorf("page tree node missing /Type entry")
@@ -1242,7 +1221,7 @@ func (r *Reader) getPageFromNode(node *Dictionary, pageNum *int) (*Dictionary, e
 		}
 
 		// Resolve kids array
-		kids, err := r.resolveArray(kidsObj)
+		kids, err := r.resolveArrayWithContext(ctx, kidsObj)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve /Kids array: %w", err)
 		}
@@ -1255,13 +1234,13 @@ func (r *Reader) getPageFromNode(node *Dictionary, pageNum *int) (*Dictionary, e
 			}
 
 			// Resolve kid dictionary
-			kid, err := r.resolveDictionary(kidObj)
+			kid, err := r.resolveDictionaryWithContext(ctx, kidObj)
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve kid %d: %w", i, err)
 			}
 
 			// Recursively search this subtree
-			page, err := r.getPageFromNode(kid, pageNum)
+			page, err := r.getPageFromNodeWithContext(ctx, kid, pageNum)
 			if err != nil {
 				return nil, err
 			}
@@ -1286,9 +1265,13 @@ func (r *Reader) getPageFromNode(node *Dictionary, pageNum *int) (*Dictionary, e
 
 // resolveArray is a helper that resolves an object and ensures it's an array.
 func (r *Reader) resolveArray(obj PdfObject) (*Array, error) {
+	return r.resolveArrayWithContext(context.Background(), obj)
+}
+
+func (r *Reader) resolveArrayWithContext(ctx context.Context, obj PdfObject) (*Array, error) {
 	// If it's an indirect reference, resolve it
 	if ref, ok := obj.(*IndirectReference); ok {
-		resolved, err := r.GetObject(ref.Number)
+		resolved, err := r.GetObjectWithContext(ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve reference %d %d R: %w",
 				ref.Number, ref.Generation, err)

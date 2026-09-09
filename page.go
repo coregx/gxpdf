@@ -34,7 +34,7 @@ func (p *Page) Number() int {
 //	text := page.ExtractText()
 //	fmt.Println(text)
 func (p *Page) ExtractText() string {
-	textExtractor := extractor.NewTextExtractor(p.doc.reader)
+	textExtractor := extractor.NewTextExtractorWithContext(p.doc.reader, p.doc.ctx)
 	elements, err := textExtractor.ExtractFromPage(p.index)
 	if err != nil {
 		logging.Logger().Error("failed to extract text from page",
@@ -67,7 +67,7 @@ func (p *Page) ExtractText() string {
 //	    fmt.Printf("%q at (%.1f, %.1f) size=%.1f\n", e.Text, e.X, e.Y, e.FontSize)
 //	}
 func (p *Page) ExtractTextElements() ([]TextElement, error) {
-	textExtractor := extractor.NewTextExtractor(p.doc.reader)
+	textExtractor := extractor.NewTextExtractorWithContext(p.doc.reader, p.doc.ctx)
 	internal, err := textExtractor.ExtractFromPage(p.index)
 	if err != nil {
 		return nil, fmt.Errorf("gxpdf: failed to extract text elements from page %d: %w", p.index, err)
@@ -114,7 +114,7 @@ func (p *Page) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, erro
 		opts = DefaultExtractionOptions()
 	}
 
-	textExtractor := extractor.NewTextExtractor(p.doc.reader)
+	textExtractor := extractor.NewTextExtractorWithContext(p.doc.reader, p.doc.ctx)
 	textElements, err := textExtractor.ExtractFromPage(p.index)
 	if err != nil {
 		return nil, err
@@ -126,7 +126,7 @@ func (p *Page) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, erro
 
 	switch opts.Method {
 	case MethodLattice:
-		graphicsParser := extractor.NewGraphicsParser(p.doc.reader)
+		graphicsParser := extractor.NewGraphicsParserWithContext(p.doc.reader, p.doc.ctx)
 		graphicsElements, gErr := graphicsParser.ParseFromPage(p.index)
 		if gErr != nil {
 			return nil, fmt.Errorf("gxpdf: failed to extract graphics from page %d: %w", p.index, gErr)
@@ -135,7 +135,7 @@ func (p *Page) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, erro
 	case MethodStream:
 		detectedTables, err = tableDetector.DetectTablesStream(textElements)
 	default:
-		graphicsParser := extractor.NewGraphicsParser(p.doc.reader)
+		graphicsParser := extractor.NewGraphicsParserWithContext(p.doc.reader, p.doc.ctx)
 		graphicsElements, gErr := graphicsParser.ParseFromPage(p.index)
 		if gErr != nil {
 			return nil, fmt.Errorf("gxpdf: failed to extract graphics from page %d: %w", p.index, gErr)
@@ -209,7 +209,7 @@ func (p *Page) GetImages() []*Image {
 //
 // Use this when you need error handling for image extraction.
 func (p *Page) GetImagesWithError() ([]*Image, error) {
-	imageExtractor := extractor.NewImageExtractor(p.doc.reader)
+	imageExtractor := extractor.NewImageExtractorWithContext(p.doc.reader, p.doc.ctx)
 	internalImages, err := imageExtractor.ExtractFromPage(p.index)
 	if err != nil {
 		return nil, err
