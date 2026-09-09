@@ -37,3 +37,26 @@ func TestFormPositionedGeometryReachesTableDetection(t *testing.T) {
 		})
 	}
 }
+
+func TestFormPositionedTableIgnoresFarRightPageText(t *testing.T) {
+	document, err := Open(filepath.Join("testdata", "pdfs", "form_positioned_table_outlier.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer document.Close()
+
+	tables, err := document.ExtractTablesWithOptions(DefaultExtractionOptions().WithMethod(MethodStream))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tables) != 1 {
+		t.Fatalf("tables = %d, want 1", len(tables))
+	}
+	if got := tables[0].ColumnCount(); got != 3 {
+		t.Fatalf("columns = %d, want 3", got)
+	}
+	rows := tables[0].Rows()
+	if len(rows) < 4 || rows[2][2] != "1450" || rows[3][2] != "(570)" {
+		t.Fatalf("terminal table values were not retained: %#v", rows)
+	}
+}

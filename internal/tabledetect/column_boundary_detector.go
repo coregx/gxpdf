@@ -105,7 +105,14 @@ func (cbd *ColumnBoundaryDetector) completeAndCompactBoundaries(
 		return boundaries
 	}
 
-	minX, maxX := cbd.findExtent(elements)
+	// Complete the outer edges only from text that participates in repeated row
+	// structure. A page number or caption can sit well outside a table, and using
+	// the page-wide extent here would turn that unrelated text into a phantom
+	// terminal column. Once a row has two cells aligned to repeated page edges,
+	// keep the whole row so a sparse column represented in only one row can still
+	// contribute its outer edge.
+	extentElements, excludedOutliers := cbd.elementsInSupportedRows(elements)
+	minX, maxX := cbd.findExtent(extentElements)
 	completed := append([]float64(nil), boundaries...)
 	sort.Float64s(completed)
 	// Edge clusters are medians, so an outer cluster can legitimately land a
@@ -113,6 +120,12 @@ func (cbd *ColumnBoundaryDetector) completeAndCompactBoundaries(
 	// clustering radius as the same edge and snap them to the extent. Appending
 	// both would create a narrow phantom terminal column.
 	edgeTolerance := cbd.minGapWidth / 2
+	if excludedOutliers {
+		completed = boundariesWithinExtent(completed, minX, maxX, edgeTolerance)
+		if len(completed) == 0 {
+			return boundaries
+		}
+	}
 	if completed[0] > minX {
 		if completed[0]-minX <= edgeTolerance {
 			completed[0] = minX
@@ -130,7 +143,7 @@ func (cbd *ColumnBoundaryDetector) completeAndCompactBoundaries(
 	}
 
 	for interval := 0; interval < len(completed)-1; {
-		if intervalContainsTextCenter(completed[interval], completed[interval+1], elements, interval == len(completed)-2) {
+		if intervalContainsTextCenter(completed[interval], completed[interval+1], extentElements, interval == len(completed)-2) {
 			interval++
 			continue
 		}
@@ -145,6 +158,69 @@ func (cbd *ColumnBoundaryDetector) completeAndCompactBoundaries(
 	}
 
 	return completed
+}
+
+func (cbd *ColumnBoundaryDetector) elementsInSupportedRows(
+	elements []*extractor.TextElement,
+) ([]*extractor.TextElement, bool) {
+	tolerance := cbd.minGapWidth / 2
+	type positionedEdge struct {
+		x       float64
+		element *extractor.TextElement
+	}
+	edges := make([]positionedEdge, 0, len(elements)*2)
+	for _, element := range elements {
+		edges = append(edges,
+			positionedEdge{x: element.X, element: element},
+			positionedEdge{x: element.Right(), element: element},
+		)
+	}
+	sort.Slice(edges, func(i, j int) bool { return edges[i].x < edges[j].x })
+
+	supportedElements := make(map[*extractor.TextElement]bool, len(elements))
+	for start := 0; start < len(edges); {
+		end := start + 1
+		owners := map[*extractor.TextElement]struct{}{edges[start].element: {}}
+		for end < len(edges) && edges[end].x-edges[end-1].x <= tolerance {
+			owners[edges[end].element] = struct{}{}
+			end++
+		}
+		if len(owners) >= 2 {
+			for element := range owners {
+				supportedElements[element] = true
+			}
+		}
+		start = end
+	}
+
+	result := make([]*extractor.TextElement, 0, len(elements))
+	for _, row := range cbd.groupElementsByRow(elements) {
+		aligned := 0
+		for _, element := range row {
+			if supportedElements[element] {
+				aligned++
+			}
+		}
+		if aligned < 2 {
+			continue
+		}
+		result = append(result, row...)
+	}
+
+	if len(result) == 0 || len(result) == len(elements) {
+		return elements, false
+	}
+	return result, true
+}
+
+func boundariesWithinExtent(boundaries []float64, minX, maxX, tolerance float64) []float64 {
+	result := make([]float64, 0, len(boundaries))
+	for _, boundary := range boundaries {
+		if boundary >= minX-tolerance && boundary <= maxX+tolerance {
+			result = append(result, boundary)
+		}
+	}
+	return result
 }
 
 func intervalContainsTextCenter(left, right float64, elements []*extractor.TextElement, includeRight bool) bool {

@@ -1,6 +1,7 @@
 //go:build ignore
 
-// Generator for testdata/pdfs/form_positioned_table.pdf.
+// Generator for testdata/pdfs/form_positioned_table.pdf and its far-right
+// page-text outlier variant.
 //
 // It mimics PDF generators that place unit-sized glyphs at the text origin and
 // supply their real page position through nested page/Form/glyph transforms.
@@ -52,6 +53,14 @@ func main() {
 	}
 	path := filepath.Join("testdata", "pdfs", "form_positioned_table.pdf")
 	if err := os.WriteFile(path, buildPDF(objects), 0o644); err != nil {
+		panic(err)
+	}
+
+	outlierObjects := append([]pdfObject(nil), objects...)
+	outlierContent := formContent + "\n" + positionedGlyphRun(1050, 100, "Page 1")
+	outlierObjects[4] = streamObject([]byte(outlierContent), "/Type /XObject /Subtype /Form /BBox [0 0 1224 792] /Matrix [1 0 0 1 20 30] /Resources << /Font << /F1 6 0 R >> >>")
+	outlierPath := filepath.Join("testdata", "pdfs", "form_positioned_table_outlier.pdf")
+	if err := os.WriteFile(outlierPath, buildPDF(outlierObjects), 0o644); err != nil {
 		panic(err)
 	}
 }

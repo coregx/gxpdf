@@ -98,6 +98,38 @@ func TestDetectBoundariesRightAlignedTables(t *testing.T) {
 	}
 }
 
+func TestDetectBoundariesIgnoresUnrelatedFarRightPageText(t *testing.T) {
+	tests := []struct {
+		name     string
+		outliers []*extractor.TextElement
+	}{
+		{
+			name: "standalone page number",
+			outliers: []*extractor.TextElement{
+				extractor.NewTextElement("Page 1", 700, 20, 30, 10, "F1", 10),
+			},
+		},
+		{
+			name: "header metadata row",
+			outliers: []*extractor.TextElement{
+				extractor.NewTextElement("Annual report", 20, 160, 80, 10, "F1", 10),
+				extractor.NewTextElement("Page 1", 700, 160, 30, 10, "F1", 10),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			elements := append(rightAlignedTableElements(3, false), test.outliers...)
+			detector := NewColumnBoundaryDetector()
+			boundaries := detector.DetectBoundaries(elements)
+
+			assert.Len(t, boundaries, 5)
+			assert.InDelta(t, 400, boundaries[len(boundaries)-1], 1e-6)
+		})
+	}
+}
+
 func rightAlignedTableElements(numericCols int, missingValue bool) []*extractor.TextElement {
 	elements := []*extractor.TextElement{
 		extractor.NewTextElement("Line Item", 20, 120, 60, 10, "F1", 10),
