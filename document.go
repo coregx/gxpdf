@@ -140,8 +140,8 @@ func (d *Document) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, 
 	}
 
 	// Create extractors
-	textExtractor := extractor.NewTextExtractor(d.reader)
-	graphicsParser := extractor.NewGraphicsParser(d.reader)
+	textExtractor := extractor.NewTextExtractorWithContext(d.reader, d.ctx)
+	graphicsParser := extractor.NewGraphicsParserWithContext(d.reader, d.ctx)
 
 	var allTables []*Table
 
@@ -257,7 +257,7 @@ func (d *Document) GetImages() []*Image {
 //
 // Use this when you need error handling for image extraction.
 func (d *Document) GetImagesWithError() ([]*Image, error) {
-	imageExtractor := extractor.NewImageExtractor(d.reader)
+	imageExtractor := extractor.NewImageExtractorWithContext(d.reader, d.ctx)
 	internalImages, err := imageExtractor.ExtractFromDocument()
 	if err != nil {
 		return nil, fmt.Errorf("gxpdf: failed to extract images: %w", err)
@@ -336,7 +336,7 @@ func (d *Document) ExtractTextFromPage(pageNum int) (string, error) {
 	}
 
 	// Extract directly to propagate errors
-	textExtractor := extractor.NewTextExtractor(d.reader)
+	textExtractor := extractor.NewTextExtractorWithContext(d.reader, d.ctx)
 	elements, err := textExtractor.ExtractFromPage(pageNum - 1) // Convert to 0-based
 	if err != nil {
 		return "", fmt.Errorf("failed to extract text from page %d: %w", pageNum, err)

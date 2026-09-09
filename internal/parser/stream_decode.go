@@ -55,37 +55,72 @@ func (s *Stream) DecodeWithOptions(options StreamDecodeOptions) ([]byte, error) 
 // standard-library API is not context-aware are checked immediately before and
 // after the codec call.
 func (s *Stream) DecodeWithContext(ctx context.Context, options StreamDecodeOptions) ([]byte, error) {
+	decoded, _, err := s.decodeWithContext(ctx, options, nil)
+	return decoded, err
+}
+
+// DecodePreservingTerminalWithContext applies the stream's filter chain while
+// leaving an explicitly allowed terminal filter encoded. This is intended for
+// consumers such as image export that must retain a JPEG or JPEG 2000 payload
+// but still need every preceding ASCII or compression filter decoded by the
+// canonical bounded pipeline. The returned filter name is canonical and does
+// not include a leading slash.
+func (s *Stream) DecodePreservingTerminalWithContext(
+	ctx context.Context,
+	options StreamDecodeOptions,
+	terminalFilters ...string,
+) ([]byte, string, error) {
+	preserved := make(map[string]struct{}, len(terminalFilters))
+	for _, filter := range terminalFilters {
+		preserved[canonicalStreamFilterName(filter)] = struct{}{}
+	}
+	return s.decodeWithContext(ctx, options, preserved)
+}
+
+func (s *Stream) decodeWithContext(
+	ctx context.Context,
+	options StreamDecodeOptions,
+	preservedTerminalFilters map[string]struct{},
+) ([]byte, string, error) {
 	maxInt := int64(^uint(0) >> 1)
 	if ctx == nil || options.MaxDecodedBytes <= 0 || options.MaxDecodedBytes >= maxInt || options.MaxFilters <= 0 {
-		return nil, fmt.Errorf("invalid stream decode options")
+		return nil, "", fmt.Errorf("invalid stream decode options")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	content := s.Content()
 	if int64(len(content)) > options.MaxDecodedBytes {
-		return nil, fmt.Errorf("%w: encoded stream is %d bytes", ErrStreamDecodeLimit, len(content))
+		return nil, "", fmt.Errorf("%w: encoded stream is %d bytes", ErrStreamDecodeLimit, len(content))
 	}
 	filters, err := streamFilterNames(s.GetFilter(), options.MaxFilters)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	parameters, err := streamDecodeParameters(s.GetDecodeParams(), len(filters))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	decoded := append([]byte(nil), content...)
-	for index, filter := range filters {
+	terminalFilter := ""
+	decodeCount := len(filters)
+	if decodeCount > 0 {
+		terminalFilter = filters[decodeCount-1]
+		if _, preserve := preservedTerminalFilters[terminalFilter]; preserve {
+			decodeCount--
+		}
+	}
+	for index, filter := range filters[:decodeCount] {
 		if err = ctx.Err(); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		decoded, err = applyStreamFilter(ctx, filter, decoded, parameters[index], options.MaxDecodedBytes)
 		if err != nil {
-			return nil, fmt.Errorf("decode filter %d (%s): %w", index, filter, err)
+			return nil, "", fmt.Errorf("decode filter %d (%s): %w", index, filter, err)
 		}
 	}
-	return decoded, nil
+	return decoded, terminalFilter, nil
 }
 
 func streamFilterNames(filterObject PdfObject, maxFilters int) ([]string, error) {
@@ -93,6 +128,8 @@ func streamFilterNames(filterObject PdfObject, maxFilters int) ([]string, error)
 		return nil, nil
 	}
 	switch value := filterObject.(type) {
+	case *Null:
+		return nil, nil
 	case *Name:
 		return []string{canonicalStreamFilterName(value.Value())}, nil
 	case *Array:
@@ -135,6 +172,9 @@ func canonicalStreamFilterName(name string) string {
 func streamDecodeParameters(parameterObject PdfObject, filterCount int) ([]*Dictionary, error) {
 	parameters := make([]*Dictionary, filterCount)
 	if parameterObject == nil || filterCount == 0 {
+		return parameters, nil
+	}
+	if _, ok := parameterObject.(*Null); ok {
 		return parameters, nil
 	}
 	if dictionary, ok := parameterObject.(*Dictionary); ok {

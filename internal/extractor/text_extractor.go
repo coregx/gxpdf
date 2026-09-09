@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -58,6 +59,7 @@ const maxXObjectDepth = 8
 // Reference: PDF 1.7 specification, Sections 9.4 (Text Objects), 8.8.1 (Form XObjects).
 type TextExtractor struct {
 	reader        *parser.Reader
+	ctx           context.Context
 	textState     *TextState
 	elements      []*TextElement
 	fontDecoders  map[string]*FontDecoder // fontName -> FontDecoder
@@ -74,8 +76,15 @@ type TextExtractor struct {
 
 // NewTextExtractor creates a new TextExtractor for the given PDF reader.
 func NewTextExtractor(reader *parser.Reader) *TextExtractor {
+	return NewTextExtractorWithContext(reader, context.Background())
+}
+
+// NewTextExtractorWithContext creates a TextExtractor whose stream decoding
+// observes ctx.
+func NewTextExtractorWithContext(reader *parser.Reader, ctx context.Context) *TextExtractor {
 	return &TextExtractor{
 		reader:       reader,
+		ctx:          contextOrBackground(ctx),
 		textState:    NewTextState(),
 		elements:     []*TextElement{},
 		fontDecoders: make(map[string]*FontDecoder),
@@ -88,6 +97,9 @@ func NewTextExtractor(reader *parser.Reader) *TextExtractor {
 //
 // Returns a slice of TextElements with position information, or error if extraction fails.
 func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
+	if err := contextOrBackground(te.ctx).Err(); err != nil {
+		return nil, err
+	}
 	// Reset state
 	te.elements = []*TextElement{}
 	te.textState = NewTextState()
@@ -371,7 +383,7 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 
 // decodeStream delegates to the parser's canonical bounded filter pipeline.
 func (te *TextExtractor) decodeStream(stream *parser.Stream) ([]byte, error) {
-	return stream.Decode()
+	return stream.DecodeWithContext(contextOrBackground(te.ctx), parser.DefaultStreamDecodeOptions())
 }
 
 // processOperator processes a single content stream operator.

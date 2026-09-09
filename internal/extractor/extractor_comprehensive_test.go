@@ -3,6 +3,7 @@ package extractor
 import (
 	"bytes"
 	"compress/zlib"
+	"encoding/ascii85"
 	"errors"
 	"math"
 	"strings"
@@ -1063,48 +1064,16 @@ func TestGetColorSpaceName_WrongType(t *testing.T) {
 	}
 }
 
-func TestGetFilterName_Nil(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	result := ie.getFilterName(nil)
-	if result != "" {
-		t.Errorf("getFilterName(nil) = %q, want empty", result)
-	}
-}
-
-func TestGetFilterName_DirectName(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	result := ie.getFilterName(parser.NewName("DCTDecode"))
-	if result != "DCTDecode" {
-		t.Errorf("getFilterName(Name) = %q, want DCTDecode", result)
-	}
-}
-
-func TestGetFilterName_Array(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	arr := parser.NewArray()
-	arr.Append(parser.NewName(filterFlateDecode))
-	result := ie.getFilterName(arr)
-	if result != filterFlateDecode {
-		t.Errorf("getFilterName(Array) = %q, want FlateDecode", result)
-	}
-}
-
-func TestGetFilterName_EmptyArray(t *testing.T) {
-	ie := newTestImageExtractor(t)
-	arr := parser.NewArray()
-	result := ie.getFilterName(arr)
-	if result != "" {
-		t.Errorf("getFilterName(empty array) = %q, want empty", result)
-	}
-}
-
 func TestDecodeImageData_NoFilter(t *testing.T) {
 	ie := newTestImageExtractor(t)
 	dict := parser.NewDictionary()
 	stream := parser.NewStream(dict, []byte{0xFF, 0xD8, 0xFF})
-	data, err := ie.decodeImageData(stream, "")
+	data, filter, err := ie.decodeImageData(stream)
 	if err != nil {
 		t.Fatalf("decodeImageData(no filter) error = %v", err)
+	}
+	if filter != "" {
+		t.Errorf("filter = %q, want empty", filter)
 	}
 	if len(data) != 3 {
 		t.Errorf("data len = %d, want 3", len(data))
@@ -1114,11 +1083,15 @@ func TestDecodeImageData_NoFilter(t *testing.T) {
 func TestDecodeImageData_DCTDecode(t *testing.T) {
 	ie := newTestImageExtractor(t)
 	dict := parser.NewDictionary()
+	dict.Set("Filter", parser.NewName("DCTDecode"))
 	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0}
 	stream := parser.NewStream(dict, jpegData)
-	data, err := ie.decodeImageData(stream, "/DCTDecode")
+	data, filter, err := ie.decodeImageData(stream)
 	if err != nil {
 		t.Fatalf("decodeImageData(DCT) error = %v", err)
+	}
+	if filter != "/DCTDecode" {
+		t.Errorf("filter = %q, want /DCTDecode", filter)
 	}
 	if !bytes.Equal(data, jpegData) {
 		t.Errorf("DCT image path changed encoded payload: got %x, want %x", data, jpegData)
@@ -1128,10 +1101,39 @@ func TestDecodeImageData_DCTDecode(t *testing.T) {
 func TestDecodeImageData_UnsupportedFilter(t *testing.T) {
 	ie := newTestImageExtractor(t)
 	dict := parser.NewDictionary()
+	dict.Set("Filter", parser.NewName("JBIG2Decode"))
 	stream := parser.NewStream(dict, []byte{0x01, 0x02})
-	_, err := ie.decodeImageData(stream, "/JBIG2Decode")
+	_, _, err := ie.decodeImageData(stream)
 	if err == nil {
 		t.Error("decodeImageData(unsupported) should return error")
+	}
+}
+
+func TestExtractImageFromStream_DecodesFilterChainBeforeDCT(t *testing.T) {
+	ie := newTestImageExtractor(t)
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0}
+	encoded := make([]byte, ascii85.MaxEncodedLen(len(jpegData)))
+	written := ascii85.Encode(encoded, jpegData)
+	encoded = append(encoded[:written], '~', '>')
+	filters := parser.NewArray()
+	filters.Append(parser.NewName("ASCII85Decode"))
+	filters.Append(parser.NewName("DCTDecode"))
+	dict := parser.NewDictionary()
+	dict.Set("Width", parser.NewInteger(1))
+	dict.Set("Height", parser.NewInteger(1))
+	dict.Set("BitsPerComponent", parser.NewInteger(8))
+	dict.Set("ColorSpace", parser.NewName(colorSpaceDeviceRGB))
+	dict.Set("Filter", filters)
+
+	image, err := ie.extractImageFromStream(parser.NewStream(dict, encoded), "Im1")
+	if err != nil {
+		t.Fatalf("extractImageFromStream() error = %v", err)
+	}
+	if !bytes.Equal(image.Data(), jpegData) {
+		t.Errorf("image data = %x, want %x", image.Data(), jpegData)
+	}
+	if image.Filter() != "/DCTDecode" {
+		t.Errorf("filter = %q, want /DCTDecode", image.Filter())
 	}
 }
 
@@ -1526,10 +1528,14 @@ func TestDecodeImageData_FlateDecode(t *testing.T) {
 	_ = w.Close()
 
 	dict := parser.NewDictionary()
+	dict.Set("Filter", parser.NewName("FlateDecode"))
 	stream := parser.NewStream(dict, buf.Bytes())
-	data, err := ie.decodeImageData(stream, "/FlateDecode")
+	data, filter, err := ie.decodeImageData(stream)
 	if err != nil {
 		t.Fatalf("decodeImageData(FlateDecode) error = %v", err)
+	}
+	if filter != "/FlateDecode" {
+		t.Errorf("filter = %q, want /FlateDecode", filter)
 	}
 	if len(data) == 0 {
 		t.Error("FlateDecode should return non-empty data")

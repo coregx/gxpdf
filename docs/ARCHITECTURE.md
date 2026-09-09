@@ -2,8 +2,8 @@
 
 Technical architecture overview of the GxPDF PDF library.
 
-**Version**: v0.7.0+
-**Last Updated**: 2026-03-23
+**Version**: v0.9.4+
+**Last Updated**: 2026-09-08
 
 ## Project Structure
 
@@ -21,7 +21,7 @@ github.com/coregx/gxpdf
 ├── export/               # Export formats (CSV, JSON, Excel)
 └── internal/             # Private implementation
     ├── document/         # Document model, pages, metadata
-    ├── encoding/         # Stream codecs (Flate, DCT, ASCII85, LZW)
+    ├── encoding/         # Reusable binary codecs and image encoding (Flate, DCT)
     ├── extractor/        # Text, image, graphics extraction
     ├── fonts/            # Font handling (Standard 14 + TTF/OTF)
     ├── models/           # Data models
@@ -187,21 +187,27 @@ PDF file parsing infrastructure:
 - **Lexer** - Tokenizes PDF byte stream
 - **Object Parser** - Parses PDF objects (arrays, dicts, streams)
 - **XRef Parser** - Cross-reference table handling
-- **Stream Parser** - Content stream parsing
+- **Stream Parser** - Content stream parsing and canonical, bounded PDF filter-chain decoding
 
 #### Encoding (`internal/encoding/`)
 
-Stream compression/decompression:
+Reusable stream and image compression/decompression primitives. PDF dictionary
+interpretation, ordered filter orchestration, resource limits, predictors, and
+context cancellation belong to `internal/parser`; `internal/encoding` contains
+lower-level codecs also used by parser decoding and writing.
 
 | Codec | Description | Status |
 |-------|-------------|--------|
 | FlateDecode | zlib compression (most common) | Implemented |
 | DCTDecode | JPEG image data | Implemented |
-| ASCII85Decode | ASCII encoding | Planned |
-| ASCIIHexDecode | Hexadecimal encoding | Planned |
-| LZWDecode | LZW compression (legacy) | Planned |
+| ASCII85Decode | ASCII encoding | Implemented by parser stream pipeline |
+| ASCIIHexDecode | Hexadecimal encoding | Implemented by parser stream pipeline |
+| RunLengthDecode | Run-length encoding | Implemented by parser stream pipeline |
+| LZWDecode | LZW compression (legacy) | Implemented by parser stream pipeline |
 
-**Note**: FlateDecode and DCTDecode cover 95%+ of PDF files. Legacy codecs planned for v0.2.0.
+All extraction consumers use the parser-owned bounded pipeline. Image extraction
+uses the same pipeline for preceding filters while preserving terminal DCT/JPX
+payloads when the original encoded image is required for export.
 
 #### Fonts (`internal/fonts/`)
 

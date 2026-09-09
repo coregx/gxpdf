@@ -1,6 +1,8 @@
 package gxpdf
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -38,6 +40,24 @@ func TestStreamFilterFixturesExtractEquivalentText(t *testing.T) {
 				t.Errorf("geometry = (%.2f, %.2f) size %.2f, want (72, 700) size 12", element.X, element.Y, element.FontSize)
 			}
 		})
+	}
+}
+
+func TestDocumentContextCancelsTextStreamDecoding(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	document, err := OpenWithContext(
+		ctx,
+		filepath.Join("testdata", "pdfs", "stream_filters", "flate.pdf"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer document.Close()
+	cancel()
+
+	_, err = document.ExtractTextElementsFromPage(1)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ExtractTextElementsFromPage() error = %v, want context.Canceled", err)
 	}
 }
 

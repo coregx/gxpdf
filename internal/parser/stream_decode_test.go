@@ -62,6 +62,57 @@ func TestStreamDecodeFilterChain(t *testing.T) {
 	assert.Equal(t, raw, decoded)
 }
 
+func TestStreamDecodePreservesAllowedTerminalFilter(t *testing.T) {
+	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0}
+	filters := NewArray()
+	filters.Append(NewName("ASCII85Decode"))
+	filters.Append(NewName("DCTDecode"))
+	dictionary := NewDictionary()
+	dictionary.Set("Filter", filters)
+
+	decoded, terminalFilter, err := NewStream(
+		dictionary,
+		encodeASCII85ForTest(t, jpegData),
+	).DecodePreservingTerminalWithContext(
+		context.Background(),
+		DefaultStreamDecodeOptions(),
+		"DCTDecode",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, jpegData, decoded)
+	assert.Equal(t, "DCTDecode", terminalFilter)
+}
+
+func TestStreamDecodeNullDictionaryEntriesBehaveAsAbsent(t *testing.T) {
+	tests := []struct {
+		name       string
+		filter     PdfObject
+		parameters PdfObject
+	}{
+		{name: "null filter", filter: NewNull()},
+		{name: "null decode parameters", filter: NewName("ASCIIHexDecode"), parameters: NewNull()},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := []byte("plain text")
+			encoded := raw
+			if _, filtered := test.filter.(*Name); filtered {
+				encoded = encodeASCIIHexForTest(t, raw)
+			}
+			dictionary := NewDictionary()
+			dictionary.Set("Filter", test.filter)
+			if test.parameters != nil {
+				dictionary.Set("DecodeParms", test.parameters)
+			}
+
+			decoded, err := NewStream(dictionary, encoded).Decode()
+			require.NoError(t, err)
+			assert.Equal(t, raw, decoded)
+		})
+	}
+}
+
 func TestStreamDecodeFilterAliases(t *testing.T) {
 	raw := []byte("alias")
 	dictionary := NewDictionary()

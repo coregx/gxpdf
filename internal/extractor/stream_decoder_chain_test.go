@@ -3,6 +3,7 @@ package extractor
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/ascii85"
 	"testing"
 
@@ -47,6 +48,43 @@ func TestExtractorConsumersUseCompleteFilterChain(t *testing.T) {
 			decoded, err := consumer.decode(stream)
 			require.NoError(t, err)
 			assert.Equal(t, raw, decoded)
+		})
+	}
+}
+
+func TestExtractorConsumersHonorCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	stream := parser.NewStream(parser.NewDictionary(), []byte("content"))
+	consumers := []struct {
+		name   string
+		decode func(*parser.Stream) error
+	}{
+		{name: "text", decode: func(stream *parser.Stream) error {
+			_, err := (&TextExtractor{ctx: ctx}).decodeStream(stream)
+			return err
+		}},
+		{name: "graphics", decode: func(stream *parser.Stream) error {
+			_, err := (&GraphicsParser{ctx: ctx}).decodeStream(stream)
+			return err
+		}},
+		{name: "vector", decode: func(stream *parser.Stream) error {
+			_, err := (&VectorParser{ctx: ctx}).decodeStream(stream)
+			return err
+		}},
+		{name: "font", decode: func(stream *parser.Stream) error {
+			_, err := decodeStreamDataWithContext(ctx, stream)
+			return err
+		}},
+		{name: "image", decode: func(stream *parser.Stream) error {
+			_, _, err := (&ImageExtractor{ctx: ctx}).decodeImageData(stream)
+			return err
+		}},
+	}
+
+	for _, consumer := range consumers {
+		t.Run(consumer.name, func(t *testing.T) {
+			require.ErrorIs(t, consumer.decode(stream), context.Canceled)
 		})
 	}
 }

@@ -2,6 +2,7 @@
 package extractor
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/coregx/gxpdf/internal/parser"
@@ -101,6 +102,7 @@ func (c Color) String() string {
 // Reference: PDF 1.7 specification, Section 8 (Graphics).
 type GraphicsParser struct {
 	reader     *parser.Reader
+	ctx        context.Context
 	elements   []*GraphicsElement
 	state      *GraphicsState
 	stateStack []*GraphicsState // graphics state stack for q/Q operators
@@ -132,8 +134,15 @@ func NewGraphicsState() *GraphicsState {
 
 // NewGraphicsParser creates a new GraphicsParser for the given PDF reader.
 func NewGraphicsParser(reader *parser.Reader) *GraphicsParser {
+	return NewGraphicsParserWithContext(reader, context.Background())
+}
+
+// NewGraphicsParserWithContext creates a GraphicsParser whose stream decoding
+// observes ctx.
+func NewGraphicsParserWithContext(reader *parser.Reader, ctx context.Context) *GraphicsParser {
 	return &GraphicsParser{
 		reader:   reader,
+		ctx:      contextOrBackground(ctx),
 		elements: []*GraphicsElement{},
 		state:    NewGraphicsState(),
 	}
@@ -145,6 +154,9 @@ func NewGraphicsParser(reader *parser.Reader) *GraphicsParser {
 //
 // Returns a slice of GraphicsElements, or error if extraction fails.
 func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error) {
+	if err := contextOrBackground(gp.ctx).Err(); err != nil {
+		return nil, err
+	}
 	// Reset state
 	gp.elements = []*GraphicsElement{}
 	gp.state = NewGraphicsState()
@@ -268,7 +280,7 @@ func (gp *GraphicsParser) getPageContent(page *parser.Dictionary) ([]byte, error
 
 // decodeStream delegates to the parser's canonical bounded filter pipeline.
 func (gp *GraphicsParser) decodeStream(stream *parser.Stream) ([]byte, error) {
-	return stream.Decode()
+	return stream.DecodeWithContext(contextOrBackground(gp.ctx), parser.DefaultStreamDecodeOptions())
 }
 
 // processOperator processes a single graphics operator.
