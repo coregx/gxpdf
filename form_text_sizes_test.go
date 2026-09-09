@@ -28,10 +28,22 @@ func TestFormTextGeometryIsIndependentOfFontSizeThreshold(t *testing.T) {
 	if len(elements) != len(want) {
 		t.Fatalf("elements = %d, want %d: %#v", len(elements), len(want), elements)
 	}
+	actual := make(map[string]TextElement, len(elements))
 	for _, element := range elements {
-		expected, ok := want[element.Text]
-		if !ok {
+		if _, ok := want[element.Text]; !ok {
 			t.Errorf("unexpected text element %q", element.Text)
+			continue
+		}
+		if _, duplicate := actual[element.Text]; duplicate {
+			t.Errorf("duplicate text element %q", element.Text)
+			continue
+		}
+		actual[element.Text] = element
+	}
+	for text, expected := range want {
+		element, ok := actual[text]
+		if !ok {
+			t.Errorf("missing text element %q", text)
 			continue
 		}
 		assertNear(t, "X", element.X, expected.x)
