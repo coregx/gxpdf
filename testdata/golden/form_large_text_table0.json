@@ -1,0 +1,44 @@
+{
+  "pdf": "testdata/pdfs/form_large_text_table.pdf",
+  "page": 0,
+  "method": "Lattice",
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "text": "Line Item 2023 2024",
+      "rowSpan": 1,
+      "colSpan": 3
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "text": "Revenue",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "text": "1200",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "text": "1450",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "text": "Cost of Sales (400) (570)",
+      "rowSpan": 1,
+      "colSpan": 3
+    }
+  ]
+}

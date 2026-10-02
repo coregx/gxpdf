@@ -13,7 +13,9 @@ import (
 //
 // Each TextElement has position information (X, Y coordinates) which is critical
 // for table extraction and layout analysis. The coordinates represent the
-// bottom-left corner of the text element in PDF coordinate space.
+// axis-aligned bottom-left corner of the text element in PDF page space. Text
+// inside Form XObjects includes the accumulated caller and Form transforms;
+// page /Rotate remains display metadata and is not applied.
 //
 // PDF Coordinate System (Section 8.3.2):
 //   - Origin (0,0) is at bottom-left of page
@@ -30,6 +32,11 @@ type TextElement struct {
 	Height   float64 // Height of text (in points)
 	FontName string  // Font name (e.g., "/F1", "/Helvetica")
 	FontSize float64 // Font size in points
+
+	// preciseWidth records whether Width came from the PDF font metrics rather
+	// than the legacy 0.6-em estimate. It intentionally remains internal: it is
+	// extraction metadata used to distinguish glyph kerning from word gaps.
+	preciseWidth bool
 }
 
 // NewTextElement creates a new TextElement with the given properties.
