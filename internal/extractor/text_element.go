@@ -30,6 +30,11 @@ type TextElement struct {
 	Height   float64 // Height of text (in points)
 	FontName string  // Font name (e.g., "/F1", "/Helvetica")
 	FontSize float64 // Font size in points
+
+	// preciseWidth records whether Width came from the PDF font metrics rather
+	// than the legacy 0.6-em estimate. It intentionally remains internal: it is
+	// extraction metadata used to distinguish glyph kerning from word gaps.
+	preciseWidth bool
 }
 
 // NewTextElement creates a new TextElement with the given properties.
