@@ -147,14 +147,16 @@ func (f *Flattener) findFieldWidget(fieldName string) (*parser.Dictionary, error
 		return nil, err
 	}
 
-	return f.searchFieldInArray(fieldsArray, fieldName, "")
+	return f.searchFieldInArray(fieldsArray, fieldName, "", newFieldTreeGuard(f.pdfReader), 0)
 }
 
 // searchFieldInArray recursively searches for a field by name.
-func (f *Flattener) searchFieldInArray(arr *parser.Array, targetName, parentName string) (*parser.Dictionary, error) {
+//
+// depth is the nesting level of the entries of arr (0 for /Fields); guard
+// bounds the walk (see fieldTreeGuard).
+func (f *Flattener) searchFieldInArray(arr *parser.Array, targetName, parentName string, guard *fieldTreeGuard, depth int) (*parser.Dictionary, error) {
 	for i := 0; i < arr.Len(); i++ {
-		obj := f.pdfReader.ResolveReferences(arr.Get(i))
-		dict, ok := obj.(*parser.Dictionary)
+		dict, ok := guard.enter(arr.Get(i), depth)
 		if !ok {
 			continue
 		}
@@ -167,7 +169,7 @@ func (f *Flattener) searchFieldInArray(arr *parser.Array, targetName, parentName
 		}
 
 		// Check children
-		found, err := f.searchKids(dict, targetName, fieldName)
+		found, err := f.searchKids(dict, targetName, fieldName, guard, depth)
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +182,8 @@ func (f *Flattener) searchFieldInArray(arr *parser.Array, targetName, parentName
 }
 
 // searchKids searches for a field in the Kids array of a dictionary.
-func (f *Flattener) searchKids(dict *parser.Dictionary, targetName, fieldName string) (*parser.Dictionary, error) {
+// depth is the nesting level of dict; its kids are visited at depth+1.
+func (f *Flattener) searchKids(dict *parser.Dictionary, targetName, fieldName string, guard *fieldTreeGuard, depth int) (*parser.Dictionary, error) {
 	kidsObj := dict.Get("Kids")
 	if kidsObj == nil {
 		return nil, nil
@@ -191,7 +194,7 @@ func (f *Flattener) searchKids(dict *parser.Dictionary, targetName, fieldName st
 		return nil, nil // Ignore malformed Kids
 	}
 
-	return f.searchFieldInArray(kidsArray, targetName, fieldName)
+	return f.searchFieldInArray(kidsArray, targetName, fieldName, guard, depth+1)
 }
 
 // buildFieldName builds the fully qualified field name.

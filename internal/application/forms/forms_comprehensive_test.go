@@ -952,7 +952,7 @@ func TestParseField_NonDictionaryInput(t *testing.T) {
 
 	reader := NewReader(pdfReader)
 	// Pass a non-dictionary object (Integer) - should return error
-	_, err := reader.parseField(parser.NewInteger(42), "")
+	_, err := reader.parseField(parser.NewInteger(42), "", newFieldTreeGuard(reader.pdfReader), 0)
 	if err == nil {
 		t.Error("parseField with non-dict should return error")
 	}
@@ -968,7 +968,7 @@ func TestParseField_TerminalField(t *testing.T) {
 	dict.Set("FT", parser.NewName("Tx"))
 	dict.Set("T", parser.NewString("testField"))
 
-	fields, err := reader.parseField(dict, "")
+	fields, err := reader.parseField(dict, "", newFieldTreeGuard(reader.pdfReader), 0)
 	if err != nil {
 		t.Fatalf("parseField terminal field returned error: %v", err)
 	}
@@ -992,7 +992,7 @@ func TestParseField_WithParentName(t *testing.T) {
 	dict.Set("FT", parser.NewName("Btn"))
 	dict.Set("T", parser.NewString("child"))
 
-	fields, err := reader.parseField(dict, "parent")
+	fields, err := reader.parseField(dict, "parent", newFieldTreeGuard(reader.pdfReader), 0)
 	if err != nil {
 		t.Fatalf("parseField returned error: %v", err)
 	}
@@ -1030,7 +1030,7 @@ func TestParseField_WithKids(t *testing.T) {
 	parent.Set("T", parser.NewString("group"))
 	parent.Set("Kids", kids)
 
-	fields, err := reader.parseField(parent, "")
+	fields, err := reader.parseField(parent, "", newFieldTreeGuard(reader.pdfReader), 0)
 	if err != nil {
 		t.Fatalf("parseField with kids returned error: %v", err)
 	}
@@ -1047,7 +1047,7 @@ func TestParseKids_NilKids(t *testing.T) {
 	reader := NewReader(pdfReader)
 	dict := parser.NewDictionary()
 	// No Kids key
-	result := reader.parseKids(dict, "parent")
+	result := reader.parseKids(dict, "parent", newFieldTreeGuard(reader.pdfReader), 0)
 	if result != nil {
 		t.Errorf("parseKids no Kids = %v, want nil", result)
 	}
@@ -1069,7 +1069,7 @@ func TestParseKids_WithValidKids(t *testing.T) {
 	dict := parser.NewDictionary()
 	dict.Set("Kids", kidsArr)
 
-	result := reader.parseKids(dict, "parent")
+	result := reader.parseKids(dict, "parent", newFieldTreeGuard(reader.pdfReader), 0)
 	if len(result) == 0 {
 		t.Error("parseKids with valid kids returned empty result")
 	}
@@ -1262,7 +1262,7 @@ func TestFlattener_SearchFieldInArray_WithFields(t *testing.T) {
 	arr.Append(field2)
 
 	// Search for "field1"
-	found, err := f.searchFieldInArray(arr, "field1", "")
+	found, err := f.searchFieldInArray(arr, "field1", "", newFieldTreeGuard(f.pdfReader), 0)
 	if err != nil {
 		t.Fatalf("searchFieldInArray returned error: %v", err)
 	}
@@ -1271,7 +1271,7 @@ func TestFlattener_SearchFieldInArray_WithFields(t *testing.T) {
 	}
 
 	// Search for non-existing
-	notFound, err := f.searchFieldInArray(arr, "missing", "")
+	notFound, err := f.searchFieldInArray(arr, "missing", "", newFieldTreeGuard(f.pdfReader), 0)
 	if err != nil {
 		t.Fatalf("searchFieldInArray missing returned error: %v", err)
 	}
@@ -1296,7 +1296,7 @@ func TestFlattener_SearchKids_WithKids(t *testing.T) {
 	parentDict := parser.NewDictionary()
 	parentDict.Set("Kids", kidsArr)
 
-	found, err := f.searchKids(parentDict, "childField", "")
+	found, err := f.searchKids(parentDict, "childField", "", newFieldTreeGuard(f.pdfReader), 0)
 	if err != nil {
 		t.Fatalf("searchKids returned error: %v", err)
 	}
@@ -1312,7 +1312,7 @@ func TestFlattener_SearchKids_NoKids(t *testing.T) {
 	f := NewFlattener(pdfReader)
 	dict := parser.NewDictionary()
 	// No Kids key
-	found, err := f.searchKids(dict, "something", "")
+	found, err := f.searchKids(dict, "something", "", newFieldTreeGuard(f.pdfReader), 0)
 	if err != nil {
 		t.Fatalf("searchKids no Kids returned error: %v", err)
 	}

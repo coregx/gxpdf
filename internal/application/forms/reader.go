@@ -73,10 +73,11 @@ func (r *Reader) GetFields() ([]*FieldInfo, error) {
 		return nil, fmt.Errorf("failed to resolve Fields array: %w", err)
 	}
 
+	guard := newFieldTreeGuard(r.pdfReader)
 	var fields []*FieldInfo
 	for i := 0; i < fieldsArray.Len(); i++ {
 		fieldObj := fieldsArray.Get(i)
-		fieldInfos, err := r.parseField(fieldObj, "")
+		fieldInfos, err := r.parseField(fieldObj, "", guard, 0)
 		if err != nil {
 			continue // Skip invalid fields
 		}
@@ -103,18 +104,19 @@ func (r *Reader) GetFieldByName(name string) (*FieldInfo, error) {
 }
 
 // parseField parses a field dictionary and its children.
-func (r *Reader) parseField(obj parser.PdfObject, parentName string) ([]*FieldInfo, error) {
-	obj = r.pdfReader.ResolveReferences(obj)
-
-	dict, ok := obj.(*parser.Dictionary)
+//
+// depth is the nesting level of obj in the field hierarchy (0 for an entry of
+// /Fields); guard bounds the walk (see fieldTreeGuard).
+func (r *Reader) parseField(obj parser.PdfObject, parentName string, guard *fieldTreeGuard, depth int) ([]*FieldInfo, error) {
+	dict, ok := guard.enter(obj, depth)
 	if !ok {
-		return nil, fmt.Errorf("field is not a dictionary")
+		return nil, fmt.Errorf("field is not a dictionary or must not be visited")
 	}
 
 	fieldName := r.extractFieldName(dict, parentName)
 
 	// Handle child fields
-	if fields := r.parseKids(dict, fieldName); fields != nil {
+	if fields := r.parseKids(dict, fieldName, guard, depth); fields != nil {
 		return fields, nil
 	}
 
@@ -145,7 +147,8 @@ func (r *Reader) extractFieldName(dict *parser.Dictionary, parentName string) st
 
 // parseKids parses child fields if present.
 // Returns nil if there are no kids (terminal field).
-func (r *Reader) parseKids(dict *parser.Dictionary, fieldName string) []*FieldInfo {
+// depth is the nesting level of dict; its kids are visited at depth+1.
+func (r *Reader) parseKids(dict *parser.Dictionary, fieldName string, guard *fieldTreeGuard, depth int) []*FieldInfo {
 	kidsObj := dict.Get("Kids")
 	if kidsObj == nil {
 		return nil
@@ -159,7 +162,7 @@ func (r *Reader) parseKids(dict *parser.Dictionary, fieldName string) []*FieldIn
 	var fields []*FieldInfo
 	for i := 0; i < kidsArray.Len(); i++ {
 		kidObj := kidsArray.Get(i)
-		kidFields, err := r.parseField(kidObj, fieldName)
+		kidFields, err := r.parseField(kidObj, fieldName, guard, depth+1)
 		if err != nil {
 			continue
 		}
