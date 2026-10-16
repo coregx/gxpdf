@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `gxpdf.Version` reports the module version recorded by the Go toolchain instead of a stale constant (`"0.1.0-alpha"`): the release tag when used as a dependency, a pseudo-version for builds from a checkout, `(devel)` for `go run`/`go test`. It is now a variable of type `string`.
+- `gxpdf version` falls back to the toolchain's version, commit and modified state when release ldflags are absent (`go install`, local builds); release and `go install` builds print the same `vX.Y.Z`.
+
 ---
 
 ## [0.9.5] - 2026-10-16

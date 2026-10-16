@@ -14,14 +14,19 @@ const (
 	formatCSV = "csv"
 	// unknownValue is the default placeholder for unset build-time variables.
 	unknownValue = "unknown"
+	// devVersion is the default Version when it is not injected at build time.
+	devVersion = "dev"
 )
 
 var (
-	// Version is the application version (set at build time).
-	Version = "dev"
+	// Version, GitCommit and BuildDate are injected by release builds
+	// (-ldflags -X). When unset, the version command falls back to the
+	// module version and VCS details recorded by the Go toolchain.
+	Version = devVersion
 	// GitCommit is the git commit hash (set at build time).
 	GitCommit = unknownValue
-	// BuildDate is the build date (set at build time).
+	// BuildDate is the commit date of the build ({{.CommitDate}} in
+	// .goreleaser.yml; vcs.time from the toolchain otherwise).
 	BuildDate = unknownValue
 
 	// Global flags.

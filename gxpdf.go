@@ -45,12 +45,16 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/coregx/gxpdf/internal/buildinfo"
 	"github.com/coregx/gxpdf/internal/parser"
 	"github.com/coregx/gxpdf/internal/security"
 )
 
-// Version is the current version of the gxpdf library.
-const Version = "0.1.0-alpha"
+// Version is the gxpdf module version the running binary was built with, as
+// recorded by the Go toolchain: the release tag (e.g. "v0.9.5") when gxpdf is
+// a dependency, a pseudo-version for builds from an untagged checkout, or
+// "(devel)" when no version was recorded (go run, go test, local replace).
+var Version = buildinfo.Read().Version
 
 // pathFromBytes is the path sentinel reported by Documents opened from in-memory bytes.
 const pathFromBytes = "<bytes>"

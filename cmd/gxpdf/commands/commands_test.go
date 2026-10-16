@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/coregx/gxpdf/creator"
+	"github.com/coregx/gxpdf/internal/buildinfo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,6 +122,50 @@ func TestRunVersionCmd_UnknownBuildInfo(t *testing.T) {
 		versionCmd.Run(versionCmd, []string{})
 	})
 	assert.Contains(t, out, "gxpdf")
+}
+
+func TestBuildDetails(t *testing.T) {
+	tool := buildinfo.Info{
+		Version:  "v0.9.6-0.20261101093000-1a2b3c4d5e6f+dirty",
+		Revision: "1a2b3c4d5e6f",
+		Time:     "2026-11-01T09:30:00Z",
+		Modified: true,
+	}
+	tests := []struct {
+		name                    string
+		version, commit, date   string // simulated -ldflags -X values
+		wantVersion, wantCommit string
+		wantDate                string
+	}{
+		{
+			name:    "release build: injected values win, version made canonical",
+			version: "0.9.5", commit: "84054bd", date: "2026-10-16T12:05:07Z",
+			wantVersion: "v0.9.5", wantCommit: "84054bd", wantDate: "2026-10-16T12:05:07Z",
+		},
+		{
+			name:    "injected version already canonical",
+			version: "v0.9.5", commit: unknownValue, date: unknownValue,
+			wantVersion: "v0.9.5", wantCommit: tool.Revision, wantDate: tool.Time,
+		},
+		{
+			name:    "no ldflags: toolchain values",
+			version: devVersion, commit: unknownValue, date: unknownValue,
+			wantVersion: tool.Version, wantCommit: tool.Revision, wantDate: tool.Time,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origVersion, origCommit, origDate := Version, GitCommit, BuildDate
+			Version, GitCommit, BuildDate = tt.version, tt.commit, tt.date
+			defer func() { Version, GitCommit, BuildDate = origVersion, origCommit, origDate }()
+
+			d := buildDetails(tool)
+			assert.Equal(t, tt.wantVersion, d.version)
+			assert.Equal(t, tt.wantCommit, d.commit)
+			assert.Equal(t, tt.wantDate, d.date)
+			assert.True(t, d.modified)
+		})
+	}
 }
 
 // ============================================================================
