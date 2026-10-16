@@ -1,5 +1,7 @@
 package layout
 
+import "sort"
+
 // Table is a layout element that renders a structured grid of cells with
 // optional repeating header and footer rows and page-split support.
 //
@@ -83,21 +85,21 @@ func (t *Table) PlanLayout(area Area) Plan {
 
 	colWidths := t.resolveColumnWidths(numCols, area.Width)
 
-	// Measure all sections.
-	headerRows := t.measureRows(t.Header, colWidths)
-	bodyRows := t.measureRows(t.Body, colWidths)
-	footerRows := t.measureRows(t.Footer, colWidths)
+	// Resolve each section into a grid with final row heights.
+	header := buildSectionGrid(t.Header, colWidths)
+	body := buildSectionGrid(t.Body, colWidths)
+	footer := buildSectionGrid(t.Footer, colWidths)
 
-	headerHeight := sumHeights(headerRows)
-	footerHeight := sumHeights(footerRows)
+	headerHeight := header.height(0, header.numRows())
+	footerHeight := footer.height(0, footer.numRows())
 
 	// Check whether all content fits on one page.
-	bodyHeight := sumHeights(bodyRows)
+	bodyHeight := body.height(0, body.numRows())
 	totalHeight := headerHeight + bodyHeight + footerHeight
 
 	if totalHeight <= area.Height || area.Height >= 1e8 {
 		// Everything fits — produce a single plan.
-		blocks := t.buildAllBlocks(headerRows, bodyRows, footerRows, colWidths, area.Width)
+		blocks := buildAllBlocks(header, body, body.numRows(), footer, colWidths, area.Width)
 		return Plan{
 			Status:   Full,
 			Consumed: totalHeight,
@@ -112,7 +114,7 @@ func (t *Table) PlanLayout(area Area) Plan {
 		if headerHeight == 0 {
 			return Plan{Status: Nothing}
 		}
-		blocks := t.buildAllBlocks(headerRows, nil, footerRows, colWidths, area.Width)
+		blocks := buildAllBlocks(header, body, 0, footer, colWidths, area.Width)
 		overflow := t.overflowTable(0)
 		return Plan{
 			Status:   Partial,
@@ -125,20 +127,20 @@ func (t *Table) PlanLayout(area Area) Plan {
 	// Walk body rows until we exceed available space.
 	splitAt := 0
 	usedHeight := 0.0
-	for i := range bodyRows {
-		if usedHeight+bodyRows[i].height > available {
+	for i, h := range body.heights {
+		if usedHeight+h > available {
 			// This row doesn't fit; split before it.
 			break
 		}
-		usedHeight += bodyRows[i].height
+		usedHeight += h
 		splitAt = i + 1
 	}
 
 	if splitAt == 0 {
 		// Nothing from the body fits on this page.
-		if len(bodyRows) == 0 {
+		if body.numRows() == 0 {
 			// No body rows — full fit with header/footer only.
-			blocks := t.buildAllBlocks(headerRows, nil, footerRows, colWidths, area.Width)
+			blocks := buildAllBlocks(header, body, 0, footer, colWidths, area.Width)
 			return Plan{
 				Status:   Full,
 				Consumed: headerHeight + footerHeight,
@@ -150,13 +152,12 @@ func (t *Table) PlanLayout(area Area) Plan {
 	}
 
 	// Build plan for what fits.
-	fittingBodyRows := bodyRows[:splitAt]
-	consumed := headerHeight + sumHeights(fittingBodyRows) + footerHeight
-	blocks := t.buildAllBlocks(headerRows, fittingBodyRows, footerRows, colWidths, area.Width)
+	consumed := headerHeight + body.height(0, splitAt) + footerHeight
+	blocks := buildAllBlocks(header, body, splitAt, footer, colWidths, area.Width)
 
 	overflow := t.overflowTable(splitAt)
 	status := Partial
-	if splitAt >= len(bodyRows) {
+	if splitAt >= body.numRows() {
 		status = Full
 		overflow = nil
 	}
@@ -201,23 +202,6 @@ func (t *Table) MaxWidth() float64 {
 		total += w
 	}
 	return total
-}
-
-// --- Internal types ---
-
-// measuredRow is a TableRow with computed height and resolved cell widths.
-type measuredRow struct {
-	row      TableRow
-	height   float64
-	cellRecs []cellRecord
-}
-
-// cellRecord stores the resolved geometry of a single cell for rendering.
-type cellRecord struct {
-	cell      TableCell
-	colIndex  int     // starting column (for X offset)
-	cellWidth float64 // total width across spanned columns
-	rowSpan   int     // effective row span
 }
 
 // --- numCols ---
@@ -454,76 +438,179 @@ func cellIntrinsicWidths(cell *TableCell) (minW, maxW float64) {
 	return minW, maxW
 }
 
-// --- Row measurement ---
+// --- Section grid ---
 
-// measureRows converts a slice of TableRows into measuredRows with heights
-// pre-computed. It uses the colOccupied array to handle rowspan tracking.
-func (t *Table) measureRows(rows []TableRow, colWidths []float64) []measuredRow {
-	nCols := len(colWidths)
-	colOccupied := make([]int, nCols)
-	result := make([]measuredRow, 0, len(rows))
-
-	for ri := range rows {
-		mr := buildMeasuredRow(&rows[ri], colWidths, nCols, colOccupied)
-		mr.height = computeRowHeight(mr.cellRecs)
-		result = append(result, mr)
-	}
-
-	return result
+// sectionGrid is one table section (header, body or footer) resolved into a
+// grid: every cell at its origin row and column with clamped spans, and the
+// final row heights. Building the whole grid before measuring is what lets a
+// row-spanning cell take part in the heights of all rows it covers
+// (ADR-007 §1–§2).
+type sectionGrid struct {
+	rows    []TableRow
+	heights []float64
+	// cells holds every originating cell, ordered by origin row, then column.
+	cells []gridCell
+	// covered[r][c] reports that column c of row r belongs to a cell that
+	// originates in an earlier row. covered[r] is nil when no column of row r
+	// is covered, which is the case for every row of a table without row spans.
+	covered [][]bool
 }
 
-// buildMeasuredRow constructs a measuredRow for a single TableRow, advancing
-// the colOccupied tracker to account for rowspan cells from previous rows.
-func buildMeasuredRow(row *TableRow, colWidths []float64, nCols int, colOccupied []int) measuredRow {
-	mr := measuredRow{row: *row}
-	cellIdx := 0
-	col := 0
-
-	for col < nCols && cellIdx < len(row.Cells) {
-		col = skipOccupiedCols(colOccupied, col, nCols)
-		if col >= nCols || cellIdx >= len(row.Cells) {
-			break
-		}
-
-		cell := row.Cells[cellIdx]
-		colspan := cell.effectiveColSpan()
-		if col+colspan > nCols {
-			colspan = nCols - col
-		}
-		rowspan := cell.effectiveRowSpan()
-
-		cellWidth := sumColWidths(colWidths, col, col+colspan)
-		mr.cellRecs = append(mr.cellRecs, cellRecord{
-			cell:      cell,
-			colIndex:  col,
-			cellWidth: cellWidth,
-			rowSpan:   rowspan,
-		})
-
-		markRowspanOccupancy(colOccupied, col, col+colspan, rowspan)
-
-		col += colspan
-		cellIdx++
-	}
-
-	// Drain remaining occupied columns for this row.
-	for ; col < nCols; col++ {
-		if colOccupied[col] > 0 {
-			colOccupied[col]--
-		}
-	}
-
-	return mr
+// gridCell is a cell placed in a sectionGrid.
+type gridCell struct {
+	cell    TableCell
+	row     int     // origin row
+	col     int     // first column
+	colSpan int     // clamped to the table width and to columns already occupied
+	rowSpan int     // clamped to the end of the section
+	width   float64 // total width of the spanned columns
 }
 
-// skipOccupiedCols advances col past any columns still occupied by a rowspan
-// from a prior row, decrementing their occupancy counters as it goes.
-func skipOccupiedCols(colOccupied []int, col, nCols int) int {
-	for col < nCols && colOccupied[col] > 0 {
-		colOccupied[col]--
-		col++
+// buildSectionGrid places the cells of rows into a grid and computes the row
+// heights. Cells fill the free columns of their row from left to right; a
+// column stays occupied for the rows a cell spans. RowSpan is clamped to the
+// end of the section (the HTML row-group rule) and ColSpan to the table width
+// and to the next occupied column, so cell boxes never overlap.
+func buildSectionGrid(rows []TableRow, colWidths []float64) *sectionGrid {
+	nRows, nCols := len(rows), len(colWidths)
+	g := &sectionGrid{
+		rows:    rows,
+		heights: make([]float64, nRows),
+		covered: make([][]bool, nRows),
 	}
-	return col
+
+	// occupiedUntil[c] is the first row at which column c is free again.
+	occupiedUntil := make([]int, nCols)
+
+	for r := range rows {
+		for c := 0; c < nCols; c++ {
+			if occupiedUntil[c] > r {
+				if g.covered[r] == nil {
+					g.covered[r] = make([]bool, nCols)
+				}
+				g.covered[r][c] = true
+			}
+		}
+
+		col := 0
+		for ci := range rows[r].Cells {
+			for col < nCols && occupiedUntil[col] > r {
+				col++
+			}
+			if col >= nCols {
+				break
+			}
+
+			cell := rows[r].Cells[ci]
+			colSpan := min(cell.effectiveColSpan(), nCols-col)
+			for k := 1; k < colSpan; k++ {
+				if occupiedUntil[col+k] > r {
+					colSpan = k
+					break
+				}
+			}
+			rowSpan := min(cell.effectiveRowSpan(), nRows-r)
+
+			g.cells = append(g.cells, gridCell{
+				cell:    cell,
+				row:     r,
+				col:     col,
+				colSpan: colSpan,
+				rowSpan: rowSpan,
+				width:   sumColWidths(colWidths, col, col+colSpan),
+			})
+			for c := col; c < col+colSpan; c++ {
+				occupiedUntil[c] = r + rowSpan
+			}
+			col += colSpan
+		}
+	}
+
+	g.computeHeights()
+	return g
+}
+
+// computeHeights sets the row heights in two passes (ADR-007 §2):
+//
+//  1. every row is as tall as its tallest single-row cell;
+//  2. each row-spanning cell, shortest span first, grows the rows it covers
+//     until their sum fits the cell (see growRows).
+//
+// Settling shorter spans first means a longer span only adds what is still
+// missing after the spans nested inside it, instead of growing rows that a
+// nested span grows again (rows 10/10/10, span 3 needing 90, span 2 needing
+// 80: 90 in total this way, 110 the other way). CSS leaves the order
+// unspecified (csswg-drafts#4418).
+func (g *sectionGrid) computeHeights() {
+	need := make([]float64, len(g.cells))
+	var spanning []int
+	for i := range g.cells {
+		gc := &g.cells[i]
+		need[i] = measureCellHeight(&gc.cell, gc.width)
+		if gc.rowSpan == 1 {
+			if need[i] > g.heights[gc.row] {
+				g.heights[gc.row] = need[i]
+			}
+			continue
+		}
+		spanning = append(spanning, i)
+	}
+
+	// cells are in origin-row order, so the stable sort keeps spans of equal
+	// length in top-to-bottom order.
+	sort.SliceStable(spanning, func(a, b int) bool {
+		return g.cells[spanning[a]].rowSpan < g.cells[spanning[b]].rowSpan
+	})
+	for _, i := range spanning {
+		gc := &g.cells[i]
+		spanned := g.heights[gc.row : gc.row+gc.rowSpan]
+		growRows(spanned, need[i]-sumFloats(spanned))
+	}
+}
+
+// growRows adds deficit to rows in proportion to their current heights, so
+// empty rows do not grow; when every row is empty the last one takes it all.
+// This is the rule proposed for CSS Tables 3 (csswg-drafts#4418) and encoded
+// in the WPT test css-tables/tentative/rowspan-height-redistribution.html.
+// The last row receives the rounding remainder of the shares; the rows then
+// sum to the previous total plus deficit up to floating-point rounding, which
+// content layout absorbs with its fit tolerance.
+func growRows(rows []float64, deficit float64) {
+	if deficit <= 0 || len(rows) == 0 {
+		return
+	}
+	last := len(rows) - 1
+	total := sumFloats(rows)
+	if total <= 0 {
+		rows[last] += deficit
+		return
+	}
+	given := 0.0
+	for i := 0; i < last; i++ {
+		share := deficit * rows[i] / total
+		rows[i] += share
+		given += share
+	}
+	rows[last] += deficit - given
+}
+
+// numRows returns the number of rows in the section.
+func (g *sectionGrid) numRows() int {
+	return len(g.heights)
+}
+
+// height returns the total height of rows [from, to).
+func (g *sectionGrid) height(from, to int) float64 {
+	return sumFloats(g.heights[from:to])
+}
+
+// sumFloats returns the sum of values, added in order.
+func sumFloats(values []float64) float64 {
+	total := 0.0
+	for _, v := range values {
+		total += v
+	}
+	return total
 }
 
 // sumColWidths returns the total width of columns [start, end).
@@ -533,33 +620,6 @@ func sumColWidths(colWidths []float64, start, end int) float64 {
 		total += colWidths[c]
 	}
 	return total
-}
-
-// markRowspanOccupancy records rowspan occupancy for columns [start, end)
-// when rowspan > 1 so that subsequent rows skip those columns.
-func markRowspanOccupancy(colOccupied []int, start, end, rowspan int) {
-	if rowspan > 1 {
-		for c := start; c < end; c++ {
-			colOccupied[c] = rowspan - 1
-		}
-	}
-}
-
-// computeRowHeight returns the maximum cell height across all cellRecords,
-// dividing rowspan cells proportionally.
-func computeRowHeight(cellRecs []cellRecord) float64 {
-	maxH := 0.0
-	for i := range cellRecs {
-		rec := &cellRecs[i]
-		h := measureCellHeight(&rec.cell, rec.cellWidth)
-		if rec.rowSpan > 1 {
-			h /= float64(rec.rowSpan)
-		}
-		if h > maxH {
-			maxH = h
-		}
-	}
-	return maxH
 }
 
 // measureCellHeight returns the total height a cell needs including padding.
@@ -589,92 +649,110 @@ func measureCellHeight(cell *TableCell, cellWidth float64) float64 {
 	return contentH + padV
 }
 
-// sumHeights sums the heights of measured rows.
-func sumHeights(rows []measuredRow) float64 {
-	total := 0.0
-	for i := range rows {
-		total += rows[i].height
-	}
-	return total
-}
-
 // --- Block building ---
 
-// buildAllBlocks converts measured rows into positioned Blocks for rendering.
-// It emits header, then body, then footer rows in sequence starting at Y=0.
-func (t *Table) buildAllBlocks(header, body, footer []measuredRow, colWidths []float64, tableWidth float64) []Block {
-	totalRows := len(header) + len(body) + len(footer)
-	blocks := make([]Block, 0, totalRows*4) // rows + bg + cells
-	cursorY := 0.0
-
-	for i := range header {
-		rowBlocks := buildRowBlocks(&header[i], colWidths, tableWidth, cursorY)
-		blocks = append(blocks, rowBlocks...)
-		cursorY += header[i].height
-	}
-	for i := range body {
-		rowBlocks := buildRowBlocks(&body[i], colWidths, tableWidth, cursorY)
-		blocks = append(blocks, rowBlocks...)
-		cursorY += body[i].height
-	}
-	for i := range footer {
-		rowBlocks := buildRowBlocks(&footer[i], colWidths, tableWidth, cursorY)
-		blocks = append(blocks, rowBlocks...)
-		cursorY += footer[i].height
-	}
-
-	return blocks
-}
-
-// buildRowBlocks creates Blocks for a single measured row.
-func buildRowBlocks(mr *measuredRow, colWidths []float64, tableWidth, rowY float64) []Block {
-	blocks := make([]Block, 0, 1+len(mr.cellRecs))
-
-	rowH := mr.height
-	rowStyle := mr.row.Style.effective()
-
-	// Row background block.
-	if rowStyle.Background != nil {
-		bg := *rowStyle.Background
-		capW := tableWidth
-		capH := rowH
-		block := Block{
-			X:      0,
-			Y:      rowY,
-			Width:  tableWidth,
-			Height: rowH,
-			Draw: func(r Renderer) {
-				r.DrawRect(0, 0, capW, capH, &bg, nil, 0)
-			},
-		}
-		blocks = append(blocks, block)
-	}
-
-	// Compute column offsets.
+// buildAllBlocks converts the sections into positioned Blocks: the whole
+// header, body rows [0, bodyEnd), then the whole footer, starting at Y=0.
+func buildAllBlocks(header, body *sectionGrid, bodyEnd int, footer *sectionGrid, colWidths []float64, tableWidth float64) []Block {
 	nCols := len(colWidths)
 	colOffsets := make([]float64, nCols)
 	for i := 1; i < nCols; i++ {
 		colOffsets[i] = colOffsets[i-1] + colWidths[i-1]
 	}
 
-	// Cell blocks.
-	for i := range mr.cellRecs {
-		cellBlock := buildCellBlock(&mr.cellRecs[i], colOffsets, rowH, rowY)
-		blocks = append(blocks, cellBlock)
-	}
-
+	totalRows := header.numRows() + bodyEnd + footer.numRows()
+	blocks := make([]Block, 0, totalRows*4) // rows + bg + cells
+	cursorY := 0.0
+	blocks, cursorY = header.appendBlocks(blocks, header.numRows(), colOffsets, tableWidth, cursorY)
+	blocks, cursorY = body.appendBlocks(blocks, bodyEnd, colOffsets, tableWidth, cursorY)
+	blocks, _ = footer.appendBlocks(blocks, footer.numRows(), colOffsets, tableWidth, cursorY)
 	return blocks
 }
 
-// buildCellBlock creates the Block for a single cell, including background,
-// border, and content layout.
-func buildCellBlock(rec *cellRecord, colOffsets []float64, rowH, rowY float64) Block {
-	s := rec.cell.Style.effective()
+// appendBlocks appends the blocks of rows [0, end) to blocks, starting at
+// rowY, and returns the extended slice and the Y below the last row. For each
+// row it emits the row background, then the cells that originate in the row.
+// A spanning cell is as tall as the rows it covers, cut at end.
+func (g *sectionGrid) appendBlocks(blocks []Block, end int, colOffsets []float64, tableWidth, rowY float64) ([]Block, float64) {
+	next := 0 // index of the first cell not yet emitted
+	for r := 0; r < end; r++ {
+		rowH := g.heights[r]
+		rowStyle := g.rows[r].Style.effective()
+		if rowStyle.Background != nil {
+			blocks = g.appendRowBackground(blocks, r, *rowStyle.Background, colOffsets, tableWidth, rowY)
+		}
+
+		for ; next < len(g.cells) && g.cells[next].row == r; next++ {
+			gc := &g.cells[next]
+			cellH := g.height(r, min(r+gc.rowSpan, end))
+
+			// A row's background covers the cells that originate in it,
+			// including the rows they span (CSS 2.2 table layers).
+			var rowBg *Color
+			if gc.rowSpan > 1 {
+				rowBg = rowStyle.Background
+			}
+			blocks = append(blocks, buildCellBlock(gc, colOffsets, cellH, rowY, rowBg))
+		}
+
+		rowY += rowH
+	}
+	return blocks, rowY
+}
+
+// appendRowBackground appends the background of row r. The background skips
+// columns covered by cells from earlier rows, so it never paints over them;
+// a row without covered columns gets a single full-width rectangle.
+func (g *sectionGrid) appendRowBackground(blocks []Block, r int, bg Color, colOffsets []float64, tableWidth, rowY float64) []Block {
+	rowH := g.heights[r]
+	covered := g.covered[r]
+	if covered == nil {
+		return append(blocks, rectBlock(0, rowY, tableWidth, rowH, bg))
+	}
+
+	nCols := len(colOffsets)
+	for c := 0; c < nCols; {
+		if covered[c] {
+			c++
+			continue
+		}
+		start := c
+		for c < nCols && !covered[c] {
+			c++
+		}
+		x := colOffsets[start]
+		right := tableWidth
+		if c < nCols {
+			right = colOffsets[c]
+		}
+		blocks = append(blocks, rectBlock(x, rowY, right-x, rowH, bg))
+	}
+	return blocks
+}
+
+// rectBlock returns a block that fills its own area with color.
+func rectBlock(x, y, w, h float64, color Color) Block {
+	return Block{
+		X:      x,
+		Y:      y,
+		Width:  w,
+		Height: h,
+		Draw: func(r Renderer) {
+			r.DrawRect(0, 0, w, h, &color, nil, 0)
+		},
+	}
+}
+
+// buildCellBlock creates the Block for a single cell of height cellH,
+// including background, border, and content layout. rowBg, when non-nil, is
+// the background of the cell's originating row; it fills the cell when the
+// cell has no background of its own.
+func buildCellBlock(gc *gridCell, colOffsets []float64, cellH, rowY float64, rowBg *Color) Block {
+	s := gc.cell.Style.effective()
 	fontSize := s.FontSize
 
-	cellX := colOffsets[rec.colIndex]
-	cellW := rec.cellWidth
-	cellH := rowH
+	cellX := colOffsets[gc.col]
+	cellW := gc.width
 
 	pad := s.Padding.Resolve(cellW, cellH, fontSize)
 	innerW := cellW - pad.Left - pad.Right
@@ -689,7 +767,7 @@ func buildCellBlock(rec *cellRecord, colOffsets []float64, rowH, rowY float64) B
 	// Layout cell content to get actual content height (for vertical alignment).
 	var contentBlocks []Block
 	innerCursorY := 0.0
-	for _, elem := range rec.cell.Content {
+	for _, elem := range gc.cell.Content {
 		plan := elem.PlanLayout(Area{Width: innerW, Height: innerH})
 		placed := cloneBlocks(plan.Blocks)
 		offsetBlocks(placed, 0, innerCursorY)
@@ -720,6 +798,9 @@ func buildCellBlock(rec *cellRecord, colOffsets []float64, rowH, rowY float64) B
 	capW := cellW
 	capH := cellH
 	capBg := s.Background
+	if capBg == nil {
+		capBg = rowBg
+	}
 	capBorder := s.Border
 
 	outerBlock := Block{

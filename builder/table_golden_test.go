@@ -128,6 +128,40 @@ func firstDiff(want, got string) string {
 	return "(no line difference)"
 }
 
+// issue100Doc is the repro from GitHub issue #100.
+func issue100Doc() *Builder {
+	doc := NewBuilder(WithPageSize(A4))
+	doc.Page(func(p *PageBuilder) {
+		p.Content(func(c *Container) {
+			c.Table(func(t *TableBuilder) {
+				t.Columns(Fr(1), Fr(1), Fr(1))
+				for i := 1; i <= 4; i++ {
+					t.Row(func(r *TableRowBuilder) {
+						cell := func(s string, o ...CellOption) {
+							r.Cell(func(cb *CellBuilder) { cb.Text(s) },
+								append([]CellOption{CellBorder(Black, 0.5)}, o...)...)
+						}
+						if i == 1 {
+							cell("TEAM", RowSpan(4), CellVAlignMiddle())
+						}
+						cell(fmt.Sprintf("member %d", i))
+						if i == 1 {
+							cell("Line one of a long merged text that wraps over several lines inside the merged cell",
+								RowSpan(4), CellVAlignMiddle())
+						}
+					})
+				}
+			})
+		})
+	})
+	return doc
+}
+
+// TestTableGolden_RowSpan pins the output of row-spanning cells (#100).
+func TestTableGolden_RowSpan(t *testing.T) {
+	assertGolden(t, "table_rowspan_issue100", recordDrawOps(t, issue100Doc()))
+}
+
 // TestTableGolden_NoRowSpan pins the output of tables without row spans.
 // ADR-007 invariant I6: the row-span rework must not change these bytes.
 // The golden files were captured on main (v0.9.5 + #105) before the rework.

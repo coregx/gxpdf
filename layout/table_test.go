@@ -177,11 +177,14 @@ func TestTable_ColSpan2(t *testing.T) {
 	plan := tbl.PlanLayout(Area{Width: 300, Height: 1000})
 	assert.Equal(t, Full, plan.Status)
 	assert.Nil(t, plan.Overflow)
-	// Row 0 has 2 cell records (span-2 + 1 normal).
-	mr := tbl.measureRows(tbl.Body, tbl.resolveColumnWidths(3, 300))
-	require.Len(t, mr[0].cellRecs, 2)
+	// Row 0 has 2 cells (span-2 + 1 normal).
+	g := buildSectionGrid(tbl.Body, tbl.resolveColumnWidths(3, 300))
+	require.Len(t, g.cells, 5)
+	assert.Equal(t, 0, g.cells[1].row)
+	assert.Equal(t, 1, g.cells[2].row)
 	// Span-2 cell should have width = 2/3 * 300 = 200.
-	assert.InDelta(t, 200.0, mr[0].cellRecs[0].cellWidth, 0.1)
+	assert.InDelta(t, 200.0, g.cells[0].width, 0.1)
+	assert.Equal(t, 2, g.cells[0].colSpan)
 }
 
 // TestTable_ColSpan3Header verifies colspan 3 in the header row.
@@ -226,17 +229,18 @@ func TestTable_RowSpan2(t *testing.T) {
 	}, fonts)
 
 	colWidths := tbl.resolveColumnWidths(3, 300)
-	mr := tbl.measureRows(tbl.Body, colWidths)
-	require.Len(t, mr, 2)
+	g := buildSectionGrid(tbl.Body, colWidths)
+	require.Equal(t, 2, g.numRows())
+	require.Len(t, g.cells, 5)
 
-	// Row 0: 3 cell records (rowspan cell + 2 normal).
-	assert.Len(t, mr[0].cellRecs, 3)
+	// Row 0: 3 cells (rowspan cell + 2 normal).
+	assert.Equal(t, gridCell{cell: tbl.Body[0].Cells[0], row: 0, col: 0, colSpan: 1, rowSpan: 2, width: 100}, g.cells[0])
 
-	// Row 1: 2 cell records (column 0 is occupied by rowspan).
-	assert.Len(t, mr[1].cellRecs, 2)
-	// The cells in row 1 should start at column index 1.
-	assert.Equal(t, 1, mr[1].cellRecs[0].colIndex)
-	assert.Equal(t, 2, mr[1].cellRecs[1].colIndex)
+	// Row 1: 2 cells (column 0 is occupied by rowspan), starting at column 1.
+	assert.Equal(t, [2]int{1, 1}, [2]int{g.cells[3].row, g.cells[3].col})
+	assert.Equal(t, [2]int{1, 2}, [2]int{g.cells[4].row, g.cells[4].col})
+	assert.Equal(t, []bool{true, false, false}, g.covered[1])
+	assert.Nil(t, g.covered[0])
 }
 
 // TestTable_HeaderRepeatOnOverflow verifies the overflow Table carries the header.
@@ -307,38 +311,42 @@ func TestTable_CellVerticalAlignTop(t *testing.T) {
 // TestTable_CellVerticalAlignMiddle verifies VAlignMiddle content is shifted.
 func TestTable_CellVerticalAlignMiddle(t *testing.T) {
 	fonts := &MockFontResolver{}
-	rec := cellRecord{
+	gc := gridCell{
 		cell: TableCell{
 			Content: []Element{&Text{Content: "hi", Fonts: fonts}},
 			Style:   Style{VerticalAlign: VAlignMiddle},
 		},
-		colIndex:  0,
-		cellWidth: 200,
-		rowSpan:   1,
+		col:     0,
+		width:   200,
+		colSpan: 1,
+		rowSpan: 1,
 	}
 	colOffsets := []float64{0}
 	rowH := 100.0
 	rowY := 0.0
-	block := buildCellBlock(&rec, colOffsets, rowH, rowY)
-	// Children should be offset (vOffset > 0 for middle-aligned short content).
-	assert.NotEmpty(t, block.Children)
+	block := buildCellBlock(&gc, colOffsets, rowH, rowY, nil)
+	// Children are offset by (100 - 14.4) / 2 for middle-aligned short content.
+	require.NotEmpty(t, block.Children)
+	assert.InDelta(t, 42.8, block.Children[0].Y, 0.001)
 }
 
 // TestTable_CellVerticalAlignBottom verifies VAlignBottom.
 func TestTable_CellVerticalAlignBottom(t *testing.T) {
 	fonts := &MockFontResolver{}
-	rec := cellRecord{
+	gc := gridCell{
 		cell: TableCell{
 			Content: []Element{&Text{Content: "hi", Fonts: fonts}},
 			Style:   Style{VerticalAlign: VAlignBottom},
 		},
-		colIndex:  0,
-		cellWidth: 200,
-		rowSpan:   1,
+		col:     0,
+		width:   200,
+		colSpan: 1,
+		rowSpan: 1,
 	}
 	colOffsets := []float64{0}
-	block := buildCellBlock(&rec, colOffsets, 100.0, 0.0)
-	assert.NotEmpty(t, block.Children)
+	block := buildCellBlock(&gc, colOffsets, 100.0, 0.0, nil)
+	require.NotEmpty(t, block.Children)
+	assert.InDelta(t, 100-14.4, block.Children[0].Y, 0.001)
 }
 
 // TestTable_CellPadding verifies padding increases measured height.
@@ -365,9 +373,9 @@ func TestTable_CellBackground(t *testing.T) {
 		Content: []Element{&Text{Content: "hi", Fonts: fonts}},
 		Style:   Style{Background: &bg},
 	}
-	rec := cellRecord{cell: cell, colIndex: 0, cellWidth: 100, rowSpan: 1}
+	gc := gridCell{cell: cell, col: 0, width: 100, colSpan: 1, rowSpan: 1}
 	colOffsets := []float64{0}
-	block := buildCellBlock(&rec, colOffsets, 50.0, 0.0)
+	block := buildCellBlock(&gc, colOffsets, 50.0, 0.0, nil)
 	assert.NotNil(t, block.Draw, "cell with background should have a Draw closure")
 }
 
@@ -518,9 +526,9 @@ func TestTable_CellBorder(t *testing.T) {
 			},
 		},
 	}
-	rec := cellRecord{cell: cell, colIndex: 0, cellWidth: 100, rowSpan: 1}
+	gc := gridCell{cell: cell, col: 0, width: 100, colSpan: 1, rowSpan: 1}
 	colOffsets := []float64{0}
-	block := buildCellBlock(&rec, colOffsets, 50.0, 0.0)
+	block := buildCellBlock(&gc, colOffsets, 50.0, 0.0, nil)
 	assert.NotNil(t, block.Draw)
 
 	// Execute the Draw closure to verify it doesn't panic.
