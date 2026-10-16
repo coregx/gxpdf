@@ -1045,52 +1045,49 @@ func (r *Reader) applyFilter(filterName string, dict *Dictionary, content []byte
 	}
 }
 
-// resolveReferences recursively resolves indirect references.
+// resolveReferences resolves the indirect references (e.g. "1 0 R") inside obj.
 //
-// PDF objects can contain indirect references (e.g., "1 0 R") that
-// point to other objects. This method follows these references and
-// replaces them with the actual objects.
+// The result is a new object: obj itself and every cached object are left
+// untouched. An IndirectReference is replaced by the object it points to;
+// direct (inline) arrays and dictionaries are copied with their elements
+// resolved the same way. Resolved objects are not descended into, so the work
+// is bounded by the size of obj's inline structure.
 //
-// For arrays and dictionaries, all nested references are resolved.
-//
-// Circular references are not currently detected (Phase 2.4).
-// This will be addressed in a future phase if needed.
+// Copy-on-resolve is essential because GetObject returns shared, cached
+// objects. Writing resolved values back into them turns ordinary PDF reference
+// cycles — a form field's /Kids and each kid's /Parent, a widget's /P and the
+// page's /Annots — into Go pointer cycles, after which the next resolution of
+// the same object recursed without bound and crashed the process with a stack
+// overflow. Mutating shared objects was also unsafe for concurrent readers.
 func (r *Reader) resolveReferences(obj PdfObject) PdfObject {
 	switch o := obj.(type) {
 	case *IndirectReference:
-		// Resolve the reference
 		resolved, err := r.GetObject(o.Number)
 		if err != nil {
-			// If resolution fails, return the unresolved reference
-			// This allows the caller to handle the error
+			// Leave the reference unresolved so the caller can handle it.
 			return o
 		}
 		return resolved
 
 	case *Array:
-		// Resolve all array elements
+		resolved := NewArrayWithCapacity(o.Len())
 		for i := 0; i < o.Len(); i++ {
-			elem := o.Get(i)
-			if elem != nil {
-				resolved := r.resolveReferences(elem)
-				_ = o.Set(i, resolved)
-			}
+			resolved.Append(r.resolveReferences(o.Get(i)))
 		}
-		return o
+		return resolved
 
 	case *Dictionary:
-		// Resolve all dictionary values
-		for _, key := range o.Keys() {
-			value := o.Get(key)
-			if value != nil {
-				resolved := r.resolveReferences(value)
-				o.Set(key, resolved)
+		keys := o.Keys()
+		resolved := NewDictionaryWithCapacity(len(keys))
+		for _, key := range keys {
+			if value := o.Get(key); value != nil {
+				resolved.Set(key, r.resolveReferences(value))
 			}
 		}
-		return o
+		return resolved
 
 	default:
-		// Direct objects are returned as-is
+		// Direct scalar objects (and streams) are immutable here.
 		return obj
 	}
 }
@@ -1240,7 +1237,8 @@ func (r *Reader) ResolveArray(obj PdfObject) (*Array, error) {
 	return r.resolveArray(obj)
 }
 
-// ResolveReferences recursively resolves indirect references in an object.
+// ResolveReferences returns a copy of obj with its indirect references
+// resolved; obj and cached objects are never modified.
 // This is the exported version of resolveReferences.
 func (r *Reader) ResolveReferences(obj PdfObject) PdfObject {
 	return r.resolveReferences(obj)
