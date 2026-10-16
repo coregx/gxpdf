@@ -102,7 +102,7 @@ fmt.Println(infos[0].SignedBy, infos[0].Valid) // "CN=Test" true
 - **Graphics** - Lines, rectangles, circles, polygons, ellipses, arcs (wedge/chord), cubic and quadratic Bezier curves
 - **Gradients** - Linear and radial gradient fills with full PDF Shading (multi-stop support)
 - **Color Spaces** - RGB and CMYK support
-- **Tables** - Complex tables with merged cells, borders, backgrounds
+- **Tables** - Complex tables with merged cells, borders, backgrounds; row spans that keep their rows on one page or continue across page breaks (`CellAllowBreak`, `CellRepeatOnBreak`)
 - **Images** - JPEG and PNG with transparency support
 - **Fonts** - Standard 14 PDF fonts + TTF/OTF embedding with full Unicode support (Cyrillic, CJK, symbols)
 - **Document Structure** - Chapters, auto-generated Table of Contents

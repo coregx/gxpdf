@@ -302,7 +302,7 @@ Community-driven release — all three extraction features requested by @joa23:
 | feat-042 | Encrypted PDF Reading | **P1** | **Done** | RC4/AES-128 with password support |
 | feat-079 | Arc Drawing | **P2** | **Done** | Elliptical/circular arcs with wedge/chord (#59) |
 | feat-076 | Declarative Builder API | **P1** | **Done** | QuestPDF-inspired layout, 12-col grid, auto-pagination |
-| feat-077 | Tables ColSpan/RowSpan | **P1** | Backlog | Enterprise-grade table layout in builder |
+| feat-077 | Tables ColSpan/RowSpan | **P1** | **Done** | Enterprise-grade table layout in builder; row spans across page breaks (#100) |
 | feat-081 | Rich Text | **P1** | Backlog | Mixed-style inline text elements |
 | feat-037 | Digital Signatures | **P1** | Backlog | Sign and verify PDFs (CMS/PKCS#7 + PAdES) |
 | feat-080 | HTML to PDF | **P2** | Backlog | Render WYSIWYG HTML via GxPDF |

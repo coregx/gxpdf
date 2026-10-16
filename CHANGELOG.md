@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Row-spanning table cells** (#100). A `RowSpan` cell was laid out in its first row only: border and background stopped there, text was clipped, vertical alignment centered in the first row, and the rows did not grow to fit it. It now covers all spanned rows; rows that must grow do so in proportion to their height.
+- **Row spans across page breaks** (#100). Cells after a break inside a span shifted left into the spanned column, and the spanning cell was lost. The cell now continues in its columns on the next page with its remaining content.
+- **Table columns changed between pages**: a table continued on the next page re-resolved `Auto` column widths and, without `Columns`, the column count from the remaining rows (an `Auto` column went from 114pt to 6pt). The column grid is now kept for the whole table.
+- **Content running off the page**: a table whose first row did not fit at the top of a page was drawn whole on one page below its bottom edge; a box whose first line did not fit near the bottom of a page was drawn below the page instead of moving to the next one.
+- **Pagination never ended** for a table whose header was taller than the page.
+- **An image in a row-spanning cell could be dropped by rounding**: grown rows can sum to a few ulps less than the image needs. Text allowed 0.01pt; images, spacers, `EnsureSpace` and table row fitting compared exactly. All fit decisions now use one tolerance.
+
+### Added
+- `builder.CellAllowBreak()` / `layout.TableCell.AllowBreak` — allow a page break inside a row span (dense tables).
+- `builder.CellRepeatOnBreak()` / `layout.TableCell.RepeatOnBreak` — repeat a spanning cell's content on every page its span continues on, like a group header.
+- `layout.Area.AtTop`, `layout.Fits`, `layout.FitTolerance` for `Element` implementations.
+- `examples/table-rowspan` — duty roster with row spans across pages.
+
 ### Changed
+- **Rows linked by a row span stay on one page**: a group that does not fit in the rest of a page moves to the next page whole; a group taller than a page is broken.
+- Custom layout drivers (not the built-in `Paginator`) must set `Area.AtTop` at the top of each page: elements return `Nothing` instead of forcing themselves when it is false.
 - `gxpdf.Version` reports the module version recorded by the Go toolchain instead of a stale constant (`"0.1.0-alpha"`): the release tag when used as a dependency, a pseudo-version for builds from a checkout, `(devel)` for `go run`/`go test`. It is now a variable of type `string`.
 - `gxpdf version` falls back to the toolchain's version, commit and modified state when release ldflags are absent (`go install`, local builds); release and `go install` builds print the same `vX.Y.Z`.
 

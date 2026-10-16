@@ -108,10 +108,14 @@ The `layout` package is a zero-dependency layout engine. It takes a tree of `Ele
 
 **Pagination algorithm**:
 1. For each `PageDef`, render header and footer into fixed zones.
-2. Feed content elements to `PlanLayout` with the available body area.
-3. When an element returns `Nothing` (does not fit), flush the current page and continue on a new one.
+2. Feed content elements to `PlanLayout` with the available body area. `Area.AtTop` is true while nothing has been placed on the page yet.
+3. When an element returns `Nothing` (does not fit), flush the current page and continue on a new one. An element at the top of a page (`AtTop`) must place what it can instead, since a fresh page offers no more room; only an element that ignores `AtTop` is forced there with unlimited height.
 4. `KeepTogether` boxes are pushed whole to the next page if they do not fit.
 5. After all pages are resolved, a second pass replaces `PageNum`/`TotalPages` placeholders with actual values.
+
+Every "does it fit" decision uses `layout.Fits`, which allows `FitTolerance` (0.01pt): heights pass through float64 chains (content + padding, grown rows, row sums), and content measured to fit must not be dropped for a rounding difference.
+
+**Tables** resolve each section (header, body, footer) into a grid before measuring. A row-spanning cell covers the summed height of its rows; rows it needs more of grow in proportion to their height. Rows linked by spans stay on one page: a group that does not fit in the rest of the page moves whole, a group taller than a page is broken, and the spanning cells continue in their columns on the next page (`TableCell.AllowBreak` permits breaks inside a span, `TableCell.RepeatOnBreak` repeats a label). A continuation keeps the column grid of the whole table. At the top of a page a table always places at least one body row, so pagination always ends.
 
 ### Layer 1: creator/ — PDF Primitives
 
