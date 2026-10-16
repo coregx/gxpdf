@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.6] - 2026-10-16
 
 ### Fixed
 - **Row-spanning table cells** (#100). A `RowSpan` cell was laid out in its first row only: border and background stopped there, text was clipped, vertical alignment centered in the first row, and the rows did not grow to fit it. It now covers all spanned rows; rows that must grow do so in proportion to their height.
@@ -29,9 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Rows linked by a row span stay on one page**: a group that does not fit in the rest of a page moves to the next page whole; a group taller than a page is broken.
 - Custom layout drivers (not the built-in `Paginator`) must set `Area.AtTop` at the top of each page: elements return `Nothing` instead of forcing themselves when it is false.
-- **An unknown font family is an error** (#102): text in a family that is neither registered nor a Standard 14 family used to be drawn in Helvetica silently; `Build()` now returns an error naming the family (with a hint when only the letter case differs from a registered name). Standard 14 families need no registration and match in any case, with the aliases Arial, Times New Roman and Courier New. To keep the old behaviour, use `WithFontFallback("Helvetica")`.
+- **An unknown font family is an error** (#102): text in a family that is neither registered nor a Standard 14 family used to be drawn in Helvetica silently; `Build()` now returns an error naming the family (with a hint when only the letter case differs from a registered name). Standard 14 families need no registration and match in any case, with the aliases Arial, Times New Roman and Courier New. To keep the old behavior, use `WithFontFallback("Helvetica")`.
 - `gxpdf.Version` reports the module version recorded by the Go toolchain instead of a stale constant (`"0.1.0-alpha"`): the release tag when used as a dependency, a pseudo-version for builds from a checkout, `(devel)` for `go run`/`go test`. It is now a variable of type `string`.
 - `gxpdf version` falls back to the toolchain's version, commit and modified state when release ldflags are absent (`go install`, local builds); release and `go install` builds print the same `vX.Y.Z`.
+- **Minimum Go version is 1.26** (was 1.25, which is no longer supported by the Go team): required by the current `golang.org/x/crypto`, `x/net` and `x/text`. CI tests the two supported releases (`oldstable`, `stable`).
+- deps: golang.org/x/crypto v0.53.0 → v0.58.0, golang.org/x/net v0.56.0 → v0.61.0, golang.org/x/text v0.38.0 → v0.43.0 (fix 10 advisories govulncheck reported in these modules; none was reachable from GxPDF), mscfb v1.0.7 → v1.0.9, pflag v1.0.9 → v1.0.10, efp v0.0.1 → v0.0.2.
 
 ---
 
