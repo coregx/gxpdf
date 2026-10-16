@@ -483,7 +483,7 @@ go test -bench=. -benchmem ./...
 - `github.com/stretchr/testify` - Assertions
 
 **Build**:
-- Go 1.25+
+- Go 1.26+
 - golangci-lint
 
 ## Performance Considerations

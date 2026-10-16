@@ -68,7 +68,7 @@ This project follows a professional Code of Conduct. By participating, you agree
 
 ### Prerequisites
 
-- **Go 1.25+** (required)
+- **Go 1.26+** (required)
 - **Git**
 - **golangci-lint** (recommended)
 

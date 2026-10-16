@@ -3,7 +3,7 @@ name: Tests
 # Testing Strategy:
 # - Tests run on Linux, macOS, and Windows (cross-platform library)
 # - PDF library with DDD architecture - must work everywhere
-# - Go 1.25+ required (matches go.mod requirement)
+# - Go: oldstable and stable, the two supported Go releases (go.mod sets the minimum)
 # - Minimal external dependencies
 #
 # Branch Strategy (Git Flow):
@@ -41,7 +41,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.25']  # Match go.mod requirement
+        go-version: ['oldstable', 'stable']
 
     steps:
     - name: Checkout code
@@ -68,7 +68,7 @@ jobs:
       run: go test -short -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25'
+      if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
       uses: codecov/codecov-action@v5
       continue-on-error: true
       with:
@@ -89,7 +89,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.25'
+        go-version: 'stable'
         cache: true
 
     - name: Build for 386
@@ -110,7 +110,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.25'
+        go-version: 'stable'
         cache: true
 
     - name: Run golangci-lint
@@ -131,7 +131,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.25'
+        go-version: 'stable'
         cache: true
 
     - name: Check formatting
@@ -160,7 +160,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.25'
+        go-version: 'stable'
         cache: true
 
     - name: Run benchmark smoke test
