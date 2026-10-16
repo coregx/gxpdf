@@ -13,62 +13,62 @@ import (
 // subsystem. It bridges between the layout engine (which uses FontRef) and
 // the creator package (which has Standard 14 fonts and CustomFont).
 //
-// Standard 14 font families are resolved by mapping FontRef.Family to
-// creator.FontName constants. Custom fonts registered via WithFont/WithFontFile
-// are looked up by family name in the customFonts map.
+// Families are resolved by a FontSet shared with the renderer, so text is
+// measured with the same font it is drawn with.
 type FontBridge struct {
-	// customFonts maps family name to a loaded CustomFont.
-	customFonts map[string]*creator.CustomFont
+	fonts *FontSet
 }
 
-// NewFontBridge creates a FontBridge with the given custom font map.
-// The map may be empty; Standard 14 fonts are always available.
-func NewFontBridge(customFonts map[string]*creator.CustomFont) *FontBridge {
-	if customFonts == nil {
-		customFonts = make(map[string]*creator.CustomFont)
+// NewFontBridge creates a FontBridge resolving families through fonts.
+// A nil fonts means no custom fonts and no fallback.
+func NewFontBridge(fonts *FontSet) *FontBridge {
+	if fonts == nil {
+		fonts = NewFontSet(nil, "")
 	}
-	return &FontBridge{customFonts: customFonts}
+	return &FontBridge{fonts: fonts}
 }
 
 // MeasureString implements layout.FontResolver.
 // Returns the width of text in PDF points at the given font and size.
 func (fb *FontBridge) MeasureString(font layout.FontRef, text string, size float64) float64 {
-	if cf, ok := fb.customFonts[font.Family]; ok {
-		return cf.MeasureString(text, size)
+	f := fb.fonts.Resolve(font)
+	if f.Custom != nil {
+		return f.Custom.MeasureString(text, size)
 	}
-	return creator.MeasureText(fb.resolveStandard14(font), text, size)
+	return creator.MeasureText(f.Standard, text, size)
 }
 
 // LineHeight implements layout.FontResolver.
 // Returns the total line height (ascender + |descender|) in PDF points.
 func (fb *FontBridge) LineHeight(font layout.FontRef, size float64) float64 {
-	if cf, ok := fb.customFonts[font.Family]; ok {
-		return cf.LineHeight(size)
+	f := fb.fonts.Resolve(font)
+	if f.Custom != nil {
+		return f.Custom.LineHeight(size)
 	}
-	return creator.FontLineHeight(fb.resolveStandard14(font), size)
+	return creator.FontLineHeight(f.Standard, size)
 }
 
 // Ascender implements layout.FontResolver.
 // Returns the ascender height above the baseline in PDF points.
 func (fb *FontBridge) Ascender(font layout.FontRef, size float64) float64 {
-	if cf, ok := fb.customFonts[font.Family]; ok {
-		return cf.Ascender(size)
+	f := fb.fonts.Resolve(font)
+	if f.Custom != nil {
+		return f.Custom.Ascender(size)
 	}
-	return creator.FontAscender(fb.resolveStandard14(font), size)
+	return creator.FontAscender(f.Standard, size)
 }
 
 // Descender implements layout.FontResolver.
 // Returns the magnitude of the descender below the baseline in PDF points.
 // Always returns a positive value.
 func (fb *FontBridge) Descender(font layout.FontRef, size float64) float64 {
-	if cf, ok := fb.customFonts[font.Family]; ok {
-		d := cf.Descender(size)
-		if d < 0 {
-			d = -d
-		}
-		return d
+	f := fb.fonts.Resolve(font)
+	var d float64
+	if f.Custom != nil {
+		d = f.Custom.Descender(size)
+	} else {
+		d = creator.FontDescender(f.Standard, size)
 	}
-	d := creator.FontDescender(fb.resolveStandard14(font), size)
 	if d < 0 {
 		d = -d
 	}
@@ -200,56 +200,6 @@ func (fb *FontBridge) breakCJK(font layout.FontRef, text string, size, maxWidth 
 		lines = append(lines, current)
 	}
 	return lines
-}
-
-// resolveStandard14 maps a FontRef to a creator.FontName for Standard 14 fonts.
-// The mapping uses the family name (case-insensitive prefix matching) and
-// falls back to Helvetica if the family is unknown.
-func (fb *FontBridge) resolveStandard14(font layout.FontRef) creator.FontName {
-	family := strings.ToLower(font.Family)
-	bold := font.Weight == layout.WeightBold
-	italic := font.Style == layout.StyleItalic
-
-	switch {
-	case strings.HasPrefix(family, "times") || strings.HasPrefix(family, "times new roman"):
-		switch {
-		case bold && italic:
-			return creator.TimesBoldItalic
-		case bold:
-			return creator.TimesBold
-		case italic:
-			return creator.TimesItalic
-		default:
-			return creator.TimesRoman
-		}
-	case strings.HasPrefix(family, "courier"):
-		switch {
-		case bold && italic:
-			return creator.CourierBoldOblique
-		case bold:
-			return creator.CourierBold
-		case italic:
-			return creator.CourierOblique
-		default:
-			return creator.Courier
-		}
-	case strings.HasPrefix(family, "symbol"):
-		return creator.Symbol
-	case strings.HasPrefix(family, "zapf"):
-		return creator.ZapfDingbats
-	default:
-		// Default: Helvetica family.
-		switch {
-		case bold && italic:
-			return creator.HelveticaBoldOblique
-		case bold:
-			return creator.HelveticaBold
-		case italic:
-			return creator.HelveticaOblique
-		default:
-			return creator.Helvetica
-		}
-	}
 }
 
 // containsCJK returns true if the string contains any CJK unified ideograph,

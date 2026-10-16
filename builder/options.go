@@ -17,6 +17,8 @@ type config struct {
 	fonts        map[string]*creator.CustomFont
 	defaultStyle layout.Style
 	meta         metadata
+	// fontFallback is the family used for unknown families (WithFontFallback).
+	fontFallback string
 	// errs collects option errors (e.g. fonts that fail to load) for Build.
 	errs []error
 }
@@ -123,10 +125,26 @@ func WithDefaultFontSize(size float64) Option {
 }
 
 // WithDefaultFontFamily sets the default font family for all text elements.
-// The family must have been registered via WithFont or WithFontFile.
+// The family must be registered via WithFont or WithFontFile, or be a
+// Standard 14 family (see FontFamily); otherwise Build returns an error.
 func WithDefaultFontFamily(family string) Option {
 	return func(c *config) {
 		c.defaultStyle.Font.Family = family
+	}
+}
+
+// WithFontFallback sets the family used for text whose family is neither
+// registered nor a Standard 14 family. Without it, Build returns an error
+// naming each such family, so that a typo or a font that was never registered
+// does not silently produce a PDF in another typeface. The fallback must
+// itself be registered or a Standard 14 family.
+//
+// Example:
+//
+//	builder.NewBuilder(builder.WithFontFallback("Helvetica"))
+func WithFontFallback(family string) Option {
+	return func(c *config) {
+		c.fontFallback = family
 	}
 }
 

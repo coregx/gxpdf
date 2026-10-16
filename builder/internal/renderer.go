@@ -19,16 +19,17 @@ import (
 // The renderer is stateless across pages; each page creates a new creator.Page.
 type PDFRenderer struct {
 	cr *creator.Creator
-	// customFonts is the map of custom fonts for text rendering.
-	customFonts map[string]*creator.CustomFont
+	// fonts resolves font families, shared with the layout's FontBridge.
+	fonts *FontSet
 }
 
-// NewPDFRenderer creates a PDFRenderer using the given Creator and custom fonts.
-func NewPDFRenderer(cr *creator.Creator, customFonts map[string]*creator.CustomFont) *PDFRenderer {
-	if customFonts == nil {
-		customFonts = make(map[string]*creator.CustomFont)
+// NewPDFRenderer creates a PDFRenderer using the given Creator, resolving
+// font families through fonts (nil: Standard 14 only).
+func NewPDFRenderer(cr *creator.Creator, fonts *FontSet) *PDFRenderer {
+	if fonts == nil {
+		fonts = NewFontSet(nil, "")
 	}
-	return &PDFRenderer{cr: cr, customFonts: customFonts}
+	return &PDFRenderer{cr: cr, fonts: fonts}
 }
 
 // RenderDocument walks all PageLayouts, creating one creator.Page per layout
@@ -57,7 +58,7 @@ func (r *PDFRenderer) RenderDocument(pages []layout.PageLayout, meta metadata) e
 		pr := &pageRenderer{
 			page:       page,
 			pageHeight: pl.Size.Height,
-			fonts:      r.customFonts,
+			fonts:      r.fonts,
 		}
 		for i := range pl.Blocks {
 			pr.renderBlock(&pl.Blocks[i])
@@ -84,7 +85,7 @@ func ExportedMetadata(title, author string) metadata {
 type pageRenderer struct {
 	page       *creator.Page
 	pageHeight float64
-	fonts      map[string]*creator.CustomFont
+	fonts      *FontSet
 }
 
 // renderBlock recursively renders a Block and its children. The baseX and baseY
@@ -137,78 +138,61 @@ func (a *blockAdaptor) DrawText(text string, x, y float64, font layout.FontRef, 
 		return
 	}
 
+	f := a.pr.fonts.Resolve(font)
 	pdfX, pdfYTop := a.toPDFCoords(x, y)
-
-	var ascender float64
-	if cf, ok := a.pr.fonts[font.Family]; ok {
-		ascender = cf.Ascender(size)
-	} else {
-		ascender = creator.FontAscender(resolveStandard14Name(font), size)
-	}
-	pdfY := pdfYTop - ascender
+	pdfY := pdfYTop - f.Ascender(size)
 
 	creatorColor := creator.Color{R: color.R, G: color.G, B: color.B}
 
 	// If word spacing is set (justified text), render each word separately
 	// with computed X positions since creator doesn't support PDF Tw operator.
 	if options.WordSpacing > 0 {
-		a.drawJustifiedText(text, pdfX, pdfY, font, size, creatorColor, options.WordSpacing)
+		a.drawJustifiedText(text, pdfX, pdfY, f, size, creatorColor, options.WordSpacing)
 		return
 	}
 
-	if cf, ok := a.pr.fonts[font.Family]; ok {
-		_ = a.pr.page.AddTextCustomFontColor(text, pdfX, pdfY, cf, size, creatorColor)
-	} else {
-		fontName := resolveStandard14Name(font)
-		_ = a.pr.page.AddTextColor(text, pdfX, pdfY, fontName, size, creatorColor)
-	}
+	a.addText(text, pdfX, pdfY, f, size, creatorColor)
 
 	if options.Underline {
-		a.drawUnderline(text, pdfX, pdfY, font, size, creatorColor)
+		a.drawUnderline(text, pdfX, pdfY, f, size, creatorColor)
 	}
 	if options.Strikethrough {
-		a.drawStrikethrough(text, pdfX, pdfY, font, size, creatorColor)
+		a.drawStrikethrough(text, pdfX, pdfY, f, size, creatorColor)
 	}
+}
+
+// addText draws text in the resolved font.
+func (a *blockAdaptor) addText(text string, pdfX, pdfY float64, f Font, size float64, color creator.Color) {
+	if f.Custom != nil {
+		_ = a.pr.page.AddTextCustomFontColor(text, pdfX, pdfY, f.Custom, size, color)
+		return
+	}
+	_ = a.pr.page.AddTextColor(text, pdfX, pdfY, f.Standard, size, color)
 }
 
 // drawJustifiedText renders text word-by-word with extra spacing between words.
-func (a *blockAdaptor) drawJustifiedText(text string, pdfX, pdfY float64, font layout.FontRef, size float64, color creator.Color, wordSpacing float64) {
+func (a *blockAdaptor) drawJustifiedText(text string, pdfX, pdfY float64, f Font, size float64, color creator.Color, wordSpacing float64) {
 	words := strings.Fields(text)
 	curX := pdfX
-
-	fontName := resolveStandard14Name(font)
-	cf, isCustom := a.pr.fonts[font.Family]
-
 	for i, word := range words {
-		if isCustom {
-			_ = a.pr.page.AddTextCustomFontColor(word, curX, pdfY, cf, size, color)
-			curX += cf.MeasureString(word, size)
-		} else {
-			_ = a.pr.page.AddTextColor(word, curX, pdfY, fontName, size, color)
-			curX += creator.MeasureText(fontName, word, size)
-		}
+		a.addText(word, curX, pdfY, f, size, color)
+		curX += f.MeasureString(word, size)
 		if i < len(words)-1 {
 			// Add normal space width + extra word spacing
-			if isCustom {
-				curX += cf.MeasureString(" ", size) + wordSpacing
-			} else {
-				curX += creator.MeasureText(fontName, " ", size) + wordSpacing
-			}
+			curX += f.MeasureString(" ", size) + wordSpacing
 		}
 	}
 }
 
-func (a *blockAdaptor) drawUnderline(text string, pdfX, pdfY float64, font layout.FontRef, size float64, color creator.Color) {
-	fontName := resolveStandard14Name(font)
+func (a *blockAdaptor) drawUnderline(text string, pdfX, pdfY float64, f Font, size float64, color creator.Color) {
 	underlineY := pdfY - size*0.1
-	w := creator.MeasureText(fontName, text, size)
+	w := f.MeasureString(text, size)
 	_ = a.pr.page.DrawLine(pdfX, underlineY, pdfX+w, underlineY, &creator.LineOptions{Color: color, Width: size * 0.05})
 }
 
-func (a *blockAdaptor) drawStrikethrough(text string, pdfX, pdfY float64, font layout.FontRef, size float64, color creator.Color) {
-	fontName := resolveStandard14Name(font)
+func (a *blockAdaptor) drawStrikethrough(text string, pdfX, pdfY float64, f Font, size float64, color creator.Color) {
 	midY := pdfY + size*0.3
-	w := creator.MeasureText(fontName, text, size)
+	w := f.MeasureString(text, size)
 	_ = a.pr.page.DrawLine(pdfX, midY, pdfX+w, midY, &creator.LineOptions{Color: color, Width: size * 0.05})
 }
 
@@ -278,61 +262,4 @@ func (a *blockAdaptor) SetClipRect(x, y, width, height float64) {
 	pdfX, pdfYTop := a.toPDFCoords(x, y)
 	pdfY := pdfYTop - height
 	_ = a.pr.page.BeginClipRect(pdfX, pdfY, width, height)
-}
-
-// resolveStandard14Name maps a layout.FontRef to a creator.FontName for
-// Standard 14 fonts. This is the same logic as FontBridge.resolveStandard14
-// but local to the renderer to avoid package coupling.
-func resolveStandard14Name(font layout.FontRef) creator.FontName {
-	family := font.Family
-	bold := font.Weight == layout.WeightBold
-	italic := font.Style == layout.StyleItalic
-
-	switch {
-	case isTimesFamily(family):
-		switch {
-		case bold && italic:
-			return creator.TimesBoldItalic
-		case bold:
-			return creator.TimesBold
-		case italic:
-			return creator.TimesItalic
-		default:
-			return creator.TimesRoman
-		}
-	case isCourierFamily(family):
-		switch {
-		case bold && italic:
-			return creator.CourierBoldOblique
-		case bold:
-			return creator.CourierBold
-		case italic:
-			return creator.CourierOblique
-		default:
-			return creator.Courier
-		}
-	case family == "Symbol":
-		return creator.Symbol
-	case family == "ZapfDingbats":
-		return creator.ZapfDingbats
-	default:
-		switch {
-		case bold && italic:
-			return creator.HelveticaBoldOblique
-		case bold:
-			return creator.HelveticaBold
-		case italic:
-			return creator.HelveticaOblique
-		default:
-			return creator.Helvetica
-		}
-	}
-}
-
-func isTimesFamily(family string) bool {
-	return family == "Times" || family == "Times New Roman" || family == "Times-Roman"
-}
-
-func isCourierFamily(family string) bool {
-	return family == "Courier" || family == "Courier New"
 }

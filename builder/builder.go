@@ -77,6 +77,8 @@ type Builder struct {
 	cfg   config
 	pages []*pageDef
 	errs  []error
+	// fonts resolves font families for both layout and rendering.
+	fonts *builderinternal.FontSet
 }
 
 // NewBuilder creates a new Builder with the given document-level options.
@@ -96,7 +98,12 @@ func NewBuilder(opts ...Option) *Builder {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return &Builder{cfg: cfg, errs: cfg.errs}
+	fonts := builderinternal.NewFontSet(cfg.fonts, cfg.fontFallback)
+	errs := cfg.errs
+	if err := fonts.CheckFallback(); err != nil {
+		errs = append(errs, err)
+	}
+	return &Builder{cfg: cfg, errs: errs, fonts: fonts}
 }
 
 // Page adds a page definition to the document. The fn callback receives a
@@ -177,9 +184,9 @@ func (b *Builder) defaultStyle() layout.Style {
 }
 
 // fontResolver returns a layout.FontResolver backed by the registered custom
-// fonts and the Standard 14 font metrics.
+// fonts and the Standard 14 font metrics, sharing the renderer's FontSet.
 func (b *Builder) fontResolver() layout.FontResolver {
-	return builderinternal.NewFontBridge(b.cfg.fonts)
+	return builderinternal.NewFontBridge(b.fonts)
 }
 
 // addError appends an error to the accumulated error list.
@@ -208,16 +215,21 @@ func (b *Builder) layoutPages() []layout.PageLayout {
 
 // renderTo runs the layout pipeline and emits PDF content into cr.
 func (b *Builder) renderTo(cr *creator.Creator) error {
+	// Families are recorded as layout and rendering resolve them.
+	b.fonts.Reset()
 	pageLayouts := b.layoutPages()
 
 	// Render page layouts via the PDF renderer.
-	renderer := builderinternal.NewPDFRenderer(cr, b.cfg.fonts)
+	renderer := builderinternal.NewPDFRenderer(cr, b.fonts)
 	meta := builderinternal.ExportedMetadata(b.cfg.meta.title, b.cfg.meta.author)
 	if err := renderer.RenderDocument(pageLayouts, meta); err != nil {
 		return fmt.Errorf("render: %w", err)
 	}
 
-	return nil
+	// Text in a family that is neither registered nor Standard 14 would have
+	// been drawn in a substitute font; without WithFontFallback that is an
+	// error, not a silently different document.
+	return b.fonts.Err()
 }
 
 // Bytes is an alias for Build() for callers that prefer the creator-style API.

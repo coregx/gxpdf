@@ -63,3 +63,78 @@ func TestBuild_FontFromBytes(t *testing.T) {
 	assert.True(t, bytes.Contains(out, []byte("DejaVuSansMono")), "embedded font name in the PDF")
 	assert.False(t, strings.Contains(string(out), "/BaseFont /Helvetica"), "no fallback font")
 }
+
+// TestBuild_UnknownFontFamily verifies a family that is neither registered nor
+// Standard 14 fails Build instead of rendering in Helvetica, wherever it is
+// used.
+func TestBuild_UnknownFontFamily(t *testing.T) {
+	tests := []struct {
+		name string
+		doc  func() *Builder
+	}{
+		{"text option", func() *Builder { return textDoc(nil, "Inetr") }},
+		{"default family", func() *Builder {
+			doc := NewBuilder(WithDefaultFontFamily("Inetr"))
+			doc.Page(func(p *PageBuilder) {
+				p.Content(func(c *Container) { c.Text("text without its own family") })
+			})
+			return doc
+		}},
+		{"rich text span", func() *Builder {
+			doc := NewBuilder()
+			doc.Page(func(p *PageBuilder) {
+				p.Content(func(c *Container) {
+					c.RichText(func(rt *RichTextBuilder) { rt.Span("span", FontFamily("Inetr")) })
+				})
+			})
+			return doc
+		}},
+		{"page footer", func() *Builder {
+			doc := NewBuilder()
+			doc.Page(func(p *PageBuilder) {
+				p.Footer(func(c *Container) { c.Text("footer", FontFamily("Inetr")) })
+				p.Content(func(c *Container) { c.Text("body") })
+			})
+			return doc
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := tt.doc().Build()
+			require.Error(t, err)
+			assert.Nil(t, out)
+			assert.Contains(t, err.Error(), `font family "Inetr" is not registered`)
+		})
+	}
+}
+
+// TestBuild_StandardFamiliesNeedNoRegistration verifies Standard 14 families
+// and their aliases work without WithFont, in any letter case.
+func TestBuild_StandardFamiliesNeedNoRegistration(t *testing.T) {
+	out, err := textDoc(nil, "Helvetica", "arial", "Times New Roman", "courier", "Symbol").Build()
+	require.NoError(t, err)
+	assert.True(t, bytes.Contains(out, []byte("/BaseFont /Times-Roman")))
+	assert.True(t, bytes.Contains(out, []byte("/BaseFont /Courier")))
+}
+
+// TestBuild_FontFallback verifies WithFontFallback renders unknown families in
+// the fallback instead of failing, and that the fallback must itself exist.
+func TestBuild_FontFallback(t *testing.T) {
+	out, err := textDoc([]Option{WithFontFallback("Times")}, "Inetr").Build()
+	require.NoError(t, err)
+	assert.True(t, bytes.Contains(out, []byte("/BaseFont /Times-Roman")), "unknown family drawn in the fallback")
+
+	_, err = textDoc([]Option{WithFontFallback("Nope")}).Build()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `font fallback "Nope" is not registered`)
+}
+
+// TestBuild_UnknownFamilyRecordedPerBuild verifies Build can be called again:
+// unknown families are recorded per Build, not accumulated.
+func TestBuild_UnknownFamilyRecordedPerBuild(t *testing.T) {
+	doc := textDoc(nil, "Helvetica")
+	_, err := doc.Build()
+	require.NoError(t, err)
+	_, err = doc.Build()
+	require.NoError(t, err, "a second Build of a valid document stays valid")
+}

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Content running off the page**: a table whose first row did not fit at the top of a page was drawn whole on one page below its bottom edge; a box whose first line did not fit near the bottom of a page was drawn below the page instead of moving to the next one.
 - **Pagination never ended** for a table whose header was taller than the page.
 - **Fonts that failed to load were ignored** (#102). `builder.WithFont` and `WithFontFile` dropped every error, so `Build()` succeeded and the text came out in Helvetica. `Build()` now returns an error per font, naming the family and the cause (`font "Missing": load TTF: open …`). Empty font data is an error too. `WithFont` loads from memory instead of a temporary file.
+- **Text was measured and drawn with different fonts** for some family names: layout matched "times…"/"courier…" by prefix and ignoring case, the renderer matched exact names, so e.g. "courier" was measured as Courier and drawn in Helvetica. Both now resolve families through one resolver. Underline and strikethrough also used Standard 14 widths for registered fonts.
 - **`PageNumber` in a page header or footer showed 1 on every page** ("Page 1 of 6" on all six pages). Header and footer blocks are shared by all pages, and the first page resolved them for every page.
 - **An image in a row-spanning cell could be dropped by rounding**: grown rows can sum to a few ulps less than the image needs. Text allowed 0.01pt; images, spacers, `EnsureSpace` and table row fitting compared exactly. All fit decisions now use one tolerance.
 
@@ -22,11 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `builder.CellRepeatOnBreak()` / `layout.TableCell.RepeatOnBreak` — repeat a spanning cell's content on every page its span continues on, like a group header.
 - `layout.Area.AtTop`, `layout.Fits`, `layout.FitTolerance` for `Element` implementations.
 - `creator.LoadFontFromBytes` — load a TrueType/OpenType font from memory.
+- `builder.WithFontFallback(family)` — draw text in an unknown family with this family instead of failing `Build()`.
 - `examples/table-rowspan` — duty roster with row spans across pages.
 
 ### Changed
 - **Rows linked by a row span stay on one page**: a group that does not fit in the rest of a page moves to the next page whole; a group taller than a page is broken.
 - Custom layout drivers (not the built-in `Paginator`) must set `Area.AtTop` at the top of each page: elements return `Nothing` instead of forcing themselves when it is false.
+- **An unknown font family is an error** (#102): text in a family that is neither registered nor a Standard 14 family used to be drawn in Helvetica silently; `Build()` now returns an error naming the family (with a hint when only the letter case differs from a registered name). Standard 14 families need no registration and match in any case, with the aliases Arial, Times New Roman and Courier New. To keep the old behaviour, use `WithFontFallback("Helvetica")`.
 - `gxpdf.Version` reports the module version recorded by the Go toolchain instead of a stale constant (`"0.1.0-alpha"`): the release tag when used as a dependency, a pseudo-version for builds from a checkout, `(devel)` for `go run`/`go test`. It is now a variable of type `string`.
 - `gxpdf version` falls back to the toolchain's version, commit and modified state when release ldflags are absent (`go install`, local builds); release and `go install` builds print the same `vX.Y.Z`.
 

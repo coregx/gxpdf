@@ -34,7 +34,12 @@ func FontSize(size float64) TextOption {
 }
 
 // FontFamily sets the font family by name (e.g. "Helvetica", "Inter").
-// The family must have been registered via WithFont or WithFontFile.
+//
+// The family must be registered via WithFont or WithFontFile (exact name), or
+// be a Standard 14 family, matched in any letter case: Helvetica (alias
+// Arial), Times (Times-Roman, Times Roman, Times New Roman), Courier (Courier
+// New), Symbol, ZapfDingbats. Any other family makes Build return an error
+// naming it, unless WithFontFallback is set.
 func FontFamily(family string) TextOption {
 	return TextOption{apply: func(s *layout.Style) {
 		s.Font.Family = family

@@ -115,65 +115,6 @@ func TestFontBridge_LineBreak_LongWordThatFits(t *testing.T) {
 }
 
 // ============================================================================
-// FontBridge.resolveStandard14 — remaining branches: Symbol and ZapfDingbats
-// ============================================================================
-
-func TestFontBridge_ResolveStandard14_Symbol(t *testing.T) {
-	fb := newTestBridge()
-	font := layout.FontRef{Family: "symbol"}
-	name := string(fb.resolveStandard14(font))
-	if name != string(creator.Symbol) {
-		t.Errorf("symbol -> %q, want %q", name, creator.Symbol)
-	}
-}
-
-func TestFontBridge_ResolveStandard14_ZapfDingbats(t *testing.T) {
-	fb := newTestBridge()
-	font := layout.FontRef{Family: "zapfdingbats"}
-	name := string(fb.resolveStandard14(font))
-	if name != string(creator.ZapfDingbats) {
-		t.Errorf("zapfdingbats -> %q, want %q", name, creator.ZapfDingbats)
-	}
-}
-
-func TestFontBridge_ResolveStandard14_TimesVariants(t *testing.T) {
-	fb := newTestBridge()
-	tests := []struct {
-		font layout.FontRef
-		want creator.FontName
-	}{
-		{layout.FontRef{Family: "times", Weight: layout.WeightBold, Style: layout.StyleItalic}, creator.TimesBoldItalic},
-		{layout.FontRef{Family: "times new roman", Weight: layout.WeightBold}, creator.TimesBold},
-		{layout.FontRef{Family: "times new roman", Style: layout.StyleItalic}, creator.TimesItalic},
-		{layout.FontRef{Family: "times new roman"}, creator.TimesRoman},
-	}
-	for _, tc := range tests {
-		got := fb.resolveStandard14(tc.font)
-		if got != tc.want {
-			t.Errorf("resolveStandard14(%v) = %q, want %q", tc.font, got, tc.want)
-		}
-	}
-}
-
-func TestFontBridge_ResolveStandard14_CourierVariants(t *testing.T) {
-	fb := newTestBridge()
-	tests := []struct {
-		font layout.FontRef
-		want creator.FontName
-	}{
-		{layout.FontRef{Family: "courier", Weight: layout.WeightBold, Style: layout.StyleItalic}, creator.CourierBoldOblique},
-		{layout.FontRef{Family: "courier", Weight: layout.WeightBold}, creator.CourierBold},
-		{layout.FontRef{Family: "courier", Style: layout.StyleItalic}, creator.CourierOblique},
-	}
-	for _, tc := range tests {
-		got := fb.resolveStandard14(tc.font)
-		if got != tc.want {
-			t.Errorf("resolveStandard14(%v) = %q, want %q", tc.font, got, tc.want)
-		}
-	}
-}
-
-// ============================================================================
 // PDFRenderer — drawJustifiedText path (via WordSpacing > 0 in DrawText)
 // ============================================================================
 

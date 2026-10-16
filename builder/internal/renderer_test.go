@@ -300,9 +300,9 @@ func TestResolveStandard14Name_HelveticaVariants(t *testing.T) {
 		{layout.FontRef{Family: "Helvetica", Weight: layout.WeightBold, Style: layout.StyleItalic}, creator.HelveticaBoldOblique},
 	}
 	for _, tc := range tests {
-		got := resolveStandard14Name(tc.font)
+		got := stdName(tc.font)
 		if got != tc.want {
-			t.Errorf("resolveStandard14Name(%v) = %q, want %q", tc.font, got, tc.want)
+			t.Errorf("stdName(%v) = %q, want %q", tc.font, got, tc.want)
 		}
 	}
 }
@@ -320,9 +320,9 @@ func TestResolveStandard14Name_TimesVariants(t *testing.T) {
 		{layout.FontRef{Family: "Times", Weight: layout.WeightBold, Style: layout.StyleItalic}, creator.TimesBoldItalic},
 	}
 	for _, tc := range tests {
-		got := resolveStandard14Name(tc.font)
+		got := stdName(tc.font)
 		if got != tc.want {
-			t.Errorf("resolveStandard14Name(%v) = %q, want %q", tc.font, got, tc.want)
+			t.Errorf("stdName(%v) = %q, want %q", tc.font, got, tc.want)
 		}
 	}
 }
@@ -340,26 +340,26 @@ func TestResolveStandard14Name_CourierVariants(t *testing.T) {
 		{layout.FontRef{Family: "Courier", Weight: layout.WeightBold, Style: layout.StyleItalic}, creator.CourierBoldOblique},
 	}
 	for _, tc := range tests {
-		got := resolveStandard14Name(tc.font)
+		got := stdName(tc.font)
 		if got != tc.want {
-			t.Errorf("resolveStandard14Name(%v) = %q, want %q", tc.font, got, tc.want)
+			t.Errorf("stdName(%v) = %q, want %q", tc.font, got, tc.want)
 		}
 	}
 }
 
 // TestResolveStandard14Name_SpecialFonts verifies Symbol and ZapfDingbats.
 func TestResolveStandard14Name_SpecialFonts(t *testing.T) {
-	if got := resolveStandard14Name(layout.FontRef{Family: "Symbol"}); got != creator.Symbol {
+	if got := stdName(layout.FontRef{Family: "Symbol"}); got != creator.Symbol {
 		t.Errorf("Symbol -> %q, want Symbol", got)
 	}
-	if got := resolveStandard14Name(layout.FontRef{Family: "ZapfDingbats"}); got != creator.ZapfDingbats {
+	if got := stdName(layout.FontRef{Family: "ZapfDingbats"}); got != creator.ZapfDingbats {
 		t.Errorf("ZapfDingbats -> %q, want ZapfDingbats", got)
 	}
 }
 
 // TestResolveStandard14Name_UnknownFallsToHelvetica verifies unknown families fall back.
 func TestResolveStandard14Name_UnknownFallsToHelvetica(t *testing.T) {
-	got := resolveStandard14Name(layout.FontRef{Family: "UnknownFont"})
+	got := stdName(layout.FontRef{Family: "UnknownFont"})
 	if got != creator.Helvetica {
 		t.Errorf("unknown font -> %q, want Helvetica", got)
 	}
