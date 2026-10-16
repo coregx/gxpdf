@@ -100,12 +100,15 @@ func assertGolden(t *testing.T, name, got string) {
 		}
 		return
 	}
-	want, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read golden %s (run with -update-golden to create): %v", path, err)
 	}
-	if string(want) != got {
-		t.Errorf("drawing ops differ from %s (run with -update-golden to accept):\n%s", path, firstDiff(string(want), got))
+	// A checkout with CRLF line endings (Windows, core.autocrlf) must not
+	// fail the comparison; .gitattributes pins *.golden to LF as well.
+	want := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	if want != got {
+		t.Errorf("drawing ops differ from %s (run with -update-golden to accept):\n%s", path, firstDiff(want, got))
 	}
 }
 
@@ -122,7 +125,7 @@ func firstDiff(want, got string) string {
 			gl = g[i]
 		}
 		if wl != gl {
-			return fmt.Sprintf("line %d:\n  want: %s\n  got:  %s", i+1, wl, gl)
+			return fmt.Sprintf("line %d:\n  want: %q\n  got:  %q", i+1, wl, gl)
 		}
 	}
 	return "(no line difference)"

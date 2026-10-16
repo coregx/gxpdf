@@ -37,3 +37,6 @@ go.sum text eol=lf
 
 # Markdown
 *.md text eol=lf
+
+# Golden test snapshots are compared byte for byte
+*.golden text eol=lf
