@@ -234,7 +234,7 @@ func TestTable_RowSpan2(t *testing.T) {
 	require.Len(t, g.cells, 5)
 
 	// Row 0: 3 cells (rowspan cell + 2 normal).
-	assert.Equal(t, gridCell{cell: tbl.Body[0].Cells[0], row: 0, col: 0, colSpan: 1, rowSpan: 2, width: 100}, g.cells[0])
+	assert.Equal(t, gridCell{cell: tbl.Body[0].Cells[0], row: 0, col: 0, colSpan: 1, rowSpan: 2, width: 100, src: &tbl.Body[0].Cells[0]}, g.cells[0])
 
 	// Row 1: 2 cells (column 0 is occupied by rowspan), starting at column 1.
 	assert.Equal(t, [2]int{1, 1}, [2]int{g.cells[3].row, g.cells[3].col})

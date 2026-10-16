@@ -179,8 +179,8 @@ type tableCellEntry struct {
 
 // Cell adds a cell to the row.
 // The fn callback receives a CellBuilder (which embeds Container) for adding content.
-// Cell-level options (ColSpan, RowSpan, CellPadding, CellBg, CellVAlign) are applied
-// via CellOption values.
+// Cell-level options (ColSpan, RowSpan, CellAllowBreak, CellRepeatOnBreak,
+// CellPadding, CellBg, CellVAlign*, CellBorder) are applied via CellOption values.
 //
 // Example:
 //
@@ -229,10 +229,12 @@ func (r *TableRowBuilder) build() layout.TableRow {
 		}
 
 		cell := layout.TableCell{
-			Content: elements,
-			ColSpan: entry.opts.colSpan,
-			RowSpan: entry.opts.rowSpan,
-			Style:   cellStyle,
+			Content:       elements,
+			ColSpan:       entry.opts.colSpan,
+			RowSpan:       entry.opts.rowSpan,
+			Style:         cellStyle,
+			AllowBreak:    entry.opts.allowBreak,
+			RepeatOnBreak: entry.opts.repeatOnBreak,
 		}
 		cells = append(cells, cell)
 	}
@@ -293,6 +295,9 @@ type cellConfig struct {
 	vAlign      layout.VAlign
 	borderColor *layout.Color
 	borderWidth float64
+
+	allowBreak    bool
+	repeatOnBreak bool
 }
 
 // applyCellOptions applies a slice of CellOption values and returns the resulting cellConfig.
@@ -319,6 +324,13 @@ func ColSpan(n int) CellOption {
 }
 
 // RowSpan makes a cell span the given number of rows. Must be >= 1.
+// A span never reaches past the end of its section (header, body, footer).
+//
+// The cell covers the full height of the rows it spans; if its content needs
+// more, those rows grow. Rows linked by a span stay on one page: a group that
+// does not fit in the rest of the page moves to the next page whole. A group
+// taller than a page is broken, and the cell continues in its columns on the
+// next page. See CellAllowBreak and CellRepeatOnBreak.
 //
 // Example:
 //
@@ -329,6 +341,37 @@ func RowSpan(n int) CellOption {
 			n = 1
 		}
 		cfg.rowSpan = n
+	}
+}
+
+// CellAllowBreak lets a page break fall between the rows a RowSpan cell
+// spans, so the rows fill each page instead of moving to the next page
+// together. A break inside a group happens only where every cell spanning
+// across it allows it. Use it for long data tables where density matters
+// more than keeping a group on one page.
+//
+// Example:
+//
+//	r.Cell(fn, builder.RowSpan(12), builder.CellAllowBreak())
+func CellAllowBreak() CellOption {
+	return func(cfg *cellConfig) {
+		cfg.allowBreak = true
+	}
+}
+
+// CellRepeatOnBreak shows a RowSpan cell's content again at the top of every
+// page its span continues on, like a repeated group header in a report: a
+// team name next to its members, a category next to its items. It applies
+// when the content was shown completely before the break; text still
+// continuing on the next page is continued, not repeated.
+//
+// Example:
+//
+//	r.Cell(func(c *builder.CellBuilder) { c.Text("Team A") },
+//	    builder.RowSpan(40), builder.CellRepeatOnBreak())
+func CellRepeatOnBreak() CellOption {
+	return func(cfg *cellConfig) {
+		cfg.repeatOnBreak = true
 	}
 }
 

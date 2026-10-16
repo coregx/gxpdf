@@ -103,6 +103,28 @@ func TestTableBuilder_RowSpanOption(t *testing.T) {
 	assert.Equal(t, 2, tbl.Body[0].Cells[0].RowSpan)
 }
 
+// TestTableBuilder_BreakOptions verifies CellAllowBreak and CellRepeatOnBreak
+// reach the layout cell, and are off by default.
+func TestTableBuilder_BreakOptions(t *testing.T) {
+	b := newTestBuilder()
+	tb := &TableBuilder{b: b}
+	tb.Columns(Fr(1), Fr(1), Fr(1))
+	tb.Row(func(r *TableRowBuilder) {
+		r.Cell(func(c *CellBuilder) { c.Text("default") }, RowSpan(2))
+		r.Cell(func(c *CellBuilder) { c.Text("allow") }, RowSpan(2), CellAllowBreak())
+		r.Cell(func(c *CellBuilder) { c.Text("repeat") }, RowSpan(2), CellRepeatOnBreak())
+	})
+
+	cells := tb.build().Body[0].Cells
+	require.Len(t, cells, 3)
+	assert.False(t, cells[0].AllowBreak)
+	assert.False(t, cells[0].RepeatOnBreak)
+	assert.True(t, cells[1].AllowBreak)
+	assert.False(t, cells[1].RepeatOnBreak)
+	assert.False(t, cells[2].AllowBreak)
+	assert.True(t, cells[2].RepeatOnBreak)
+}
+
 // TestTableBuilder_TableRowBg verifies row background color is applied.
 func TestTableBuilder_TableRowBg(t *testing.T) {
 	b := newTestBuilder()

@@ -162,6 +162,54 @@ func TestTableGolden_RowSpan(t *testing.T) {
 	assertGolden(t, "table_rowspan_issue100", recordDrawOps(t, issue100Doc()))
 }
 
+// rosterAtPageBottom is the #100 table with 6 member rows, started 700pt down
+// an A4 page so that only its first row would fit on page 1.
+func rosterAtPageBottom(opts ...CellOption) *Builder {
+	doc := NewBuilder(WithPageSize(A4))
+	doc.Page(func(p *PageBuilder) {
+		p.Content(func(c *Container) {
+			c.Spacer(Pt(700))
+			c.Table(func(t *TableBuilder) {
+				t.Columns(Fr(1), Fr(1), Fr(1))
+				for i := 1; i <= 6; i++ {
+					t.Row(func(r *TableRowBuilder) {
+						cell := func(s string, o ...CellOption) {
+							r.Cell(func(cb *CellBuilder) { cb.Text(s) },
+								append([]CellOption{CellBorder(Black, 0.5)}, o...)...)
+						}
+						span := append([]CellOption{RowSpan(6), CellVAlignMiddle()}, opts...)
+						if i == 1 {
+							cell("TEAM", span...)
+						}
+						cell(fmt.Sprintf("member %d", i))
+						if i == 1 {
+							cell("Line one of a long merged text that wraps over several lines inside the merged cell", span...)
+						}
+					})
+				}
+			})
+		})
+	})
+	return doc
+}
+
+// TestTableGolden_RowSpanPageBreak pins the three page-break behaviors of a
+// row span (ADR-007 §5): the group moves to page 2 whole by default; with
+// CellAllowBreak it is broken after row 1 and continues in its columns; with
+// CellRepeatOnBreak as well, TEAM is shown again on page 2.
+func TestTableGolden_RowSpanPageBreak(t *testing.T) {
+	t.Run("default_moves_whole", func(t *testing.T) {
+		assertGolden(t, "table_rowspan_break_default", recordDrawOps(t, rosterAtPageBottom()))
+	})
+	t.Run("allow_break", func(t *testing.T) {
+		assertGolden(t, "table_rowspan_break_allow", recordDrawOps(t, rosterAtPageBottom(CellAllowBreak())))
+	})
+	t.Run("allow_break_repeat", func(t *testing.T) {
+		assertGolden(t, "table_rowspan_break_repeat",
+			recordDrawOps(t, rosterAtPageBottom(CellAllowBreak(), CellRepeatOnBreak())))
+	})
+}
+
 // TestTableGolden_NoRowSpan pins the output of tables without row spans.
 // ADR-007 invariant I6: the row-span rework must not change these bytes.
 // The golden files were captured on main (v0.9.5 + #105) before the rework.

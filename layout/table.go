@@ -51,6 +51,12 @@ type carriedCell struct {
 	cell    TableCell // remaining content and span; style of the original
 	col     int
 	colSpan int
+	// src is the cell as the caller defined it: its full content and
+	// alignment, which RepeatOnBreak shows again.
+	src TableCell
+	// remainder reports that cell.Content is the rest of src's content
+	// rather than all of it.
+	remainder bool
 }
 
 // ColumnDef describes how a single column's width is determined.
@@ -80,6 +86,19 @@ type TableCell struct {
 	RowSpan int
 	// Style provides cell-level styling: padding, border, background, vertical align.
 	Style Style
+	// AllowBreak lets a page break fall between the rows this cell spans.
+	// By default the rows linked by row spans stay on one page: a group that
+	// does not fit in the rest of the page moves to the next page whole, and
+	// only a group taller than an empty page is broken. A break inside a group
+	// is allowed where every cell spanning across it sets AllowBreak.
+	// It has no effect on cells with RowSpan <= 1.
+	AllowBreak bool
+	// RepeatOnBreak shows the cell's content again at the top of every page
+	// its row span continues on, like a repeated group header. It applies
+	// only when the content was shown completely before the break; content
+	// that is still continuing is continued, never repeated.
+	// It has no effect on cells with RowSpan <= 1.
+	RepeatOnBreak bool
 }
 
 // effectiveColSpan returns ColSpan clamped to at least 1.
@@ -462,6 +481,10 @@ type gridCell struct {
 	// carried marks the continuation of a cell that originates on a previous
 	// page; the background of the row it starts in here does not apply to it.
 	carried bool
+	// src is the cell as the caller defined it (full content, alignment).
+	src *TableCell
+	// remainder reports that cell.Content is the rest of src's content.
+	remainder bool
 }
 
 // buildSectionGrid places the cells of rows into a grid and computes the row
@@ -522,12 +545,14 @@ func (p *gridPlacer) placeCarried(cc *carriedCell) {
 		return // cannot happen for a carry built from a valid grid
 	}
 	p.place(&gridCell{
-		cell:    cc.cell,
-		row:     0,
-		col:     cc.col,
-		colSpan: min(max(cc.colSpan, 1), nCols-cc.col),
-		rowSpan: min(cc.cell.effectiveRowSpan(), p.g.numRows()),
-		carried: true,
+		cell:      cc.cell,
+		row:       0,
+		col:       cc.col,
+		colSpan:   min(max(cc.colSpan, 1), nCols-cc.col),
+		rowSpan:   min(cc.cell.effectiveRowSpan(), p.g.numRows()),
+		carried:   true,
+		src:       &cc.src,
+		remainder: cc.remainder,
 	})
 }
 
@@ -570,6 +595,7 @@ func (p *gridPlacer) placeRow(r int) {
 			col:     col,
 			colSpan: colSpan,
 			rowSpan: min(cell.effectiveRowSpan(), p.g.numRows()-r),
+			src:     cell,
 		})
 		col += colSpan
 	}
@@ -665,11 +691,14 @@ func (g *sectionGrid) lastBreakAtOrBefore(n int) int {
 }
 
 // crossedBoundaries reports for each boundary k (between rows k-1 and k)
-// whether a row-spanning cell crosses it.
+// whether a row-spanning cell that keeps its rows together crosses it.
 func (g *sectionGrid) crossedBoundaries() []bool {
 	crossed := make([]bool, len(g.heights)+1)
 	for i := range g.cells {
 		gc := &g.cells[i]
+		if gc.cell.AllowBreak {
+			continue
+		}
 		for k := gc.row + 1; k < gc.row+gc.rowSpan; k++ {
 			crossed[k] = true
 		}
@@ -798,19 +827,43 @@ func (g *sectionGrid) appendBlocks(blocks []Block, end int, colOffsets []float64
 }
 
 // continuation returns the cell that continues gc after row end, on the next
-// page: same columns, style and the rows it still spans, holding the content
-// that did not fit (possibly none, so the column stays framed). It keeps the
-// background of its originating row, and its content continues from the top.
+// page: same columns, style and the rows it still spans. It holds the content
+// that did not fit, continued from the top (possibly none, so the column
+// stays framed). If gc showed the cell's entire content and the cell repeats
+// on breaks, it holds the entire content again with the cell's alignment.
+// It keeps the background of its originating row.
 func continuation(gc *gridCell, rest []Element, end int, rowBg *Color) carriedCell {
+	src := gc.source()
 	cell := gc.cell
-	cell.Content = rest
 	cell.RowSpan = gc.row + gc.rowSpan - end
 	cell.ColSpan = gc.colSpan
 	if cell.Style.Background == nil {
 		cell.Style.Background = rowBg
 	}
-	cell.Style.VerticalAlign = VAlignTop
-	return carriedCell{cell: cell, col: gc.col, colSpan: gc.colSpan}
+
+	repeat := src.RepeatOnBreak && len(rest) == 0 && !gc.remainder && len(src.Content) > 0
+	if repeat {
+		cell.Content = src.Content
+		cell.Style.VerticalAlign = src.Style.VerticalAlign
+	} else {
+		cell.Content = rest
+		cell.Style.VerticalAlign = VAlignTop
+	}
+	return carriedCell{
+		cell:      cell,
+		col:       gc.col,
+		colSpan:   gc.colSpan,
+		src:       *src,
+		remainder: !repeat && (len(rest) > 0 || gc.remainder),
+	}
+}
+
+// source returns the cell as the caller defined it.
+func (gc *gridCell) source() *TableCell {
+	if gc.src != nil {
+		return gc.src
+	}
+	return &gc.cell
 }
 
 // appendRowBackground appends the background of row r. The background skips
