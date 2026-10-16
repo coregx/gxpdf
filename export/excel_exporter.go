@@ -10,6 +10,9 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// alignCenter is the excelize alignment value for centered cells.
+const alignCenter = "center"
+
 // ExcelExporter exports tables to Excel format (XLSX).
 //
 // Excel export provides rich formatting and layout capabilities.
@@ -139,7 +142,7 @@ func (e *ExcelExporter) setupSheet(f *excelize.File) error {
 func (e *ExcelExporter) createStyles(f *excelize.File) (*excelStyles, error) {
 	headerStyle, err := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true},
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Alignment: &excelize.Alignment{Horizontal: alignCenter, Vertical: alignCenter},
 		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"#E0E0E0"}},
 	})
 	if err != nil {
@@ -147,7 +150,7 @@ func (e *ExcelExporter) createStyles(f *excelize.File) (*excelStyles, error) {
 	}
 
 	centerStyle, err := f.NewStyle(&excelize.Style{
-		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "top"},
+		Alignment: &excelize.Alignment{Horizontal: alignCenter, Vertical: "top"},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create center style: %w", err)

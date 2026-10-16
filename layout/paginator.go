@@ -14,6 +14,10 @@ const PageNumberPlaceholder = "\x00PAGE\x00"
 // count should appear.
 const TotalPagesPlaceholder = "\x00TOTAL\x00"
 
+// pageNumberTag marks the blocks of PageNumber elements; ResolvePageNumbers
+// rewrites them once the page count is known.
+const pageNumberTag = "__pagenumber__"
+
 // PageDef describes a page template: its physical size, margins, and the
 // content elements to be rendered on each page of the document.
 type PageDef struct {
@@ -283,7 +287,7 @@ func ResolvePageNumbers(pages []PageLayout) {
 // the first page would resolve the shared blocks for all pages.
 func resolveBlockPageNumbers(blocks []Block, pageNum, totalPages int) {
 	for i := range blocks {
-		if blocks[i].Tag == "__pagenumber__" && blocks[i].AltText != "" {
+		if blocks[i].Tag == pageNumberTag && blocks[i].AltText != "" {
 			resolved := blocks[i].AltText
 			resolved = strings.ReplaceAll(resolved, PageNumberPlaceholder, fmt.Sprintf("%d", pageNum))
 			resolved = strings.ReplaceAll(resolved, TotalPagesPlaceholder, fmt.Sprintf("%d", totalPages))
@@ -315,7 +319,7 @@ func resolveBlockPageNumbers(blocks []Block, pageNum, totalPages int) {
 // page-number block.
 func containsPageNumber(blocks []Block) bool {
 	for i := range blocks {
-		if blocks[i].Tag == "__pagenumber__" || containsPageNumber(blocks[i].Children) {
+		if blocks[i].Tag == pageNumberTag || containsPageNumber(blocks[i].Children) {
 			return true
 		}
 	}
@@ -380,7 +384,7 @@ func (pn *PageNumber) PlanLayout(area Area) Plan {
 		Y:        0,
 		Width:    lineWidth,
 		Height:   lineSpacing,
-		Tag:      "__pagenumber__",
+		Tag:      pageNumberTag,
 		AltText:  pn.Format,
 		drawData: dd,
 		Draw: func(r Renderer) {

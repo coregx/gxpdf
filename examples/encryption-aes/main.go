@@ -10,6 +10,12 @@ import (
 	"github.com/coregx/gxpdf/creator"
 )
 
+// Demo passwords used for every example document.
+const (
+	userPassword  = "user123"
+	ownerPassword = "owner123"
+)
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -47,8 +53,8 @@ func createAES128PDF() error {
 
 	// Set encryption with AES-128.
 	if err := c.SetEncryption(creator.EncryptionOptions{
-		UserPassword:  "user123",
-		OwnerPassword: "owner123",
+		UserPassword:  userPassword,
+		OwnerPassword: ownerPassword,
 		Permissions:   creator.PermissionPrint | creator.PermissionCopy,
 		Algorithm:     creator.EncryptionAES128,
 	}); err != nil {
@@ -69,8 +75,8 @@ func createAES256PDF() error {
 
 	// Set encryption with AES-256 (most secure).
 	if err := c.SetEncryption(creator.EncryptionOptions{
-		UserPassword:  "user123",
-		OwnerPassword: "owner123",
+		UserPassword:  userPassword,
+		OwnerPassword: ownerPassword,
 		Permissions:   creator.PermissionAll,
 		Algorithm:     creator.EncryptionAES256,
 	}); err != nil {
@@ -91,8 +97,8 @@ func createRC4PDF() error {
 
 	// Set encryption with RC4-128 (legacy, for compatibility).
 	if err := c.SetEncryption(creator.EncryptionOptions{
-		UserPassword:  "user123",
-		OwnerPassword: "owner123",
+		UserPassword:  userPassword,
+		OwnerPassword: ownerPassword,
 		Permissions:   creator.PermissionPrint,
 		Algorithm:     creator.EncryptionRC4_128,
 	}); err != nil {
@@ -127,7 +133,7 @@ func addSampleContent(c *creator.Creator, title string) error {
 	}
 
 	// Add instructions.
-	instructions := "User password: user123 | Owner password: owner123"
+	instructions := "User password: " + userPassword + " | Owner password: " + ownerPassword
 	if err := page.AddText(instructions, 50, 650, creator.Helvetica, 10); err != nil {
 		return fmt.Errorf("add instructions: %w", err)
 	}

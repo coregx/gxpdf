@@ -17,6 +17,16 @@ import (
 	"github.com/coregx/gxpdf/creator"
 )
 
+// Values repeated across the feature, spec and platform tables.
+const (
+	featureTableExtraction = "Table Extraction"
+	labelDependencies      = "Dependencies"
+	depsZero               = "Zero"
+	unicodeFullBMP         = "Full BMP"
+	supportFull            = "Full"
+	supportYes             = "Yes"
+)
+
 // Corporate color palette - Professional enterprise design.
 var (
 	// Primary colors.
@@ -292,7 +302,7 @@ func createHeroPage(c *creator.Creator, fonts *Fonts) error {
 		{"740+", "Test Transactions"},
 		{"100%", "Accuracy"},
 		{"500+", "Pages/Second"},
-		{"0", "Dependencies"},
+		{"0", labelDependencies},
 	}
 
 	statWidth := width / float64(len(stats))
@@ -419,10 +429,10 @@ func createFeaturesPage(c *creator.Creator, fonts *Fonts) error {
 	startY -= 20
 	comparison := [][]string{
 		{"Feature", "GxPDF", "UniPDF", "pdfcpu"},
-		{"Table Extraction", "Yes (100%)", "Yes", "No"},
-		{"Unicode Support", "Full BMP", "Full BMP", "Limited"},
+		{featureTableExtraction, "Yes (100%)", supportYes, "No"},
+		{"Unicode Support", unicodeFullBMP, unicodeFullBMP, "Limited"},
 		{"License", "MIT", "Commercial", "Apache 2.0"},
-		{"Dependencies", "Zero", "Multiple", "Zero"},
+		{labelDependencies, depsZero, "Multiple", depsZero},
 	}
 	_, _ = drawTable(page, fonts, 50, startY, width-100, comparison)
 
@@ -494,7 +504,7 @@ func createDashboardPage(c *creator.Creator, fonts *Fonts) error {
 		color creator.Color
 	}{
 		{"Text Extraction", 1000, ChartBlue},
-		{"Table Extraction", 500, ChartGreen},
+		{featureTableExtraction, 500, ChartGreen},
 		{"PDF Generation", 100, ChartOrange},
 		{"Font Embedding", 50, ChartPurple},
 	}
@@ -526,7 +536,7 @@ func createDashboardPage(c *creator.Creator, fonts *Fonts) error {
 		color creator.Color
 	}{
 		{"Text Extraction", 5, ChartBlue},
-		{"Table Extraction", 10, ChartGreen},
+		{featureTableExtraction, 10, ChartGreen},
 		{"PDF Generation", 20, ChartOrange},
 		{"Font Embedding", 50, ChartPurple},
 	}
@@ -845,9 +855,9 @@ func createSpecsPage(c *creator.Creator, fonts *Fonts) error {
 		{"Property", "Value"},
 		{"PDF Version", "1.7 (ISO 32000-1)"},
 		{"Go Version", "1.21+"},
-		{"Dependencies", "Zero"},
+		{labelDependencies, depsZero},
 		{"Font Support", "Standard 14 + TTF/OTF"},
-		{"Unicode", "Full BMP"},
+		{"Unicode", unicodeFullBMP},
 		{"License", "MIT"},
 	}
 	y, _ = drawTable(page, fonts, 50, y, colWidth, coreSpecs)
@@ -878,11 +888,11 @@ func createSpecsPage(c *creator.Creator, fonts *Fonts) error {
 	_ = page.AddTextCustomFontColor("Security", 50, secY, fonts.Bold, 13, NavyDark)
 	secSpecs := [][]string{
 		{"Feature", "Support"},
-		{"RC4 40-bit", "Yes"},
-		{"RC4 128-bit", "Yes"},
-		{"AES 128-bit", "Yes"},
-		{"AES 256-bit", "Yes"},
-		{"Permissions", "Full"},
+		{"RC4 40-bit", supportYes},
+		{"RC4 128-bit", supportYes},
+		{"AES 128-bit", supportYes},
+		{"AES 256-bit", supportYes},
+		{"Permissions", supportFull},
 	}
 	_, _ = drawTable(page, fonts, 50, secY-20, colWidth, secSpecs)
 
@@ -890,10 +900,10 @@ func createSpecsPage(c *creator.Creator, fonts *Fonts) error {
 	_ = page.AddTextCustomFontColor("Compression", rightX, secY, fonts.Bold, 13, NavyDark)
 	compSpecs := [][]string{
 		{"Filter", "Status"},
-		{"FlateDecode", "Full"},
+		{"FlateDecode", supportFull},
 		{"LZWDecode", "Read"},
-		{"ASCII85", "Full"},
-		{"ASCIIHex", "Full"},
+		{"ASCII85", supportFull},
+		{"ASCIIHex", supportFull},
 		{"RunLength", "Read"},
 	}
 	_, _ = drawTable(page, fonts, rightX, secY-20, colWidth, compSpecs)
@@ -906,11 +916,11 @@ func createSpecsPage(c *creator.Creator, fonts *Fonts) error {
 		name   string
 		status string
 	}{
-		{"Windows", "Full"},
-		{"macOS", "Full"},
-		{"Linux", "Full"},
-		{"FreeBSD", "Full"},
-		{"ARM64", "Full"},
+		{"Windows", supportFull},
+		{"macOS", supportFull},
+		{"Linux", supportFull},
+		{"FreeBSD", supportFull},
+		{"ARM64", supportFull},
 		{"WebAssembly", "Experimental"},
 	}
 

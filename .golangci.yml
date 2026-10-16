@@ -1,4 +1,4 @@
-# GolangCI-Lint v2.7 Configuration for GxPDF
+# GolangCI-Lint v2 configuration for GxPDF (CI runs the latest release)
 # Based on goawk configuration (working v2 format)
 # Documentation: https://golangci-lint.run/docs/configuration/
 
@@ -96,6 +96,7 @@ linters:
     paths:
       - reference/
       - examples/unipdf/
+      - tmp/ # gitignored scratch code, absent in CI
 
     rules:
       # Test files - allow more flexibility

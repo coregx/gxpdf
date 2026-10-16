@@ -80,20 +80,20 @@ func initFontMetricsRegistry() {
 		return
 	}
 	fontMetricsRegistry = map[string]*FontMetrics{
-		"Helvetica":             helveticaMetrics,
-		"Helvetica-Bold":        helveticaBoldMetrics,
-		"Helvetica-Oblique":     helveticaObliqueMetrics,
-		"Helvetica-BoldOblique": helveticaBoldObliqueMetrics,
-		"Times-Roman":           timesRomanMetrics,
-		"Times-Bold":            timesBoldMetrics,
-		"Times-Italic":          timesItalicMetrics,
-		"Times-BoldItalic":      timesBoldItalicMetrics,
-		"Courier":               courierMetrics,
-		"Courier-Bold":          courierBoldMetrics,
-		"Courier-Oblique":       courierObliqueMetrics,
-		"Courier-BoldOblique":   courierBoldObliqueMetrics,
-		"Symbol":                symbolMetrics,
-		"ZapfDingbats":          zapfDingbatsMetrics,
+		Helvetica.Name:            helveticaMetrics,
+		HelveticaBold.Name:        helveticaBoldMetrics,
+		HelveticaOblique.Name:     helveticaObliqueMetrics,
+		HelveticaBoldOblique.Name: helveticaBoldObliqueMetrics,
+		TimesRoman.Name:           timesRomanMetrics,
+		TimesBold.Name:            timesBoldMetrics,
+		TimesItalic.Name:          timesItalicMetrics,
+		TimesBoldItalic.Name:      timesBoldItalicMetrics,
+		Courier.Name:              courierMetrics,
+		CourierBold.Name:          courierBoldMetrics,
+		CourierOblique.Name:       courierObliqueMetrics,
+		CourierBoldOblique.Name:   courierBoldObliqueMetrics,
+		Symbol.Name:               symbolMetrics,
+		ZapfDingbats.Name:         zapfDingbatsMetrics,
 	}
 }
 

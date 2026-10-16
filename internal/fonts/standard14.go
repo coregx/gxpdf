@@ -25,41 +25,57 @@ type Standard14Font struct {
 	IsSymbolic bool
 }
 
+// Family, weight and style names of the Standard 14 fonts.
+const (
+	familyTimes        = "Times"
+	familyHelvetica    = "Helvetica"
+	familyCourier      = "Courier"
+	familySymbol       = "Symbol"
+	familyZapfDingbats = "ZapfDingbats"
+
+	weightRegular = "Regular"
+	weightBold    = "Bold"
+
+	styleNormal  = "Normal"
+	styleItalic  = "Italic"
+	styleOblique = "Oblique"
+)
+
 // Standard 14 Type 1 Fonts - Serif Family (Times).
 var (
 	// TimesRoman is the Times Roman font (Regular weight, Normal style).
 	TimesRoman = &Standard14Font{
 		Name:       "Times-Roman",
-		Family:     "Times",
-		Weight:     "Regular",
-		Style:      "Normal",
+		Family:     familyTimes,
+		Weight:     weightRegular,
+		Style:      styleNormal,
 		IsSymbolic: false,
 	}
 
 	// TimesBold is the Times Bold font.
 	TimesBold = &Standard14Font{
 		Name:       "Times-Bold",
-		Family:     "Times",
-		Weight:     "Bold",
-		Style:      "Normal",
+		Family:     familyTimes,
+		Weight:     weightBold,
+		Style:      styleNormal,
 		IsSymbolic: false,
 	}
 
 	// TimesItalic is the Times Italic font.
 	TimesItalic = &Standard14Font{
 		Name:       "Times-Italic",
-		Family:     "Times",
-		Weight:     "Regular",
-		Style:      "Italic",
+		Family:     familyTimes,
+		Weight:     weightRegular,
+		Style:      styleItalic,
 		IsSymbolic: false,
 	}
 
 	// TimesBoldItalic is the Times Bold Italic font.
 	TimesBoldItalic = &Standard14Font{
 		Name:       "Times-BoldItalic",
-		Family:     "Times",
-		Weight:     "Bold",
-		Style:      "Italic",
+		Family:     familyTimes,
+		Weight:     weightBold,
+		Style:      styleItalic,
 		IsSymbolic: false,
 	}
 )
@@ -69,36 +85,36 @@ var (
 	// Helvetica is the Helvetica font (Regular weight, Normal style).
 	Helvetica = &Standard14Font{
 		Name:       "Helvetica",
-		Family:     "Helvetica",
-		Weight:     "Regular",
-		Style:      "Normal",
+		Family:     familyHelvetica,
+		Weight:     weightRegular,
+		Style:      styleNormal,
 		IsSymbolic: false,
 	}
 
 	// HelveticaBold is the Helvetica Bold font.
 	HelveticaBold = &Standard14Font{
 		Name:       "Helvetica-Bold",
-		Family:     "Helvetica",
-		Weight:     "Bold",
-		Style:      "Normal",
+		Family:     familyHelvetica,
+		Weight:     weightBold,
+		Style:      styleNormal,
 		IsSymbolic: false,
 	}
 
 	// HelveticaOblique is the Helvetica Oblique font.
 	HelveticaOblique = &Standard14Font{
 		Name:       "Helvetica-Oblique",
-		Family:     "Helvetica",
-		Weight:     "Regular",
-		Style:      "Oblique",
+		Family:     familyHelvetica,
+		Weight:     weightRegular,
+		Style:      styleOblique,
 		IsSymbolic: false,
 	}
 
 	// HelveticaBoldOblique is the Helvetica Bold Oblique font.
 	HelveticaBoldOblique = &Standard14Font{
 		Name:       "Helvetica-BoldOblique",
-		Family:     "Helvetica",
-		Weight:     "Bold",
-		Style:      "Oblique",
+		Family:     familyHelvetica,
+		Weight:     weightBold,
+		Style:      styleOblique,
 		IsSymbolic: false,
 	}
 )
@@ -108,36 +124,36 @@ var (
 	// Courier is the Courier font (Regular weight, Normal style).
 	Courier = &Standard14Font{
 		Name:       "Courier",
-		Family:     "Courier",
-		Weight:     "Regular",
-		Style:      "Normal",
+		Family:     familyCourier,
+		Weight:     weightRegular,
+		Style:      styleNormal,
 		IsSymbolic: false,
 	}
 
 	// CourierBold is the Courier Bold font.
 	CourierBold = &Standard14Font{
 		Name:       "Courier-Bold",
-		Family:     "Courier",
-		Weight:     "Bold",
-		Style:      "Normal",
+		Family:     familyCourier,
+		Weight:     weightBold,
+		Style:      styleNormal,
 		IsSymbolic: false,
 	}
 
 	// CourierOblique is the Courier Oblique font.
 	CourierOblique = &Standard14Font{
 		Name:       "Courier-Oblique",
-		Family:     "Courier",
-		Weight:     "Regular",
-		Style:      "Oblique",
+		Family:     familyCourier,
+		Weight:     weightRegular,
+		Style:      styleOblique,
 		IsSymbolic: false,
 	}
 
 	// CourierBoldOblique is the Courier Bold Oblique font.
 	CourierBoldOblique = &Standard14Font{
 		Name:       "Courier-BoldOblique",
-		Family:     "Courier",
-		Weight:     "Bold",
-		Style:      "Oblique",
+		Family:     familyCourier,
+		Weight:     weightBold,
+		Style:      styleOblique,
 		IsSymbolic: false,
 	}
 )
@@ -147,18 +163,18 @@ var (
 	// Symbol is the Symbol font (symbolic characters, mathematical symbols).
 	Symbol = &Standard14Font{
 		Name:       "Symbol",
-		Family:     "Symbol",
-		Weight:     "Regular",
-		Style:      "Normal",
+		Family:     familySymbol,
+		Weight:     weightRegular,
+		Style:      styleNormal,
 		IsSymbolic: true,
 	}
 
 	// ZapfDingbats is the ZapfDingbats font (symbolic characters, dingbats).
 	ZapfDingbats = &Standard14Font{
 		Name:       "ZapfDingbats",
-		Family:     "ZapfDingbats",
-		Weight:     "Regular",
-		Style:      "Normal",
+		Family:     familyZapfDingbats,
+		Weight:     weightRegular,
+		Style:      styleNormal,
 		IsSymbolic: true,
 	}
 )

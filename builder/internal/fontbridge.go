@@ -102,48 +102,33 @@ func (fb *FontBridge) LineBreak(font layout.FontRef, text string, size float64, 
 	current := ""
 
 	for _, word := range words {
-		// Check if the word itself contains CJK; if so, handle character-level.
+		// A word containing CJK breaks at character level.
 		if containsCJK(word) {
-			// Flush current line first.
 			if current != "" {
 				lines = append(lines, current)
-				current = ""
 			}
-			cjkLines := fb.breakCJK(font, word, size, maxWidth)
-			if len(cjkLines) > 1 {
-				lines = append(lines, cjkLines[:len(cjkLines)-1]...)
-				current = cjkLines[len(cjkLines)-1]
-			} else if len(cjkLines) == 1 {
-				current = cjkLines[0]
-			}
+			lines, current = splitLast(lines, fb.breakCJK(font, word, size, maxWidth))
 			continue
 		}
 
-		// Non-CJK word.
 		candidate := word
 		if current != "" {
 			candidate = current + " " + word
 		}
-
-		if fb.MeasureString(font, candidate, size) <= maxWidth { //nolint:nestif // line-break logic
+		if fb.MeasureString(font, candidate, size) <= maxWidth {
 			current = candidate
-		} else {
-			// Word doesn't fit on current line.
-			if current != "" {
-				lines = append(lines, current)
-			}
-			// Check if the word alone exceeds maxWidth.
-			if fb.MeasureString(font, word, size) > maxWidth {
-				// Force-split the oversized word at character level.
-				charLines := fb.breakAtChars(font, word, size, maxWidth)
-				if len(charLines) > 1 {
-					lines = append(lines, charLines[:len(charLines)-1]...)
-					current = charLines[len(charLines)-1]
-				} else {
-					current = word
-				}
-			} else {
-				current = word
+			continue
+		}
+
+		// Word doesn't fit on current line.
+		if current != "" {
+			lines = append(lines, current)
+		}
+		current = word
+		if fb.MeasureString(font, word, size) > maxWidth {
+			// Force-split the oversized word at character level.
+			if pieces := fb.breakAtChars(font, word, size, maxWidth); len(pieces) > 1 {
+				lines, current = splitLast(lines, pieces)
 			}
 		}
 	}
@@ -155,6 +140,15 @@ func (fb *FontBridge) LineBreak(font layout.FontRef, text string, size float64, 
 		return []string{text}
 	}
 	return lines
+}
+
+// splitLast appends all pieces but the last to lines and returns the last
+// piece as the line still being filled ("" when there are no pieces).
+func splitLast(lines, pieces []string) (newLines []string, current string) {
+	if len(pieces) == 0 {
+		return lines, ""
+	}
+	return append(lines, pieces[:len(pieces)-1]...), pieces[len(pieces)-1]
 }
 
 // breakAtChars splits a single token at character boundaries to fit maxWidth.
