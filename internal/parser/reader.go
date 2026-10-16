@@ -68,6 +68,12 @@ type Reader struct {
 	catalog   *Dictionary
 	pages     *Dictionary
 
+	// pagesRootRef is the object number of the page tree root (0 if direct).
+	pagesRootRef int
+	// pageIdx is the flattened page tree, built lazily once (see page_tree.go).
+	pageIndexOnce sync.Once
+	pageIdx       *pageIndex
+
 	// headerOffset is the number of bytes before the %PDF- marker.
 	// Some PDFs have leading whitespace that shifts all internal byte offsets.
 	// This offset must be added to all file positions read from the PDF.
@@ -612,6 +618,9 @@ func (r *Reader) loadCatalog() error {
 	}
 
 	r.pages = pages
+	if ref, ok := pagesRef.(*IndirectReference); ok {
+		r.pagesRootRef = ref.Number
+	}
 
 	return nil
 }
@@ -1160,128 +1169,48 @@ func (r *Reader) GetPages() (*Dictionary, error) {
 
 // GetPageCount returns the total number of pages in the document.
 //
-// The count is read from the /Count entry in the page tree root.
+// The count is the number of page (leaf) nodes actually reachable in the page
+// tree, not the root's /Count entry: /Count is untrusted input and must not be
+// able to inflate the page count (a single-page file declaring /Count
+// 2000000000 would otherwise make every per-page loop run two billion times).
+// A mismatch is logged.
 //
 // Reference: PDF 1.7 specification, Section 7.7.3.2 (Page Tree Nodes).
 func (r *Reader) GetPageCount() (int, error) {
-	if r.pages == nil {
-		return 0, fmt.Errorf("pages not loaded (call Open first)")
+	idx, err := r.pageIndexOrBuild()
+	if err != nil {
+		return 0, err
 	}
-
-	count := r.pages.GetInteger("Count")
-	if count <= 0 {
-		return 0, fmt.Errorf("invalid page count: %d", count)
+	if len(idx.pages) == 0 {
+		return 0, fmt.Errorf("invalid page count: document has no reachable pages")
 	}
-
-	return int(count), nil
+	return len(idx.pages), nil
 }
 
 // GetPage returns the page dictionary for the specified page number.
 //
 // Page numbers are 0-based (first page is 0).
 //
-// The method traverses the page tree to find the requested page.
-// The page tree can have intermediate nodes (/Type /Pages) and
-// leaf nodes (/Type /Page).
+// Pages are looked up in the page index, which is built once from the page
+// tree (see page_tree.go), so lookup is O(1) and safe against cyclic or
+// malformed trees.
 //
 // Reference: PDF 1.7 specification, Section 7.7.3 (Page Tree).
 func (r *Reader) GetPage(pageNum int) (*Dictionary, error) {
-	if r.pages == nil {
-		return nil, fmt.Errorf("pages not loaded (call Open first)")
+	idx, err := r.pageIndexOrBuild()
+	if err != nil {
+		return nil, err
 	}
 
 	if pageNum < 0 {
 		return nil, fmt.Errorf("invalid page number: %d (must be >= 0)", pageNum)
 	}
 
-	// Traverse page tree
-	page, err := r.getPageFromNode(r.pages, &pageNum)
-	if err != nil {
-		return nil, err
+	if pageNum >= len(idx.pages) {
+		return nil, fmt.Errorf("page %d not found (page count: %d)", pageNum, len(idx.pages))
 	}
 
-	if page == nil {
-		return nil, fmt.Errorf("page %d not found (page count: %d)", pageNum, r.pages.GetInteger("Count"))
-	}
-
-	return page, nil
-}
-
-// getPageFromNode recursively traverses the page tree to find a page.
-//
-// The pageNum pointer is decremented as we traverse leaf pages,
-// so when it reaches 0, we've found the target page.
-//
-// Page tree structure:
-//   - Intermediate nodes: /Type /Pages, /Kids [array of child nodes], /Count total
-//   - Leaf nodes: /Type /Page
-//
-// Reference: PDF 1.7 specification, Section 7.7.3.2 (Page Tree Nodes).
-func (r *Reader) getPageFromNode(node *Dictionary, pageNum *int) (*Dictionary, error) {
-	typeObj := node.GetName("Type")
-	if typeObj == nil {
-		return nil, fmt.Errorf("page tree node missing /Type entry")
-	}
-
-	nodeType := typeObj.Value()
-
-	if nodeType == nodeTypePage {
-		// Leaf node - this is a page
-		if *pageNum == 0 {
-			return node, nil
-		}
-		*pageNum--
-		return nil, nil
-	}
-
-	if nodeType == nodeTypePages {
-		// Intermediate node - traverse kids
-		kidsObj := node.Get("Kids")
-		if kidsObj == nil {
-			return nil, fmt.Errorf("pages node missing /Kids entry")
-		}
-
-		// Resolve kids array
-		kids, err := r.resolveArray(kidsObj)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve /Kids array: %w", err)
-		}
-
-		// Traverse each kid
-		for i := 0; i < kids.Len(); i++ {
-			kidObj := kids.Get(i)
-			if kidObj == nil {
-				continue
-			}
-
-			// Resolve kid dictionary
-			kid, err := r.resolveDictionary(kidObj)
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve kid %d: %w", i, err)
-			}
-
-			// Recursively search this subtree
-			page, err := r.getPageFromNode(kid, pageNum)
-			if err != nil {
-				return nil, err
-			}
-
-			if page != nil {
-				return page, nil
-			}
-
-			// If pageNum didn't change or became negative, something is wrong
-			if *pageNum < 0 {
-				return nil, fmt.Errorf("page index exceeded page count")
-			}
-		}
-
-		// If we've exhausted all kids and haven't found the page, return nil
-		// This allows parent node to continue searching in other subtrees
-		return nil, nil
-	}
-
-	return nil, fmt.Errorf("unknown page tree node type: %s", nodeType)
+	return idx.pages[pageNum], nil
 }
 
 // resolveArray is a helper that resolves an object and ensures it's an array.
