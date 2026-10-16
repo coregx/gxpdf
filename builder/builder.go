@@ -96,7 +96,7 @@ func NewBuilder(opts ...Option) *Builder {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return &Builder{cfg: cfg}
+	return &Builder{cfg: cfg, errs: cfg.errs}
 }
 
 // Page adds a page definition to the document. The fn callback receives a

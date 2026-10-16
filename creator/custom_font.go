@@ -58,6 +58,24 @@ func LoadFont(path string) (*CustomFont, error) {
 	}, nil
 }
 
+// LoadFontFromBytes loads a TrueType/OpenType font from its file contents,
+// with the same format support as LoadFont. The font keeps a reference to
+// data for embedding; the caller must not modify it afterwards.
+//
+// Returns an error if data is not a valid font.
+func LoadFontFromBytes(data []byte) (*CustomFont, error) {
+	ttf, err := fonts.LoadTTFFromBytes(data)
+	if err != nil {
+		return nil, fmt.Errorf("load TTF: %w", err)
+	}
+
+	return &CustomFont{
+		ttfFont: ttf,
+		subset:  fonts.NewFontSubset(ttf),
+		isBuilt: false,
+	}, nil
+}
+
 // UseChar marks a character as used (for subsetting).
 //
 // This is called automatically by text rendering functions.
@@ -126,11 +144,16 @@ func (f *CustomFont) GetTTF() *fonts.TTFFont {
 //
 // The ID is used to track fonts across pages and avoid duplicates.
 func (f *CustomFont) ID() string {
-	// Use PostScript name or derive from file path.
+	// Use PostScript name or derive from file path. A font loaded from bytes
+	// without a PostScript name has neither; identify it by instance so two
+	// such fonts are not merged.
 	if f.ttfFont.PostScriptName != "" {
 		return f.ttfFont.PostScriptName
 	}
-	return f.ttfFont.FilePath
+	if f.ttfFont.FilePath != "" {
+		return f.ttfFont.FilePath
+	}
+	return fmt.Sprintf("font-%p", f.ttfFont)
 }
 
 // Ascender returns the ascender height in points at the given size.

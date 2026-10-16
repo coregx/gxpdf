@@ -1,7 +1,7 @@
 package builder
 
 import (
-	"os"
+	"fmt"
 
 	"github.com/coregx/gxpdf/creator"
 	"github.com/coregx/gxpdf/layout"
@@ -17,6 +17,8 @@ type config struct {
 	fonts        map[string]*creator.CustomFont
 	defaultStyle layout.Style
 	meta         metadata
+	// errs collects option errors (e.g. fonts that fail to load) for Build.
+	errs []error
 }
 
 // metadata holds PDF document metadata.
@@ -72,6 +74,8 @@ func WithMargins(top, right, bottom, left Value) Option {
 
 // WithFont registers a TrueType font from raw bytes under the given family name.
 // Once registered, the family name can be used with FontFamily() text option.
+// If data is empty or not a valid font, Build() returns an error naming the
+// family; the data must not be modified after the call.
 //
 // Example:
 //
@@ -80,22 +84,12 @@ func WithMargins(top, right, bottom, left Value) Option {
 func WithFont(family string, data []byte) Option {
 	return func(c *config) {
 		if len(data) == 0 {
+			c.errs = append(c.errs, fmt.Errorf("font %q: empty font data", family))
 			return
 		}
-		// Write to a temporary file because creator.LoadFont expects a path.
-		f, err := os.CreateTemp("", "gxpdf-font-*.ttf")
+		font, err := creator.LoadFontFromBytes(data)
 		if err != nil {
-			return
-		}
-		defer func() { _ = os.Remove(f.Name()) }()
-		if _, err := f.Write(data); err != nil {
-			_ = f.Close()
-			return
-		}
-		_ = f.Close()
-
-		font, err := creator.LoadFont(f.Name())
-		if err != nil {
+			c.errs = append(c.errs, fmt.Errorf("font %q: %w", family, err))
 			return
 		}
 		c.fonts[family] = font
@@ -103,6 +97,8 @@ func WithFont(family string, data []byte) Option {
 }
 
 // WithFontFile registers a TrueType font from a file path under the given family name.
+// If the file cannot be read or is not a valid font, Build() returns an error
+// naming the family.
 //
 // Example:
 //
@@ -111,7 +107,8 @@ func WithFontFile(family string, path string) Option {
 	return func(c *config) {
 		font, err := creator.LoadFont(path)
 		if err != nil {
-			// Errors are deferred — the builder will surface this on Build().
+			// Reported by Build().
+			c.errs = append(c.errs, fmt.Errorf("font %q: %w", family, err))
 			return
 		}
 		c.fonts[family] = font
