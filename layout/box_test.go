@@ -69,10 +69,44 @@ func TestBoxVertical_NothingAtPageTop(t *testing.T) {
 	big := &Box{
 		Children: []Element{fixedText("big", 200)},
 	}
-	plan := big.PlanLayout(Area{Width: 200, Height: 10})
+	plan := big.PlanLayout(Area{Width: 200, Height: 10, AtTop: true})
 	// Forced layout should return Full or Partial, never Nothing.
 	if plan.Status == Nothing {
 		t.Errorf("should not return Nothing when forced at page top")
+	}
+}
+
+func TestBoxVertical_NothingMidPageMovesToNextPage(t *testing.T) {
+	// The same box below other content on the page: a fresh page may have
+	// room, so the box must ask to move instead of running off the page.
+	big := &Box{
+		Children: []Element{fixedText("big", 200)},
+	}
+	plan := big.PlanLayout(Area{Width: 200, Height: 10})
+	if plan.Status != Nothing {
+		t.Errorf("status: got %v, want Nothing (box must move to the next page)", plan.Status)
+	}
+}
+
+func TestPaginator_BoxNearPageBottomMovesToNextPage(t *testing.T) {
+	// Page body 100pt: a 95pt box, then a box whose first line (14.4pt) does
+	// not fit in the remaining 5pt. It used to be forced onto page 1 and
+	// drawn down to y=109.4, below the page.
+	filler := &Box{Height: Pt(95)}
+	box := &Box{Children: []Element{&Text{Content: "box text", Fonts: &MockFontResolver{}}}}
+	pages := (&Paginator{}).Paginate([]*PageDef{{
+		Size:    Size{Width: 200, Height: 100},
+		Content: []Element{filler, box},
+	}})
+	if len(pages) != 2 {
+		t.Fatalf("pages: got %d, want 2", len(pages))
+	}
+	for i, pg := range pages {
+		for _, b := range pg.Blocks {
+			if b.Y+b.Height > 100+FitTolerance {
+				t.Errorf("page %d: block bottom %.1f below the page", i+1, b.Y+b.Height)
+			}
+		}
 	}
 }
 

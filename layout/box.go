@@ -69,10 +69,14 @@ func (b *Box) PlanLayout(area Area) Plan {
 	var consumed float64
 
 	if b.Direction == Horizontal {
-		childBlocks, consumed = b.layoutHorizontal(innerWidth, innerHeight, &s)
+		childBlocks, consumed = b.layoutHorizontal(innerWidth, innerHeight, area.AtTop, &s)
 		// Horizontal boxes do not split across pages.
 	} else {
-		childBlocks, consumed, overflow = b.layoutVertical(innerWidth, innerHeight, &s)
+		var nothing bool
+		childBlocks, consumed, overflow, nothing = b.layoutVertical(innerWidth, innerHeight, area.AtTop, &s)
+		if nothing {
+			return Plan{Status: Nothing}
+		}
 	}
 
 	// If KeepTogether is set and content overflowed, return Nothing so the
@@ -119,20 +123,25 @@ func (b *Box) PlanLayout(area Area) Plan {
 
 // layoutVertical stacks children top-to-bottom within the given inner area.
 // It returns the placed blocks, consumed height, and an overflow element if
-// not all children fit.
-func (b *Box) layoutVertical(innerWidth, innerHeight float64, s *Style) ([]Block, float64, Element) {
-	var blocks []Block
+// not all children fit. nothing reports that not even the first child fits
+// and the box is not at the top of the page, so the whole box should move to
+// the next page. At the top of the page a first child that does not fit is
+// placed anyway (forced), since a fresh page cannot offer more room.
+func (b *Box) layoutVertical(innerWidth, innerHeight float64, atTop bool, s *Style) (blocks []Block, consumed float64, overflow Element, nothing bool) {
 	cursorY := 0.0
 
 	for i, child := range b.Children {
 		remaining := innerHeight - cursorY
-		if remaining <= 0 {
+		if remaining <= 0 && (i > 0 || !atTop) {
+			if i == 0 {
+				return nil, 0, nil, true
+			}
 			// No space left — everything from here overflows.
 			overflow := b.overflowBox(b.Children[i:], s)
-			return blocks, cursorY, overflow
+			return blocks, cursorY, overflow, false
 		}
 
-		childPlan := child.PlanLayout(Area{Width: innerWidth, Height: remaining})
+		childPlan := child.PlanLayout(Area{Width: innerWidth, Height: remaining, AtTop: atTop && cursorY == 0})
 
 		switch childPlan.Status {
 		case Full:
@@ -153,39 +162,43 @@ func (b *Box) layoutVertical(innerWidth, innerHeight float64, s *Style) ([]Block
 			remaining = append(remaining, childPlan.Overflow)
 			remaining = append(remaining, b.Children[i+1:]...)
 			overflow := b.overflowBox(remaining, s)
-			return blocks, cursorY, overflow
+			return blocks, cursorY, overflow, false
 
 		case Nothing:
-			if i == 0 && cursorY == 0 {
-				// Nothing at page top — force layout with unlimited height.
-				forced := child.PlanLayout(Area{Width: innerWidth, Height: 1e9})
-				placed := cloneBlocks(forced.Blocks)
-				offsetBlocks(placed, 0, cursorY)
-				blocks = append(blocks, placed...)
-				cursorY += forced.Consumed
-
-				if forced.Overflow != nil {
-					remaining := make([]Element, 0, 1+len(b.Children[i+1:]))
-					remaining = append(remaining, forced.Overflow)
-					remaining = append(remaining, b.Children[i+1:]...)
-					overflow := b.overflowBox(remaining, s)
-					return blocks, cursorY, overflow
-				}
-			} else {
-				// Nothing mid-page — overflow everything from here.
+			if i > 0 || cursorY > 0 {
+				// Something is placed already — overflow everything from here.
 				overflow := b.overflowBox(b.Children[i:], s)
-				return blocks, cursorY, overflow
+				return blocks, cursorY, overflow, false
+			}
+			if !atTop {
+				// The first child does not fit here; a fresh page may help.
+				return nil, 0, nil, true
+			}
+			// Nothing fits even at the page top and the child ignored AtTop:
+			// force it with unlimited height.
+			forced := child.PlanLayout(Area{Width: innerWidth, Height: 1e9, AtTop: true})
+			placed := cloneBlocks(forced.Blocks)
+			offsetBlocks(placed, 0, cursorY)
+			blocks = append(blocks, placed...)
+			cursorY += forced.Consumed
+
+			if forced.Overflow != nil {
+				remaining := make([]Element, 0, 1+len(b.Children[i+1:]))
+				remaining = append(remaining, forced.Overflow)
+				remaining = append(remaining, b.Children[i+1:]...)
+				overflow := b.overflowBox(remaining, s)
+				return blocks, cursorY, overflow, false
 			}
 		}
 	}
 
-	return blocks, cursorY, nil
+	return blocks, cursorY, nil, false
 }
 
 // layoutHorizontal places children left-to-right within the inner area.
 // Children with an explicit Width are resolved first; remaining children
 // share the leftover space equally. Horizontal boxes do not split.
-func (b *Box) layoutHorizontal(innerWidth, innerHeight float64, s *Style) ([]Block, float64) {
+func (b *Box) layoutHorizontal(innerWidth, innerHeight float64, atTop bool, s *Style) ([]Block, float64) {
 	if len(b.Children) == 0 {
 		return nil, 0
 	}
@@ -198,7 +211,7 @@ func (b *Box) layoutHorizontal(innerWidth, innerHeight float64, s *Style) ([]Blo
 
 	for i, child := range b.Children {
 		w := widths[i]
-		childPlan := child.PlanLayout(Area{Width: w, Height: innerHeight})
+		childPlan := child.PlanLayout(Area{Width: w, Height: innerHeight, AtTop: atTop})
 
 		placed := cloneBlocks(childPlan.Blocks)
 		offsetBlocks(placed, cursorX, 0)

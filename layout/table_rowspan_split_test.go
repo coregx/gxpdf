@@ -65,7 +65,7 @@ func paginateTable(t *testing.T, tbl *Table, width, pageH float64, maxPages int)
 	var elem Element = tbl
 	for page := 0; elem != nil; page++ {
 		require.Less(t, page, maxPages, "table did not finish within %d pages", maxPages)
-		p := elem.PlanLayout(Area{Width: width, Height: pageH})
+		p := elem.PlanLayout(Area{Width: width, Height: pageH, AtTop: true})
 		require.NotEqual(t, Nothing, p.Status, "page %d: nothing placed", page+1)
 		if p.Status == Full {
 			require.Nil(t, p.Overflow, "page %d: Full plan with overflow", page+1)
@@ -104,9 +104,9 @@ const longText = "Line one of a long merged text that wraps over several lines i
 // after row 1): rows after the break stay in their columns and both spanning
 // cells continue on the next page.
 func TestTable_RowSpanSplit_ColumnsPreserved(t *testing.T) {
-	first := issue100Table(4).PlanLayout(Area{Width: 300, Height: 30})
+	first := issue100Table(4).PlanLayout(Area{Width: 300, Height: 30, AtTop: true})
 	require.Equal(t, Partial, first.Status)
-	second := first.Overflow.PlanLayout(Area{Width: 300, Height: 1000})
+	second := first.Overflow.PlanLayout(Area{Width: 300, Height: 1000, AtTop: true})
 	require.Equal(t, Full, second.Status)
 	plans := []Plan{first, second}
 
@@ -332,7 +332,11 @@ func TestTable_HeaderTallerThanPageEmptyBody(t *testing.T) {
 		Header:  []TableRow{{Cells: []TableCell{textCell("H")}}},
 		Fonts:   &MockFontResolver{},
 	}
-	p := tbl.PlanLayout(Area{Width: 100, Height: 5})
+	// Mid-page: move to a fresh page.
+	assert.Equal(t, Nothing, tbl.PlanLayout(Area{Width: 100, Height: 5}).Status)
+
+	// Page top: place it (nothing better is possible), with no overflow.
+	p := tbl.PlanLayout(Area{Width: 100, Height: 5, AtTop: true})
 	assert.Equal(t, Full, p.Status)
 	assert.Nil(t, p.Overflow)
 }

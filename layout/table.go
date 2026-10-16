@@ -129,55 +129,23 @@ func (t *Table) PlanLayout(area Area) Plan {
 		}
 	}
 
-	// Determine how many body rows fit on this page.
-	available := area.Height - headerHeight - footerHeight
-	if available <= 0 {
-		// Not even a header+footer fits; force-place header only.
-		if headerHeight == 0 {
-			return Plan{Status: Nothing}
-		}
-		blocks, _ := buildAllBlocks(header, body, 0, footer, colWidths, area.Width)
-		overflow := t.overflowTable(0, t.carry(), colWidths, area.Width)
-		status := Partial
-		if overflow == nil {
-			status = Full // no body rows remain
-		}
-		return Plan{
-			Status:   status,
-			Consumed: headerHeight + footerHeight,
-			Blocks:   blocks,
-			Overflow: overflow,
-		}
-	}
-
-	// Walk body rows until we exceed available space.
-	splitAt := 0
-	usedHeight := 0.0
-	for i, h := range body.heights {
-		if !Fits(usedHeight+h, available) {
-			// This row doesn't fit; split before it.
-			break
-		}
-		usedHeight += h
-		splitAt = i + 1
-	}
+	// Not everything fits. Find the last break opportunity among the body rows
+	// that fit: a break must not cut a row-span group (ADR-007 §5).
+	fitRows := body.rowsFitting(area.Height - headerHeight - footerHeight)
+	splitAt := body.lastBreakAtOrBefore(fitRows)
 
 	if splitAt == 0 {
-		// Nothing from the body fits on this page.
-		if body.numRows() == 0 {
-			// No body rows — full fit with header/footer only.
-			blocks, _ := buildAllBlocks(header, body, 0, footer, colWidths, area.Width)
-			return Plan{
-				Status:   Full,
-				Consumed: headerHeight + footerHeight,
-				Blocks:   blocks,
-			}
+		if !area.AtTop {
+			// A fresh page offers more room; move the whole table there.
+			return Plan{Status: Nothing}
 		}
-		// No body row fits on this page.
-		return Plan{Status: Nothing}
+		// At the top of a page waiting cannot help. Break inside the first
+		// span group (the keep-together rule is relaxed, as CSS relaxes
+		// break-inside: avoid), and if not even one row fits, place one row
+		// anyway so that every page makes progress (ADR-007 I4).
+		splitAt = min(max(fitRows, 1), body.numRows())
 	}
 
-	// Build plan for what fits.
 	consumed := headerHeight + body.height(0, splitAt) + footerHeight
 	blocks, carry := buildAllBlocks(header, body, splitAt, footer, colWidths, area.Width)
 
@@ -671,6 +639,44 @@ func growRows(rows []float64, deficit float64) {
 	rows[last] += deficit - given
 }
 
+// rowsFitting returns how many leading rows fit into the height avail.
+func (g *sectionGrid) rowsFitting(avail float64) int {
+	used := 0.0
+	for i, h := range g.heights {
+		if !Fits(used+h, avail) {
+			return i
+		}
+		used += h
+	}
+	return len(g.heights)
+}
+
+// lastBreakAtOrBefore returns the largest k <= n at which a page break
+// (before row k) does not cut a row span, or 0 if there is none. The end of
+// the section is always a break opportunity.
+func (g *sectionGrid) lastBreakAtOrBefore(n int) int {
+	crossed := g.crossedBoundaries()
+	for k := n; k > 0; k-- {
+		if k == len(g.heights) || !crossed[k] {
+			return k
+		}
+	}
+	return 0
+}
+
+// crossedBoundaries reports for each boundary k (between rows k-1 and k)
+// whether a row-spanning cell crosses it.
+func (g *sectionGrid) crossedBoundaries() []bool {
+	crossed := make([]bool, len(g.heights)+1)
+	for i := range g.cells {
+		gc := &g.cells[i]
+		for k := gc.row + 1; k < gc.row+gc.rowSpan; k++ {
+			crossed[k] = true
+		}
+	}
+	return crossed
+}
+
 // numRows returns the number of rows in the section.
 func (g *sectionGrid) numRows() int {
 	return len(g.heights)
@@ -720,7 +726,7 @@ func measureCellHeight(cell *TableCell, cellWidth float64) float64 {
 	// Measure by running layout on each content element with unlimited height.
 	contentH := 0.0
 	for _, elem := range cell.Content {
-		plan := elem.PlanLayout(Area{Width: innerWidth, Height: 1e9})
+		plan := elem.PlanLayout(Area{Width: innerWidth, Height: 1e9, AtTop: true})
 		contentH += plan.Consumed
 	}
 	return contentH + padV
@@ -892,7 +898,7 @@ func layoutCell(gc *gridCell, colOffsets []float64, cellH, rowY float64, rowBg *
 		if fragment {
 			avail = innerH - innerCursorY
 		}
-		plan := elem.PlanLayout(Area{Width: innerW, Height: avail})
+		plan := elem.PlanLayout(Area{Width: innerW, Height: avail, AtTop: true})
 		if fragment && plan.Status == Nothing {
 			rest = append(rest, gc.cell.Content[i:]...)
 			break

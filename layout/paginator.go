@@ -127,7 +127,7 @@ func buildPageBlocks(remaining []Element, contentWidth, bodyHeight float64) (pag
 		elem := remaining[0]
 		availH := bodyHeight - cursorY
 
-		plan := elem.PlanLayout(Area{Width: contentWidth, Height: availH})
+		plan := elem.PlanLayout(Area{Width: contentWidth, Height: availH, AtTop: cursorY == 0})
 
 		switch plan.Status {
 		case Full:
@@ -176,7 +176,7 @@ func handleNothingStatus(
 ) (outBlocks []Block, nextRemaining []Element, outRemaining []Element) {
 	if cursorY == 0 {
 		// Nothing at page top — force with unlimited height.
-		forcedPlan := elem.PlanLayout(Area{Width: contentWidth, Height: 1e9})
+		forcedPlan := elem.PlanLayout(Area{Width: contentWidth, Height: 1e9, AtTop: true})
 		placed := cloneBlocks(forcedPlan.Blocks)
 		offsetBlocks(placed, 0, cursorY)
 		pageBlocks = append(pageBlocks, placed...)

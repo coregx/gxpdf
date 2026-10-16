@@ -24,6 +24,12 @@ type Area struct {
 	Width float64
 	// Height is the remaining vertical space on the current page in PDF points.
 	Height float64
+	// AtTop reports that nothing has been placed on the current page yet, so
+	// moving content to the next page cannot help. An element that would
+	// return Nothing (to be retried on a fresh page) must place what it can
+	// instead when AtTop is true; an element that avoids breaks, such as a
+	// table row-span group, must break.
+	AtTop bool
 }
 
 // Plan is the immutable result of a layout computation.
