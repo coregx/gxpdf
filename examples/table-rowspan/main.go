@@ -52,6 +52,9 @@ func main() {
 	}
 
 	b.Page(func(p *builder.PageBuilder) {
+		p.Footer(func(c *builder.Container) {
+			c.PageNumber("Page "+builder.PageNum+" of "+builder.TotalPages, builder.AlignCenter(), builder.FontSize(8))
+		})
 		p.Content(func(c *builder.Container) {
 			c.Text("Duty roster", builder.Bold(), builder.FontSize(16))
 			c.Text("Teams stay on one page; the reserve pool is longer than a page and repeats its name on each page.",

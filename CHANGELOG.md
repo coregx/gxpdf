@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Table columns changed between pages**: a table continued on the next page re-resolved `Auto` column widths and, without `Columns`, the column count from the remaining rows (an `Auto` column went from 114pt to 6pt). The column grid is now kept for the whole table.
 - **Content running off the page**: a table whose first row did not fit at the top of a page was drawn whole on one page below its bottom edge; a box whose first line did not fit near the bottom of a page was drawn below the page instead of moving to the next one.
 - **Pagination never ended** for a table whose header was taller than the page.
+- **`PageNumber` in a page header or footer showed 1 on every page** ("Page 1 of 6" on all six pages). Header and footer blocks are shared by all pages, and the first page resolved them for every page.
 - **An image in a row-spanning cell could be dropped by rounding**: grown rows can sum to a few ulps less than the image needs. Text allowed 0.01pt; images, spacers, `EnsureSpace` and table row fitting compared exactly. All fit decisions now use one tolerance.
 
 ### Added

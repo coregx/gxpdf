@@ -274,8 +274,13 @@ func ResolvePageNumbers(pages []PageLayout) {
 	}
 }
 
-// resolveBlockPageNumbers recursively finds page-number blocks and updates
-// the shared textPtr that their Draw closures read from.
+// resolveBlockPageNumbers recursively finds page-number blocks and rebuilds
+// their Draw closures with the resolved text.
+//
+// Children slices may be shared between pages: page header and footer blocks
+// are laid out once per PageDef and copied shallowly to every page. A
+// Children slice is therefore copied before anything inside it changes, or
+// the first page would resolve the shared blocks for all pages.
 func resolveBlockPageNumbers(blocks []Block, pageNum, totalPages int) {
 	for i := range blocks {
 		if blocks[i].Tag == "__pagenumber__" && blocks[i].AltText != "" {
@@ -299,10 +304,22 @@ func resolveBlockPageNumbers(blocks []Block, pageNum, totalPages int) {
 				}
 			}
 		}
-		if len(blocks[i].Children) > 0 {
+		if containsPageNumber(blocks[i].Children) {
+			blocks[i].Children = cloneBlocks(blocks[i].Children)
 			resolveBlockPageNumbers(blocks[i].Children, pageNum, totalPages)
 		}
 	}
+}
+
+// containsPageNumber reports whether blocks or their descendants include a
+// page-number block.
+func containsPageNumber(blocks []Block) bool {
+	for i := range blocks {
+		if blocks[i].Tag == "__pagenumber__" || containsPageNumber(blocks[i].Children) {
+			return true
+		}
+	}
+	return false
 }
 
 // PageNumber is a special Element that renders the current page number.
