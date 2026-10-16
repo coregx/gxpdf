@@ -193,19 +193,22 @@ func (b *Builder) accumulatedError() error {
 	return errors.Join(b.errs...)
 }
 
-// renderTo runs the layout pipeline and emits PDF content into cr.
-func (b *Builder) renderTo(cr *creator.Creator) error {
-	// Build layout page definitions.
+// layoutPages runs the layout pipeline and returns the positioned pages.
+func (b *Builder) layoutPages() []layout.PageLayout {
 	layoutPages := make([]*layout.PageDef, 0, len(b.pages))
 	for _, pd := range b.pages {
 		layoutPages = append(layoutPages, pd.toLayoutPageDef(b.cfg.pageSize, b.cfg.margins))
 	}
 
-	// Run the paginator.
 	paginator := &layout.Paginator{
 		Fonts: b.fontResolver(),
 	}
-	pageLayouts := paginator.Paginate(layoutPages)
+	return paginator.Paginate(layoutPages)
+}
+
+// renderTo runs the layout pipeline and emits PDF content into cr.
+func (b *Builder) renderTo(cr *creator.Creator) error {
+	pageLayouts := b.layoutPages()
 
 	// Render page layouts via the PDF renderer.
 	renderer := builderinternal.NewPDFRenderer(cr, b.cfg.fonts)
