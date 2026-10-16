@@ -178,7 +178,7 @@ func TestTable_ColSpan2(t *testing.T) {
 	assert.Equal(t, Full, plan.Status)
 	assert.Nil(t, plan.Overflow)
 	// Row 0 has 2 cells (span-2 + 1 normal).
-	g := buildSectionGrid(tbl.Body, tbl.resolveColumnWidths(3, 300))
+	g := buildSectionGrid(tbl.Body, tbl.resolveColumnWidths(3, 300), nil)
 	require.Len(t, g.cells, 5)
 	assert.Equal(t, 0, g.cells[1].row)
 	assert.Equal(t, 1, g.cells[2].row)
@@ -229,7 +229,7 @@ func TestTable_RowSpan2(t *testing.T) {
 	}, fonts)
 
 	colWidths := tbl.resolveColumnWidths(3, 300)
-	g := buildSectionGrid(tbl.Body, colWidths)
+	g := buildSectionGrid(tbl.Body, colWidths, nil)
 	require.Equal(t, 2, g.numRows())
 	require.Len(t, g.cells, 5)
 

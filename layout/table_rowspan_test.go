@@ -137,7 +137,7 @@ func TestTable_RowSpan_NestedShortestFirst(t *testing.T) {
 		{Cells: []TableCell{fixedCell(90, 3), fixedCell(80, 2), fixedCell(10, 1)}},
 		{Cells: []TableCell{fixedCell(10, 1)}},
 		{Cells: []TableCell{fixedCell(10, 1), fixedCell(10, 1)}},
-	}, []float64{100, 100, 100})
+	}, []float64{100, 100, 100}, nil)
 
 	assert.InDeltaSlice(t, []float64{40, 40, 10}, g.heights, 1e-9)
 }
@@ -156,10 +156,10 @@ func TestTable_RowSpan_ClampedToSection(t *testing.T) {
 	}
 	widths := tbl.resolveColumnWidths(2, 200)
 
-	header := buildSectionGrid(tbl.Header, widths)
+	header := buildSectionGrid(tbl.Header, widths, nil)
 	assert.Equal(t, 1, header.cells[0].rowSpan)
 
-	body := buildSectionGrid(tbl.Body, widths)
+	body := buildSectionGrid(tbl.Body, widths, nil)
 	require.Len(t, body.cells, 3)
 	assert.Equal(t, 2, body.cells[0].rowSpan)
 	// Body row 0 starts at column 0: the header span did not leak into it.
@@ -177,7 +177,7 @@ func TestTable_ColSpanStopsAtOccupiedColumn(t *testing.T) {
 	g := buildSectionGrid([]TableRow{
 		{Cells: []TableCell{textCell("a"), textCell("span", withRowSpan(2)), textCell("c")}},
 		{Cells: []TableCell{textCell("wide", withColSpan(3)), textCell("d")}},
-	}, []float64{100, 100, 100})
+	}, []float64{100, 100, 100}, nil)
 
 	require.Len(t, g.cells, 5)
 	wide, d := g.cells[3], g.cells[4]
