@@ -1,6 +1,10 @@
 package gxpdf
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/coregx/gxpdf/internal/extractor"
+)
 
 // Common errors returned by gxpdf functions.
 var (
@@ -25,6 +29,12 @@ var (
 	// ErrUnsupportedFeature is returned for PDF features not yet implemented.
 	ErrUnsupportedFeature = errors.New("gxpdf: unsupported PDF feature")
 )
+
+// ErrResourceLimitExceeded is returned when a document exceeds a processing
+// limit that protects against maliciously crafted or corrupted input — for
+// example, Form XObjects that would expand into an unbounded amount of content
+// on a single page. Use errors.Is to detect it.
+var ErrResourceLimitExceeded = extractor.ErrResourceLimitExceeded
 
 // IsEncrypted returns true if the error indicates an encrypted PDF.
 func IsEncrypted(err error) bool {

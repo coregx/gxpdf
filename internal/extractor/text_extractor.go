@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"compress/zlib"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -35,12 +36,27 @@ const glyphMergeGapFactor = 1.5
 // as a word boundary and receives a space.
 const wordSpaceGapFactor = 1.0
 
-// maxXObjectDepth limits Form XObject recursion to prevent infinite loops.
+// maxXObjectDepth limits Form XObject nesting.
 //
-// The PDF specification does not forbid cyclic XObject references, so we
-// cap the recursion depth. In practice, shipping-label PDFs produced by
-// TCPDF use at most 2 levels of nesting.
+// In practice, shipping-label PDFs produced by TCPDF use at most 2 levels of
+// nesting. Cycles are handled separately (see TextExtractor.activeForms); the
+// depth limit only bounds legitimate-looking but absurdly deep nesting.
 const maxXObjectDepth = 8
+
+// maxFormInvocationsPerPage bounds the total number of Form XObject
+// invocations (Do operators, across all nesting levels) on one page.
+//
+// Cycle detection alone does not bound the work: an acyclic graph in which a
+// Form invokes another Form ten times, which invokes a third ten times, and so
+// on, expands to 10^8 invocations within maxXObjectDepth from a file of a few
+// hundred bytes. Real documents stay several orders of magnitude below this
+// limit even when every symbol on a map or drawing is a Form; repeated
+// invocations are cheap because parsed Form content is cached per page.
+const maxFormInvocationsPerPage = 100_000
+
+// ErrResourceLimitExceeded is returned when content exceeds a processing
+// limit that protects against maliciously crafted or corrupted documents.
+var ErrResourceLimitExceeded = errors.New("extractor: content exceeds processing limits")
 
 // TextExtractor extracts text with positional information from PDF pages.
 //
@@ -72,15 +88,34 @@ type TextExtractor struct {
 	// xobjectDepth is the current Form XObject recursion depth.
 	// It is incremented on every Do call and decremented on return.
 	xobjectDepth int
+
+	// Per-page Form XObject state (reset by ExtractFromPage).
+	//
+	// activeForms holds the Forms currently executing (the Do call stack).
+	// Re-entering one of them is a cycle: no conforming reader can render it,
+	// so the nested invocation is skipped.
+	activeForms map[*parser.Stream]struct{}
+	// formOperators caches each Form's parsed content (nil if it could not
+	// be decoded or parsed), so repeated invocations are not re-decoded.
+	formOperators map[*parser.Stream][]*Operator
+	// formInvocations counts Form invocations; see maxFormInvocationsPerPage.
+	formInvocations int
+	// cycleLogged ensures a cyclic Form graph is logged once per page.
+	cycleLogged bool
+	// limitErr is set when a processing limit is hit; processing of the page
+	// stops and ExtractFromPage returns it.
+	limitErr error
 }
 
 // NewTextExtractor creates a new TextExtractor for the given PDF reader.
 func NewTextExtractor(reader *parser.Reader) *TextExtractor {
 	return &TextExtractor{
-		reader:       reader,
-		textState:    NewTextState(),
-		elements:     []*TextElement{},
-		fontDecoders: make(map[string]*FontDecoder),
+		reader:        reader,
+		textState:     NewTextState(),
+		elements:      []*TextElement{},
+		fontDecoders:  make(map[string]*FontDecoder),
+		activeForms:   make(map[*parser.Stream]struct{}),
+		formOperators: make(map[*parser.Stream][]*Operator),
 	}
 }
 
@@ -94,6 +129,11 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 	te.elements = []*TextElement{}
 	te.textState = NewTextState()
 	te.fontDecoders = make(map[string]*FontDecoder)
+	te.activeForms = make(map[*parser.Stream]struct{})
+	te.formOperators = make(map[*parser.Stream][]*Operator)
+	te.formInvocations = 0
+	te.cycleLogged = false
+	te.limitErr = nil
 
 	// Get page
 	page, err := te.reader.GetPage(pageNum)
@@ -123,8 +163,10 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 	}
 
 	// Process operators to extract text
-	for _, op := range operators {
-		te.processOperator(op)
+	te.processOperators(operators)
+	if te.limitErr != nil {
+		// Callers add the (1-based) page number to the message.
+		return nil, te.limitErr
 	}
 
 	// Merge per-glyph TextElements that belong to the same word.
@@ -686,14 +728,17 @@ func (te *TextExtractor) processTextArray(arr *parser.Array) {
 //  4. Parse and process the XObject's content stream operators.
 //  5. Pop the saved resources to restore the caller's context.
 //
-// Infinite-recursion guard: recursion is capped at maxXObjectDepth levels.
+// Bounds (the Form graph is untrusted input):
+//   - cycles: a Form that is already executing is not re-entered;
+//   - nesting: at most maxXObjectDepth levels;
+//   - total work: at most maxFormInvocationsPerPage invocations per page,
+//     after which te.limitErr is set and processing of the page stops.
 //
 // Reference: PDF 1.7 specification, Section 8.8.1 (Form XObjects).
 //
 //nolint:cyclop // XObject resolution requires several type-assertion branches
 func (te *TextExtractor) processFormXObject(xobjName string) {
-	// Guard against infinite recursion
-	if te.xobjectDepth >= maxXObjectDepth {
+	if te.limitErr != nil || te.xobjectDepth >= maxXObjectDepth {
 		return
 	}
 
@@ -709,11 +754,30 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 		return
 	}
 
-	// Decode the XObject content stream
-	contentData, err := te.decodeStream(xobjectStream)
-	if err != nil || len(contentData) == 0 {
+	// A Form that is already on the Do call stack would recurse into itself.
+	if _, active := te.activeForms[xobjectStream]; active {
+		if !te.cycleLogged {
+			te.cycleLogged = true
+			logging.Logger().Warn("cyclic Form XObject invocation skipped",
+				slog.String("name", xobjName), slog.Int("depth", te.xobjectDepth))
+		}
 		return
 	}
+
+	te.formInvocations++
+	if te.formInvocations > maxFormInvocationsPerPage {
+		te.limitErr = fmt.Errorf("%w: more than %d Form XObject invocations",
+			ErrResourceLimitExceeded, maxFormInvocationsPerPage)
+		return
+	}
+
+	operators := te.formContent(xobjectStream)
+	if len(operators) == 0 {
+		return
+	}
+
+	te.activeForms[xobjectStream] = struct{}{}
+	defer delete(te.activeForms, xobjectStream)
 
 	// Push current resources and switch to XObject's resources (if present)
 	savedResources := te.pageResources
@@ -725,14 +789,7 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 		te.pageResources = xobjResources
 	}
 
-	// Parse and process the XObject's content stream
-	contentParser := NewContentParser(contentData)
-	operators, err := contentParser.ParseOperators()
-	if err == nil {
-		for _, op := range operators {
-			te.processOperator(op)
-		}
-	}
+	te.processOperators(operators)
 
 	// Restore saved resources and depth counter
 	te.xobjectDepth--
@@ -742,6 +799,34 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 	} else {
 		te.pageResources = savedResources
 	}
+}
+
+// processOperators runs content operators until they are exhausted or a
+// processing limit is hit.
+func (te *TextExtractor) processOperators(operators []*Operator) {
+	for _, op := range operators {
+		if te.limitErr != nil {
+			return
+		}
+		te.processOperator(op)
+	}
+}
+
+// formContent returns the parsed content of a Form XObject, decoding and
+// parsing it only on first use within the page. A Form that cannot be decoded
+// or parsed yields nil (and is not retried).
+func (te *TextExtractor) formContent(form *parser.Stream) []*Operator {
+	if operators, cached := te.formOperators[form]; cached {
+		return operators
+	}
+	var operators []*Operator
+	if data, err := te.decodeStream(form); err == nil && len(data) > 0 {
+		if parsed, err := NewContentParser(data).ParseOperators(); err == nil {
+			operators = parsed
+		}
+	}
+	te.formOperators[form] = operators
+	return operators
 }
 
 // resolveXObject looks up a named XObject from the current pageResources and
