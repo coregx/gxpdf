@@ -217,7 +217,7 @@ func (e *spacerElement) PlanLayout(area layout.Area) layout.Plan {
 	if h <= 0 {
 		h = 0
 	}
-	if h > area.Height && area.Height < 1e8 {
+	if !layout.Fits(h, area.Height) {
 		return layout.Plan{Status: layout.Nothing}
 	}
 	return layout.Plan{
@@ -238,7 +238,7 @@ func newEnsureSpaceElement(h layout.Value) *ensureSpaceElement {
 
 func (e *ensureSpaceElement) PlanLayout(area layout.Area) layout.Plan {
 	required := e.minHeight.Resolve(area.Width, 12)
-	if area.Height < required && area.Height < 1e8 {
+	if !layout.Fits(required, area.Height) {
 		return layout.Plan{Status: layout.Nothing}
 	}
 	// Consume zero height — just a guard.
@@ -317,7 +317,7 @@ func (e *imageElement) PlanLayout(area layout.Area) layout.Plan {
 		}
 	}
 
-	if displayH > area.Height && area.Height < 1e8 {
+	if !layout.Fits(displayH, area.Height) {
 		return layout.Plan{Status: layout.Nothing}
 	}
 

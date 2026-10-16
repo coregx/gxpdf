@@ -97,7 +97,7 @@ func (t *Table) PlanLayout(area Area) Plan {
 	bodyHeight := body.height(0, body.numRows())
 	totalHeight := headerHeight + bodyHeight + footerHeight
 
-	if totalHeight <= area.Height || area.Height >= 1e8 {
+	if Fits(totalHeight, area.Height) {
 		// Everything fits — produce a single plan.
 		blocks := buildAllBlocks(header, body, body.numRows(), footer, colWidths, area.Width)
 		return Plan{
@@ -128,7 +128,7 @@ func (t *Table) PlanLayout(area Area) Plan {
 	splitAt := 0
 	usedHeight := 0.0
 	for i, h := range body.heights {
-		if usedHeight+h > available {
+		if !Fits(usedHeight+h, available) {
 			// This row doesn't fit; split before it.
 			break
 		}

@@ -39,7 +39,7 @@ func (t *Text) PlanLayout(area Area) Plan {
 	cursorY := 0.0
 
 	for i, line := range lines {
-		if cursorY+lineSpacing > area.Height+0.01 && area.Height < 1e8 {
+		if !Fits(cursorY+lineSpacing, area.Height) {
 			// Remaining lines overflow.
 			overflow := t.overflowText(joinStrings(lines[i:], " "), &s)
 			status := Partial

@@ -81,7 +81,7 @@ func (rt *RichText) PlanLayout(area Area) Plan {
 		maxFS := maxRichFontSize(line)
 		lineSpacing := maxFS * lineHeight
 
-		if cursorY+lineSpacing > area.Height+0.01 && area.Height < 1e8 {
+		if !Fits(cursorY+lineSpacing, area.Height) {
 			// Build overflow from remaining lines.
 			overflow := rebuildRichOverflow(lines[i:], rt.Align, rt.LineHeight, rt.Fonts)
 			status := Partial

@@ -12,7 +12,8 @@ package layout
 // Element is the core layout interface. Every layoutable type implements it.
 // PlanLayout must be pure — no side effects, no mutation of the receiver.
 // The caller supplies the available Area; the returned Plan describes what
-// was placed and what (if anything) could not fit.
+// was placed and what (if anything) could not fit. Implementations decide
+// what fits with Fits, so that all elements apply the same tolerance.
 type Element interface {
 	PlanLayout(area Area) Plan
 }
