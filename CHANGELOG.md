@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Crafted object graphs can no longer crash or hang the reader** — several inputs caused unrecoverable process crashes (`fatal error: stack overflow` / out of memory, which `recover` cannot catch) or effectively infinite loops:
+  - a page tree whose `/Kids` references an ancestor;
+  - a form field listing itself or an ancestor in `/Kids`;
+  - a Form XObject invoking itself several times (a 1 KB file expanded to about 2 million invocations), or an acyclic Form graph that expands exponentially;
+  - a page tree `/Count` far larger than the real number of pages (a one-page file declaring `/Count 2000000000` made per-page loops run two billion times).
+
+### Fixed
+- **Reading form fields of ordinary documents could crash the process** — resolving references wrote resolved objects back into the shared object cache, turning normal `/Kids` ↔ `/Parent` back-references into Go pointer cycles; a spec-conformant radio-button group crashed on the second `GetFormFields` call. Reference resolution no longer mutates cached objects.
+- **Page count is the number of pages actually present** — `PageCount` no longer trusts the page tree's `/Count`; mismatches are logged.
+
+### Added
+- **`ErrResourceLimitExceeded`** — returned (wrapped) when a document exceeds a processing limit, e.g. more than 100,000 Form XObject invocations on one page.
+
+### Changed
+- **Faster page access and Form XObject text extraction** — pages are indexed once instead of walking the page tree on every lookup, and each Form XObject's parsed content is cached per page (invoking one Form 2,000 times: 115–184 ms → 15–18 ms).
+
 ---
 
 ## [0.9.4] - 2026-08-02

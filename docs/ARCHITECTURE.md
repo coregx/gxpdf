@@ -415,6 +415,33 @@ if err != nil {
 
 The builder accumulates errors and surfaces them all at once from `Build()`, so callers do not need to check errors at every content-adding step.
 
+### 6. Untrusted Input Is Bounded
+
+Every PDF is treated as untrusted. Object graphs may contain cycles (some are
+normal — a form field's `/Kids` and its kids' `/Parent`), and any count or size
+in the file may be wrong or hostile. Rules for code that reads documents:
+
+- **Never mutate shared objects.** `GetObject` returns cached objects;
+  `ResolveReferences` returns a resolved copy and leaves the cache untouched.
+- **Every graph walk is cycle-safe and bounded** — visited sets (by object
+  number and by dictionary pointer) plus an explicit depth limit; prefer
+  iterative walks over recursion.
+- **Derive counts from structure, not declarations** — e.g. the page count is
+  the number of reachable pages, not the page tree's `/Count`.
+- **Bound total work, not only depth** — acyclic graphs can still expand
+  exponentially.
+- **Skip and log malformed nodes; fail explicitly on exhausted budgets** with
+  an error wrapping `ErrResourceLimitExceeded`, never by silently truncating.
+
+| Walk | Guard | Limit |
+|------|-------|-------|
+| Page tree (`internal/parser/page_tree.go`) | visited set, iterative | depth 256 |
+| AcroForm fields (`internal/application/forms/field_tree.go`) | visited set | depth 64 |
+| Form XObjects (text extraction) | active-call set, parsed-content cache | depth 8, 100,000 invocations per page |
+
+Hostile-document regressions live in `hostile_documents_test.go`; test PDFs
+with arbitrary object graphs are built with `internal/testutil.BuildPDF`.
+
 ## Testing Strategy
 
 ### Test Types
