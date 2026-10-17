@@ -338,3 +338,40 @@ func TestBuilderImage_BadDataFailsBuild(t *testing.T) {
 		t.Fatalf("Build error = %v, want an image error", err)
 	}
 }
+
+// TestBuilderImage_GrayJPEGAndPalettedPNG (bug-016): a grayscale JPEG used to
+// be declared DeviceRGB over a one-component DCT stream, and a paletted PNG
+// with a transparent entry (a typical logo) lost its transparency.
+func TestBuilderImage_GrayJPEGAndPalettedPNG(t *testing.T) {
+	var gray bytes.Buffer
+	if err := jpeg.Encode(&gray, image.NewGray(image.Rect(0, 0, 30, 20)), nil); err != nil {
+		t.Fatal(err)
+	}
+	pal := image.NewPaletted(image.Rect(0, 0, 8, 4), color.Palette{color.NRGBA{0, 0, 0, 0}, color.NRGBA{200, 30, 30, 255}})
+	for x := 2; x < 6; x++ {
+		pal.SetColorIndex(x, 2, 1)
+	}
+	var logo bytes.Buffer
+	if err := png.Encode(&logo, pal); err != nil {
+		t.Fatal(err)
+	}
+
+	doc := builder.NewBuilder()
+	doc.Page(func(p *builder.PageBuilder) {
+		p.Content(func(c *builder.Container) {
+			c.Image(gray.Bytes(), builder.FitWidth(builder.Mm(30)))
+			c.Image(logo.Bytes(), builder.FitWidth(builder.Mm(30)))
+		})
+	})
+	pdf := buildDoc(t, doc)
+
+	var got []string
+	for _, img := range pageImages(t, pdf)[0] {
+		got = append(got, img.colorSpace+" "+img.filter+" smask="+strconv.FormatBool(img.hasSMask))
+	}
+	sort.Strings(got)
+	want := []string{"DeviceGray DCTDecode smask=false", "DeviceRGB FlateDecode smask=true"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("images %q, want %q", got, want)
+	}
+}

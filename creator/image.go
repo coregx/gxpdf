@@ -17,15 +17,15 @@ import (
 // Image represents an image that can be embedded in a PDF document.
 //
 // Currently supports:
-//   - JPEG images (RGB and CMYK color spaces)
-//   - PNG images (RGB, RGBA, grayscale, paletted)
+//   - JPEG images: grayscale, RGB (YCbCr) and CMYK (Adobe CMYK/YCCK included)
+//   - PNG images: RGB, RGBA, grayscale, paletted, 8 and 16 bit
 //
 // The image data is stored as:
-//   - JPEG: Raw JPEG bytes (DCTDecode)
-//   - PNG: Raw pixel data compressed with FlateDecode
+//   - JPEG: the original bytes (DCTDecode), color space from the component count
+//   - PNG: 8-bit samples compressed with FlateDecode (DeviceGray or DeviceRGB)
 //
-// For RGBA PNG with transparency, the alpha channel is stored separately
-// as an SMask (soft mask) for proper PDF rendering.
+// Any PNG transparency (alpha channel, or tRNS in a paletted, grey or RGB PNG)
+// is stored separately as an 8-bit SMask (soft mask).
 //
 // Example:
 //
@@ -56,6 +56,10 @@ type Image struct {
 
 	// Bits per component (8 for most images).
 	bitsPerComponent int
+
+	// decode is the image's /Decode array, nil for the default mapping.
+	// Adobe CMYK JPEGs store inverted samples and need [1 0 1 0 1 0 1 0].
+	decode []float64
 }
 
 // ColorSpace represents the image color space.
@@ -75,8 +79,8 @@ const (
 // LoadImage loads an image from a file.
 //
 // Supported formats: JPEG, PNG.
-// For JPEG: RGB and CMYK color spaces.
-// For PNG: RGB, RGBA (with alpha mask), grayscale, paletted.
+// For JPEG: grayscale, RGB and CMYK (1, 3 or 4 components).
+// For PNG: RGB, RGBA, grayscale, paletted; transparency becomes an SMask.
 //
 // Example:
 //
@@ -121,14 +125,24 @@ func LoadImageFromReader(r io.Reader) (*Image, error) {
 	}
 
 	// Load based on format.
+	var img *Image
 	switch format {
 	case "jpeg":
-		return loadJPEG(data)
+		img, err = loadJPEG(data)
 	case "png":
-		return loadPNG(data)
+		img, err = loadPNG(data)
 	default:
 		return nil, fmt.Errorf("unsupported image format: %s", format)
 	}
+	if err != nil {
+		return nil, err
+	}
+	// A JPEG frame header may declare a zero width or height (the decoder
+	// accepts it); an image XObject needs at least one pixel.
+	if img.width <= 0 || img.height <= 0 {
+		return nil, fmt.Errorf("%w: %s is %dx%d pixels", ErrInvalidImageDimensions, format, img.width, img.height)
+	}
+	return img, nil
 }
 
 // detectImageFormat detects the image format by checking file header.
@@ -150,23 +164,84 @@ func detectImageFormat(data []byte) string {
 	return ""
 }
 
-// loadJPEG loads a JPEG image from raw data.
+// loadJPEG loads a JPEG image from raw data. The bytes are embedded as they
+// are (DCTDecode); the color space follows the number of components in the
+// frame header: 1 = DeviceGray, 3 = DeviceRGB (YCbCr or RGB), 4 = DeviceCMYK.
 func loadJPEG(data []byte) (*Image, error) {
-	// Decode config to get dimensions.
+	// Decode config to get dimensions (and to validate the stream).
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode JPEG: %w", err)
 	}
+	components, adobe, err := jpegComponents(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode JPEG: %w", err)
+	}
 
-	return &Image{
+	img := &Image{
 		format:           "jpeg",
 		data:             data,
 		width:            cfg.Width,
 		height:           cfg.Height,
-		colorSpace:       ColorSpaceRGB, // JPEG defaults to RGB.
-		components:       3,
+		components:       components,
 		bitsPerComponent: 8,
-	}, nil
+	}
+	switch components {
+	case 1:
+		img.colorSpace = ColorSpaceGray
+	case 3:
+		img.colorSpace = ColorSpaceRGB
+	case 4:
+		img.colorSpace = ColorSpaceCMYK
+		if adobe {
+			// Adobe applications write CMYK (and YCCK) JPEGs with inverted
+			// samples; the APP14 marker identifies them. Same rule as
+			// libtexpdf; krilla inverts every CMYK JPEG.
+			img.decode = []float64{1, 0, 1, 0, 1, 0, 1, 0}
+		}
+	default:
+		return nil, fmt.Errorf("unsupported JPEG with %d color components", components)
+	}
+	return img, nil
+}
+
+// jpegComponents scans the JPEG markers up to the frame header and returns its
+// number of color components and whether an Adobe APP14 marker precedes it.
+func jpegComponents(data []byte) (components int, adobe bool, err error) {
+	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+		return 0, false, errors.New("missing SOI marker")
+	}
+	for pos := 2; pos+4 <= len(data); {
+		if data[pos] != 0xFF {
+			return 0, false, fmt.Errorf("expected a marker at offset %d", pos)
+		}
+		marker := data[pos+1]
+		switch {
+		case marker == 0xFF: // fill byte
+			pos++
+			continue
+		case marker == 0xD8 || marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7):
+			pos += 2 // markers without a length
+			continue
+		}
+		length := int(data[pos+2])<<8 | int(data[pos+3])
+		if length < 2 || pos+2+length > len(data) {
+			return 0, false, fmt.Errorf("truncated segment 0x%02X at offset %d", marker, pos)
+		}
+		seg := data[pos+4 : pos+2+length]
+		switch {
+		case marker == 0xEE && len(seg) >= 5 && string(seg[:5]) == "Adobe":
+			adobe = true
+		case marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC:
+			// SOFn: precision, height, width, component count.
+			if len(seg) < 6 {
+				return 0, false, errors.New("truncated frame header")
+			}
+			return int(seg[5]), adobe, nil
+		}
+		pos += 2 + length
+	}
+	return 0, false, errors.New("no frame header")
 }
 
 // loadPNG loads a PNG image from raw data.
@@ -190,170 +265,75 @@ func decodePNGImage(data []byte) (image.Image, error) {
 	return img, nil
 }
 
-// convertPNGToImage converts a PNG image to our Image structure.
+// convertPNGToImage converts a decoded PNG into samples for an image XObject:
+// DeviceGray for grayscale PNGs (8 or 16 bit), DeviceRGB otherwise, always
+// 8 bits per component. Any transparency — an alpha channel, 16-bit alpha, or
+// tRNS in a paletted, grey or RGB PNG — becomes an 8-bit SMask; an image with
+// no translucent pixel gets none. Color samples are straight (not multiplied
+// by alpha), as an SMask without /Matte requires.
 func convertPNGToImage(img image.Image) (*Image, error) {
 	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
+	width, height := bounds.Dx(), bounds.Dy()
 
-	// Detect color model and convert accordingly.
-	switch img.ColorModel() {
-	case color.RGBAModel:
-		return convertRGBAPNG(img, width, height)
-	case color.NRGBAModel:
-		return convertRGBAPNG(img, width, height)
-	case color.GrayModel:
-		return convertGrayPNG(img, width, height)
-	default:
-		// For paletted and other formats, convert to RGB.
-		return convertGenericPNG(img, width, height)
-	}
-}
-
-// convertRGBAPNG converts an RGBA PNG image (with alpha channel).
-func convertRGBAPNG(img image.Image, width, height int) (*Image, error) {
-	// Extract RGB and alpha channels separately.
-	rgbData, alphaData := extractRGBAndAlpha(img, width, height)
-
-	// Compress both with FlateDecode.
-	compressedRGB, err := compressData(rgbData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compress RGB data: %w", err)
-	}
-
-	var compressedAlpha []byte
-	if alphaData != nil {
-		compressedAlpha, err = compressData(alphaData)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compress alpha data: %w", err)
-		}
-	}
-
-	return &Image{
+	m := img.ColorModel()
+	gray := m == color.GrayModel || m == color.Gray16Model
+	out := &Image{
 		format:           "png",
-		data:             compressedRGB,
-		alphaMask:        compressedAlpha,
 		width:            width,
 		height:           height,
 		colorSpace:       ColorSpaceRGB,
 		components:       3,
 		bitsPerComponent: 8,
-	}, nil
-}
-
-// convertGrayPNG converts a grayscale PNG image.
-func convertGrayPNG(img image.Image, width, height int) (*Image, error) {
-	// Extract grayscale data.
-	grayData := extractGrayscale(img, width, height)
-
-	// Compress with FlateDecode.
-	compressed, err := compressData(grayData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compress grayscale data: %w", err)
+	}
+	if gray {
+		out.colorSpace, out.components = ColorSpaceGray, 1
 	}
 
-	return &Image{
-		format:           "png",
-		data:             compressed,
-		width:            width,
-		height:           height,
-		colorSpace:       ColorSpaceGray,
-		components:       1,
-		bitsPerComponent: 8,
-	}, nil
-}
-
-// convertGenericPNG converts paletted and other PNG formats to RGB.
-func convertGenericPNG(img image.Image, width, height int) (*Image, error) {
-	// Convert to RGB.
-	rgbData := extractRGB(img, width, height)
-
-	// Compress with FlateDecode.
-	compressed, err := compressData(rgbData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compress RGB data: %w", err)
+	samples := make([]byte, 0, width*height*out.components)
+	var alpha []byte
+	if o, ok := img.(interface{ Opaque() bool }); !ok || !o.Opaque() {
+		alpha = make([]byte, 0, width*height)
 	}
-
-	return &Image{
-		format:           "png",
-		data:             compressed,
-		width:            width,
-		height:           height,
-		colorSpace:       ColorSpaceRGB,
-		components:       3,
-		bitsPerComponent: 8,
-	}, nil
-}
-
-// extractRGBAndAlpha extracts RGB and alpha from RGBA image.
-func extractRGBAndAlpha(img image.Image, width, height int) ([]byte, []byte) {
-	rgbData := make([]byte, width*height*3)
-	alphaData := make([]byte, width*height)
-	hasAlpha := false
-
-	idx := 0
-	alphaIdx := 0
-	bounds := img.Bounds()
-
+	translucent := false
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, a := img.At(x, y).RGBA()
-			rgbData[idx] = byte(r >> 8)
-			rgbData[idx+1] = byte(g >> 8)
-			rgbData[idx+2] = byte(b >> 8)
-			idx += 3
-
-			alphaValue := byte(a >> 8)
-			alphaData[alphaIdx] = alphaValue
-			alphaIdx++
-
-			if alphaValue != 255 {
-				hasAlpha = true
+			c := straightNRGBA(img.At(x, y))
+			if gray {
+				samples = append(samples, c.R)
+			} else {
+				samples = append(samples, c.R, c.G, c.B)
+			}
+			if alpha != nil {
+				alpha = append(alpha, c.A)
+				translucent = translucent || c.A != 0xFF
 			}
 		}
 	}
 
-	// Return nil for alpha if fully opaque.
-	if !hasAlpha {
-		return rgbData, nil
+	var err error
+	if out.data, err = compressData(samples); err != nil {
+		return nil, fmt.Errorf("failed to compress PNG samples: %w", err)
 	}
-	return rgbData, alphaData
-}
-
-// extractRGB extracts RGB data from any image format.
-func extractRGB(img image.Image, width, height int) []byte {
-	rgbData := make([]byte, width*height*3)
-	idx := 0
-	bounds := img.Bounds()
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, _ := img.At(x, y).RGBA()
-			rgbData[idx] = byte(r >> 8)
-			rgbData[idx+1] = byte(g >> 8)
-			rgbData[idx+2] = byte(b >> 8)
-			idx += 3
+	if translucent {
+		if out.alphaMask, err = compressData(alpha); err != nil {
+			return nil, fmt.Errorf("failed to compress PNG alpha: %w", err)
 		}
 	}
-
-	return rgbData
+	return out, nil
 }
 
-// extractGrayscale extracts grayscale data from a grayscale image.
-func extractGrayscale(img image.Image, width, height int) []byte {
-	grayData := make([]byte, width*height)
-	idx := 0
-	bounds := img.Bounds()
-
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			gray := color.GrayModel.Convert(img.At(x, y)).(color.Gray)
-			grayData[idx] = gray.Y
-			idx++
-		}
+// straightNRGBA returns c with straight (non-premultiplied) 8-bit components.
+// NRGBA colors (NRGBA images, tRNS palettes) are taken as they are, so even a
+// fully transparent palette entry keeps its color; Color.RGBA() would return
+// premultiplied values.
+func straightNRGBA(c color.Color) color.NRGBA {
+	switch v := c.(type) {
+	case color.NRGBA:
+		return v
+	case color.NRGBA64:
+		return color.NRGBA{R: uint8(v.R >> 8), G: uint8(v.G >> 8), B: uint8(v.B >> 8), A: uint8(v.A >> 8)}
 	}
-
-	return grayData
+	return color.NRGBAModel.Convert(c).(color.NRGBA)
 }
 
 // compressData compresses data using FlateDecode.
