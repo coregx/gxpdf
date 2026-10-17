@@ -137,11 +137,18 @@ func TestFormXObject_InvocationBudget(t *testing.T) {
 func TestFormXObject_RepeatedInvocationsUseCachedContent(t *testing.T) {
 	r := formPage(t, "/X Do /X Do /X Do",
 		map[string]string{"X": "BT /F1 12 Tf 72 700 Td (A) Tj ET"}, []string{"X"})
-	elements, err := extractWithin(t, r, 5*time.Second)
+	extractor := NewTextExtractor(r)
+	elements, err := extractor.ExtractFromPage(0)
 	if err != nil {
 		t.Fatalf("ExtractFromPage: %v", err)
 	}
 	if got := strings.Count(joinedText(elements), "A"); got != 3 {
 		t.Errorf("Form content emitted %d times, want 3", got)
+	}
+	if extractor.fontCacheLoads != 1 {
+		t.Errorf("font loads = %d, want 1 for the shared resolved font", extractor.fontCacheLoads)
+	}
+	if len(extractor.fontCache) != 1 {
+		t.Errorf("font cache entries = %d, want 1", len(extractor.fontCache))
 	}
 }

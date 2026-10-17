@@ -71,6 +71,12 @@ func (m Matrix) Transform(x, y float64) (float64, float64) {
 	return nx, ny
 }
 
+func (m Matrix) isFinite() bool {
+	return isFiniteNumber(m.A) && isFiniteNumber(m.B) &&
+		isFiniteNumber(m.C) && isFiniteNumber(m.D) &&
+		isFiniteNumber(m.E) && isFiniteNumber(m.F)
+}
+
 // Multiply multiplies this matrix by another matrix (m * other).
 //
 // Matrix multiplication is used to combine transformations.

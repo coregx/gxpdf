@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -540,6 +541,68 @@ func TestFormXObject_FontCachesAreScopedToResources(t *testing.T) {
 	assert.InDelta(t, 10, elements[1].Width, 0.001)
 }
 
+func TestFontCacheUsesResolvedIdentityAcrossResourceAliases(t *testing.T) {
+	font := parser.NewDictionary()
+	font.Set("Subtype", parser.NewName("TrueType"))
+	font.Set("FirstChar", parser.NewInteger(65))
+	font.Set("Widths", parser.NewArrayFromSlice([]parser.PdfObject{parser.NewInteger(600)}))
+
+	firstFonts := parser.NewDictionary()
+	firstFonts.Set("F1", font)
+	firstResources := parser.NewDictionary()
+	firstResources.Set("Font", firstFonts)
+	secondFonts := parser.NewDictionary()
+	secondFonts.Set("SharedAlias", font)
+	secondResources := parser.NewDictionary()
+	secondResources.Set("Font", secondFonts)
+
+	extractor := NewTextExtractor(nil)
+	extractor.pageResources = firstResources
+	extractor.loadFontDecoder("F1")
+	firstDecoder := extractor.fontDecoders["F1"]
+	firstMetrics := extractor.fontMetrics["F1"]
+	require.NotNil(t, firstDecoder)
+	require.NotNil(t, firstMetrics)
+
+	// Entering a resource scope creates new local-name bindings, while the
+	// resolved-font cache remains shared for the page.
+	extractor.fontDecoders = make(map[string]*FontDecoder)
+	extractor.fontMetrics = make(map[string]*fontMetrics)
+	extractor.pageResources = secondResources
+	extractor.loadFontDecoder("SharedAlias")
+
+	assert.Same(t, firstDecoder, extractor.fontDecoders["SharedAlias"])
+	assert.Same(t, firstMetrics, extractor.fontMetrics["SharedAlias"])
+	assert.Equal(t, 1, extractor.fontCacheLoads)
+	assert.Len(t, extractor.fontCache, 1)
+}
+
+func TestFontCacheKeepsSiblingResourceFontsDistinct(t *testing.T) {
+	first := parser.NewDictionary()
+	first.Set("Subtype", parser.NewName("TrueType"))
+	first.Set("FirstChar", parser.NewInteger(65))
+	first.Set("Widths", parser.NewArrayFromSlice([]parser.PdfObject{parser.NewInteger(600)}))
+	second := parser.NewDictionary()
+	second.Set("Subtype", parser.NewName("TrueType"))
+	second.Set("FirstChar", parser.NewInteger(65))
+	second.Set("Widths", parser.NewArrayFromSlice([]parser.PdfObject{parser.NewInteger(1000)}))
+
+	extractor := NewTextExtractor(nil)
+	for _, font := range []*parser.Dictionary{first, second} {
+		fonts := parser.NewDictionary()
+		fonts.Set("F1", font)
+		resources := parser.NewDictionary()
+		resources.Set("Font", fonts)
+		extractor.pageResources = resources
+		extractor.fontDecoders = make(map[string]*FontDecoder)
+		extractor.fontMetrics = make(map[string]*fontMetrics)
+		extractor.loadFontDecoder("F1")
+	}
+
+	assert.Equal(t, 2, extractor.fontCacheLoads)
+	assert.Len(t, extractor.fontCache, 2)
+}
+
 func TestFormXObject_RestoresCallerTextState(t *testing.T) {
 	reader := openPDFBytes(t, buildFormTextStateIsolationPDF(t))
 	extractor := NewTextExtractor(reader)
@@ -610,6 +673,45 @@ func TestPositionedTJAdjustmentHonorsHorizontalScaling(t *testing.T) {
 	require.Len(t, extractor.elements, 2)
 	assert.InDelta(t, 0, extractor.elements[0].X, 0.001)
 	assert.InDelta(t, 3.5, extractor.elements[1].X, 0.001)
+}
+
+func TestPositionedFormGeometryRejectsNonFiniteBounds(t *testing.T) {
+	extractor := NewTextExtractor(nil)
+	extractor.xobjectDepth = 1
+	extractor.ctm = Scaling(math.MaxFloat64, math.MaxFloat64)
+	extractor.textState.SetFont("F1", 1)
+	extractor.textState.SetTextMatrix(1, 0, 0, 1, 2, 2)
+	extractor.fontMetrics["F1"] = &fontMetrics{
+		widths:       map[uint16]float64{65: 600},
+		defaultWidth: 600,
+		precise:      true,
+	}
+
+	extractor.addTextBytes([]byte("A"))
+	assert.Empty(t, extractor.elements)
+	assert.InDelta(t, 2, extractor.textState.CurrentX, 0.001, "rejected geometry must not poison text position")
+}
+
+func TestTextExtractorIgnoresNonFiniteCM(t *testing.T) {
+	extractor := NewTextExtractor(nil)
+	original := extractor.ctm
+	extractor.processOperator(&Operator{Name: "cm", Operands: []parser.PdfObject{
+		parser.NewReal(math.Inf(1)), parser.NewInteger(0), parser.NewInteger(0),
+		parser.NewInteger(1), parser.NewInteger(0), parser.NewInteger(0),
+	}})
+	assert.Equal(t, original, extractor.ctm)
+}
+
+func TestGetFormMatrixRejectsNonFiniteValues(t *testing.T) {
+	dictionary := parser.NewDictionary()
+	dictionary.Set("Matrix", parser.NewArrayFromSlice([]parser.PdfObject{
+		parser.NewReal(math.NaN()), parser.NewInteger(0), parser.NewInteger(0),
+		parser.NewInteger(1), parser.NewInteger(0), parser.NewInteger(0),
+	}))
+	stream := parser.NewStream(dictionary, nil)
+
+	_, ok := NewTextExtractor(nil).getFormMatrix(stream)
+	assert.False(t, ok)
 }
 
 func TestFormXObject_UnmatchedRestoreCannotPopCallerGraphicsState(t *testing.T) {

@@ -88,13 +88,15 @@ var ErrResourceLimitExceeded = errors.New("extractor: content exceeds processing
 //
 // Reference: PDF 1.7 specification, Sections 9.4 (Text Objects), 8.8.1 (Form XObjects).
 type TextExtractor struct {
-	reader        *parser.Reader
-	textState     *TextState
-	elements      []*TextElement
-	fontDecoders  map[string]*FontDecoder // fontName -> FontDecoder
-	fontMetrics   map[string]*fontMetrics // fontName -> glyph widths
-	pageResources *parser.Dictionary      // Current page resources
-	ctm           Matrix                  // Current transformation matrix
+	reader         *parser.Reader
+	textState      *TextState
+	elements       []*TextElement
+	fontDecoders   map[string]*FontDecoder // fontName -> FontDecoder
+	fontMetrics    map[string]*fontMetrics // fontName -> glyph widths
+	fontCache      map[*parser.Dictionary]loadedFont
+	fontCacheLoads int
+	pageResources  *parser.Dictionary // Current page resources
+	ctm            Matrix             // Current transformation matrix
 
 	graphicsStateStack []textExtractorGraphicsState
 
@@ -135,6 +137,11 @@ type textExtractorGraphicsState struct {
 	rise       float64
 }
 
+type loadedFont struct {
+	decoder *FontDecoder
+	metrics *fontMetrics
+}
+
 func (te *TextExtractor) currentGraphicsState() textExtractorGraphicsState {
 	return textExtractorGraphicsState{
 		ctm:        te.ctm,
@@ -167,6 +174,7 @@ func NewTextExtractor(reader *parser.Reader) *TextExtractor {
 		elements:      []*TextElement{},
 		fontDecoders:  make(map[string]*FontDecoder),
 		fontMetrics:   make(map[string]*fontMetrics),
+		fontCache:     make(map[*parser.Dictionary]loadedFont),
 		ctm:           Identity(),
 		activeForms:   make(map[*parser.Stream]struct{}),
 		formOperators: make(map[*parser.Stream][]*Operator),
@@ -184,6 +192,8 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 	te.textState = NewTextState()
 	te.fontDecoders = make(map[string]*FontDecoder)
 	te.fontMetrics = make(map[string]*fontMetrics)
+	te.fontCache = make(map[*parser.Dictionary]loadedFont)
+	te.fontCacheLoads = 0
 	te.ctm = Identity()
 	te.graphicsStateStack = nil
 	te.activeForms = make(map[*parser.Stream]struct{})
@@ -595,7 +605,10 @@ func (te *TextExtractor) processOperator(op *Operator) {
 			if values[0] != nil && values[1] != nil && values[2] != nil &&
 				values[3] != nil && values[4] != nil && values[5] != nil {
 				operand := NewMatrix(*values[0], *values[1], *values[2], *values[3], *values[4], *values[5])
-				te.ctm = te.ctm.Multiply(operand)
+				combined := te.ctm.Multiply(operand)
+				if operand.isFinite() && combined.isFinite() {
+					te.ctm = combined
+				}
 			}
 		}
 
@@ -763,7 +776,14 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 	x, y := te.textState.CurrentX, te.textState.CurrentY
 	height, effectiveFontSize := te.textState.FontSize, te.textState.FontSize
 	if positionedFormGeometry {
-		x, y, width, height, effectiveFontSize = te.transformedTextBounds(width)
+		var finite bool
+		x, y, width, height, effectiveFontSize, finite = te.transformedTextBounds(width)
+		if !finite {
+			return
+		}
+	}
+	if !allFiniteNumbers(x, y, width, height, effectiveFontSize, advance) {
+		return
 	}
 
 	// Create text element with decoded text
@@ -777,7 +797,7 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 
 // transformedTextBounds maps the text-space bounding box through the text
 // matrix and current transformation matrix and returns its axis-aligned bounds.
-func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64, float64, float64, float64) {
+func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64, float64, float64, float64, bool) {
 	// Existing direct-page extraction intentionally remains in raw text space
 	// for compatibility with the lattice coordinate normalizer. Form XObjects,
 	// however, cannot be positioned without inheriting the caller CTM and their
@@ -805,7 +825,11 @@ func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64,
 	topX, topY = coordinateMatrix.Transform(topX, topY)
 	effectiveFontSize := math.Hypot(topX-baseX, topY-baseY)
 
-	return minX, minY, maxX - minX, maxY - minY, effectiveFontSize
+	resultWidth, resultHeight := maxX-minX, maxY-minY
+	if !allFiniteNumbers(minX, minY, resultWidth, resultHeight, effectiveFontSize) {
+		return 0, 0, 0, 0, 0, false
+	}
+	return minX, minY, resultWidth, resultHeight, effectiveFontSize, true
 }
 
 func (te *TextExtractor) usesPositionedFormGeometry() bool {
@@ -916,6 +940,15 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 	te.activeForms[xobjectStream] = struct{}{}
 	defer delete(te.activeForms, xobjectStream)
 
+	formMatrix, validMatrix := te.getFormMatrix(xobjectStream)
+	if !validMatrix {
+		return
+	}
+	combinedCTM := te.ctm.Multiply(formMatrix)
+	if !combinedCTM.isFinite() {
+		return
+	}
+
 	// Push current resources and switch to XObject's resources (if present)
 	savedResources := te.pageResources
 	savedGraphicsState := te.currentGraphicsState()
@@ -937,9 +970,7 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 		te.fontDecoders = make(map[string]*FontDecoder)
 		te.fontMetrics = make(map[string]*fontMetrics)
 	}
-	if formMatrix, ok := te.getFormMatrix(xobjectStream); ok {
-		te.ctm = te.ctm.Multiply(formMatrix)
-	}
+	te.ctm = combinedCTM
 
 	te.processOperators(operators)
 
@@ -990,6 +1021,9 @@ func (te *TextExtractor) formContent(form *parser.Stream) []*Operator {
 // getFormMatrix resolves a Form XObject's optional /Matrix entry.
 func (te *TextExtractor) getFormMatrix(stream *parser.Stream) (Matrix, bool) {
 	matrixObj := stream.Dictionary().Get("Matrix")
+	if matrixObj == nil {
+		return Identity(), true
+	}
 	if ref, ok := matrixObj.(*parser.IndirectReference); ok {
 		resolved, err := te.reader.GetObject(ref.Number)
 		if err != nil {
@@ -1009,7 +1043,17 @@ func (te *TextExtractor) getFormMatrix(stream *parser.Stream) (Matrix, bool) {
 		}
 		values[i] = *num
 	}
-	return NewMatrix(values[0], values[1], values[2], values[3], values[4], values[5]), true
+	matrix := NewMatrix(values[0], values[1], values[2], values[3], values[4], values[5])
+	return matrix, matrix.isFinite()
+}
+
+func allFiniteNumbers(values ...float64) bool {
+	for _, value := range values {
+		if !isFiniteNumber(value) {
+			return false
+		}
+	}
+	return true
 }
 
 // resolveXObject looks up a named XObject from the current pageResources and
@@ -1137,66 +1181,51 @@ func (te *TextExtractor) getPageResources(page *parser.Dictionary) *parser.Dicti
 // If the font cannot be loaded or has no ToUnicode CMap, we create
 // a default decoder that will use fallback encoding (Latin-1).
 func (te *TextExtractor) loadFontDecoder(fontName string) {
-	// fontMetrics shares the same resource-scope lifecycle as fontDecoders.
-	// ExtractFromPage resets the page caches, and processFormXObject swaps both
-	// caches when a Form supplies its own Resources dictionary.
 	if _, exists := te.fontDecoders[fontName]; exists {
 		return
 	}
 
-	// Get Font dictionary from Resources
-	fontsObj := te.pageResources.Get("Font")
-	if fontsObj == nil {
-		// No fonts in resources - use default decoder
-		te.fontDecoders[fontName] = NewFontDecoder(nil, "", false)
-		return
-	}
-
-	// Resolve Font dictionary
-	var fontsDict *parser.Dictionary
-	if ref, ok := fontsObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
-		if err == nil {
-			fontsDict, _ = resolved.(*parser.Dictionary)
-		}
-	} else {
-		fontsDict, _ = fontsObj.(*parser.Dictionary)
-	}
-
-	if fontsDict == nil {
-		// Font dictionary not found - use default decoder
-		te.fontDecoders[fontName] = NewFontDecoder(nil, "", false)
-		return
-	}
-
-	// Get the specific font object
-	fontObj := fontsDict.Get(fontName)
-	if fontObj == nil {
-		// Font not found - use default decoder
-		te.fontDecoders[fontName] = NewFontDecoder(nil, "", false)
-		return
-	}
-
-	// Resolve font object
-	var fontDict *parser.Dictionary
-	if ref, ok := fontObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
-		if err == nil {
-			fontDict, _ = resolved.(*parser.Dictionary)
-		}
-	} else {
-		fontDict, _ = fontObj.(*parser.Dictionary)
-	}
-
+	fontDict := te.resolveFontDictionary(fontName)
 	if fontDict == nil {
-		// Font dictionary not resolved - use default decoder
 		te.fontDecoders[fontName] = NewFontDecoder(nil, "", false)
 		return
 	}
+	if te.fontCache == nil {
+		te.fontCache = make(map[*parser.Dictionary]loadedFont)
+	}
 
-	// Load widths alongside the decoder so positioned glyphs receive accurate
-	// bounds and word-gap detection can use a conservative threshold.
-	te.fontMetrics[fontName] = te.loadFontMetrics(fontDict)
+	// Resource names such as /F1 are local aliases. Cache by the resolved font
+	// dictionary identity so sibling Forms can use different /F1 fonts while
+	// repeated Forms that share a font decode its CMap and widths only once.
+	if cached, ok := te.fontCache[fontDict]; ok {
+		te.fontDecoders[fontName] = cached.decoder
+		te.fontMetrics[fontName] = cached.metrics
+		return
+	}
+
+	loaded := loadedFont{
+		decoder: te.buildFontDecoder(fontDict),
+		metrics: te.loadFontMetrics(fontDict),
+	}
+	te.fontCache[fontDict] = loaded
+	te.fontCacheLoads++
+	te.fontDecoders[fontName] = loaded.decoder
+	te.fontMetrics[fontName] = loaded.metrics
+}
+
+func (te *TextExtractor) resolveFontDictionary(fontName string) *parser.Dictionary {
+	if te.pageResources == nil {
+		return nil
+	}
+	fontsDict, _ := resolveObject(te.reader, te.pageResources.Get("Font")).(*parser.Dictionary)
+	if fontsDict == nil {
+		return nil
+	}
+	fontDict, _ := resolveObject(te.reader, fontsDict.Get(fontName)).(*parser.Dictionary)
+	return fontDict
+}
+
+func (te *TextExtractor) buildFontDecoder(fontDict *parser.Dictionary) *FontDecoder {
 
 	// Extract encoding name AND Differences array
 	encodingName := ""
@@ -1250,7 +1279,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 		if differences != nil && len(differences) > 0 {
 			// Create decoder with custom encoding (Differences array).
 			// use2ByteGlyphs is false for simple fonts with Differences.
-			te.fontDecoders[fontName] = NewFontDecoderWithCustomEncoding(differences, encodingName, false)
+			return NewFontDecoderWithCustomEncoding(differences, encodingName, false)
 		} else {
 			// Fallback: create decoder with encoding name only.
 			// For Identity-H/V and Type0 fonts, honor 2-byte mode.
@@ -1258,9 +1287,8 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 			if isType0 {
 				decoder.isCompositeFont = true
 			}
-			te.fontDecoders[fontName] = decoder
+			return decoder
 		}
-		return
 	}
 
 	// Resolve ToUnicode stream
@@ -1280,8 +1308,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 		if isType0 {
 			decoder.isCompositeFont = true
 		}
-		te.fontDecoders[fontName] = decoder
-		return
+		return decoder
 	}
 
 	// Decode the CMap stream (handle compression)
@@ -1292,8 +1319,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 		if isType0 {
 			decoder.isCompositeFont = true
 		}
-		te.fontDecoders[fontName] = decoder
-		return
+		return decoder
 	}
 
 	// Parse CMap
@@ -1304,8 +1330,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 		if isType0 {
 			decoder.isCompositeFont = true
 		}
-		te.fontDecoders[fontName] = decoder
-		return
+		return decoder
 	}
 
 	// When begincodespacerange declared 2-byte codes, honor that even if
@@ -1326,7 +1351,7 @@ func (te *TextExtractor) loadFontDecoder(fontName string) {
 		decoder.customEncoding = customEncoding
 	}
 
-	te.fontDecoders[fontName] = decoder
+	return decoder
 }
 
 // decodeTextBytes decodes glyph bytes to Unicode text using the current font decoder.

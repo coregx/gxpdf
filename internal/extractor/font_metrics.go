@@ -1,6 +1,11 @@
 package extractor
 
-import "github.com/coregx/gxpdf/internal/parser"
+import (
+	"math"
+	"sort"
+
+	"github.com/coregx/gxpdf/internal/parser"
+)
 
 const type0FontSubtype = "Type0"
 
@@ -9,8 +14,18 @@ const type0FontSubtype = "Type0"
 // define /DW and /W on their descendant CIDFont.
 type fontMetrics struct {
 	widths       map[uint16]float64
+	intervals    []fontWidthInterval
 	defaultWidth float64
 	precise      bool
+}
+
+// fontWidthInterval stores one composite-font /W range without expanding it
+// into up to 65,536 map entries. loadCompositeFontMetrics normalizes these
+// into ascending, non-overlapping intervals so width lookup stays logarithmic.
+type fontWidthInterval struct {
+	first uint16
+	last  uint16
+	width float64
 }
 
 func (fm *fontMetrics) width(glyphID uint16) float64 {
@@ -19,6 +34,12 @@ func (fm *fontMetrics) width(glyphID uint16) float64 {
 	}
 	if width, ok := fm.widths[glyphID]; ok {
 		return width
+	}
+	intervalIndex := sort.Search(len(fm.intervals), func(i int) bool {
+		return fm.intervals[i].last >= glyphID
+	})
+	if intervalIndex < len(fm.intervals) && fm.intervals[intervalIndex].first <= glyphID {
+		return fm.intervals[intervalIndex].width
 	}
 	return fm.defaultWidth
 }
@@ -84,14 +105,17 @@ func (te *TextExtractor) loadSimpleFontMetrics(fontDict *parser.Dictionary) *fon
 	}
 	firstChar := int(firstCharObj.Value())
 	for i := 0; i < widthsArray.Len(); i++ {
-		if width := getNumber(widthsArray.Get(i)); width != nil && firstChar+i >= 0 && firstChar+i <= 65535 {
+		if width := getNumber(widthsArray.Get(i)); width != nil && isFiniteNumber(*width) &&
+			firstChar+i >= 0 && firstChar+i <= 65535 {
 			metrics.widths[uint16(firstChar+i)] = *width
 		}
 	}
 
 	if descriptor, ok := resolveObject(te.reader, fontDict.Get("FontDescriptor")).(*parser.Dictionary); ok {
 		if missingWidth := getNumber(descriptor.Get("MissingWidth")); missingWidth != nil {
-			metrics.defaultWidth = *missingWidth
+			if isFiniteNumber(*missingWidth) {
+				metrics.defaultWidth = *missingWidth
+			}
 		}
 	}
 	return metrics
@@ -108,18 +132,20 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 	}
 
 	metrics := &fontMetrics{
-		widths:       make(map[uint16]float64),
 		defaultWidth: 1000,
 		precise:      true,
 	}
 	if defaultWidth := getNumber(descendant.Get("DW")); defaultWidth != nil {
-		metrics.defaultWidth = *defaultWidth
+		if isFiniteNumber(*defaultWidth) {
+			metrics.defaultWidth = *defaultWidth
+		}
 	}
 	widths, _ := resolveObject(te.reader, descendant.Get("W")).(*parser.Array)
 	if widths == nil {
 		return metrics
 	}
 
+	intervals := make([]fontWidthInterval, 0, widths.Len()/2)
 	for i := 0; i < widths.Len(); {
 		firstObj, ok := widths.Get(i).(*parser.Integer)
 		if !ok {
@@ -134,8 +160,10 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 		if explicit, ok := resolveObject(te.reader, widths.Get(i)).(*parser.Array); ok {
 			for offset := 0; offset < explicit.Len(); offset++ {
 				glyphID := first + int64(offset)
-				if width := getNumber(explicit.Get(offset)); width != nil && glyphID >= 0 && glyphID <= 65535 {
-					metrics.widths[uint16(glyphID)] = *width
+				if width := getNumber(explicit.Get(offset)); width != nil &&
+					glyphID >= 0 && glyphID <= 65535 && isFiniteNumber(*width) {
+					cid := uint16(glyphID)
+					intervals = append(intervals, fontWidthInterval{first: cid, last: cid, width: *width})
 				}
 			}
 			i++
@@ -147,7 +175,7 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 			break
 		}
 		width := getNumber(widths.Get(i + 1))
-		if width == nil {
+		if width == nil || !isFiniteNumber(*width) {
 			break
 		}
 		last := lastObj.Value()
@@ -160,10 +188,50 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 		if last > 65535 {
 			last = 65535
 		}
-		for glyphID := first; glyphID <= last; glyphID++ {
-			metrics.widths[uint16(glyphID)] = *width
+		if first <= last && last >= 0 && first <= 65535 {
+			intervals = append(intervals, fontWidthInterval{
+				first: uint16(first),
+				last:  uint16(last),
+				width: *width,
+			})
 		}
 		i += 2
 	}
+	metrics.intervals = normalizeFontWidthIntervals(intervals)
 	return metrics
+}
+
+func normalizeFontWidthIntervals(intervals []fontWidthInterval) []fontWidthInterval {
+	if len(intervals) == 0 {
+		return nil
+	}
+	sort.SliceStable(intervals, func(i, j int) bool {
+		if intervals[i].first != intervals[j].first {
+			return intervals[i].first < intervals[j].first
+		}
+		return intervals[i].last < intervals[j].last
+	})
+
+	normalized := intervals[:0]
+	for _, current := range intervals {
+		if len(normalized) > 0 {
+			previous := &normalized[len(normalized)-1]
+			if current.first <= previous.last {
+				if current.last <= previous.last || previous.last == math.MaxUint16 {
+					continue
+				}
+				current.first = previous.last + 1
+			}
+			if previous.last+1 == current.first && previous.width == current.width {
+				previous.last = current.last
+				continue
+			}
+		}
+		normalized = append(normalized, current)
+	}
+	return normalized
+}
+
+func isFiniteNumber(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }

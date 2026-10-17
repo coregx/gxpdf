@@ -8,36 +8,49 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func compositeFontWithWidths(widths []parser.PdfObject, defaultWidth int64) *parser.Dictionary {
+	descendant := parser.NewDictionary()
+	descendant.Set("DW", parser.NewInteger(defaultWidth))
+	descendant.Set("W", parser.NewArrayFromSlice(widths))
+	font := parser.NewDictionary()
+	font.Set("DescendantFonts", parser.NewArrayFromSlice([]parser.PdfObject{descendant}))
+	return font
+}
+
 func TestLoadCompositeFontMetricsBoundsWidthDefinitions(t *testing.T) {
 	tests := []struct {
-		name         string
-		widths       []parser.PdfObject
-		defaultWidth int64
-		want         map[uint16]float64
+		name          string
+		widths        []parser.PdfObject
+		defaultWidth  int64
+		wantWidths    map[uint16]float64
+		wantIntervals int
 	}{
 		{
 			name: "hostile negative range",
 			widths: []parser.PdfObject{
 				parser.NewInteger(-2_000_000_000), parser.NewInteger(2), parser.NewInteger(500),
 			},
-			defaultWidth: 750,
-			want:         map[uint16]float64{0: 500, 1: 500, 2: 500},
+			defaultWidth:  750,
+			wantWidths:    map[uint16]float64{0: 500, 1: 500, 2: 500, 3: 750},
+			wantIntervals: 1,
 		},
 		{
 			name: "hostile upper range",
 			widths: []parser.PdfObject{
 				parser.NewInteger(65_534), parser.NewInteger(2_000_000_000), parser.NewInteger(600),
 			},
-			defaultWidth: 800,
-			want:         map[uint16]float64{65_534: 600, 65_535: 600},
+			defaultWidth:  800,
+			wantWidths:    map[uint16]float64{65_533: 800, 65_534: 600, 65_535: 600},
+			wantIntervals: 1,
 		},
 		{
 			name: "range outside cid space",
 			widths: []parser.PdfObject{
 				parser.NewInteger(-20), parser.NewInteger(-10), parser.NewInteger(400),
 			},
-			defaultWidth: 900,
-			want:         map[uint16]float64{},
+			defaultWidth:  900,
+			wantWidths:    map[uint16]float64{0: 900, 65_535: 900},
+			wantIntervals: 0,
 		},
 		{
 			name: "explicit widths crossing zero",
@@ -46,23 +59,54 @@ func TestLoadCompositeFontMetricsBoundsWidthDefinitions(t *testing.T) {
 					parser.NewInteger(100), parser.NewInteger(200), parser.NewInteger(300),
 				}),
 			},
-			defaultWidth: 1_000,
-			want:         map[uint16]float64{0: 200, 1: 300},
+			defaultWidth:  1_000,
+			wantWidths:    map[uint16]float64{0: 200, 1: 300, 2: 1_000},
+			wantIntervals: 2,
+		},
+		{
+			name: "unsorted ranges normalized",
+			widths: []parser.PdfObject{
+				parser.NewInteger(100), parser.NewInteger(110), parser.NewInteger(400),
+				parser.NewInteger(10), parser.NewInteger(20), parser.NewInteger(500),
+			},
+			defaultWidth:  1_000,
+			wantWidths:    map[uint16]float64{9: 1_000, 10: 500, 20: 500, 21: 1_000, 100: 400, 110: 400},
+			wantIntervals: 2,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			descendant := parser.NewDictionary()
-			descendant.Set("DW", parser.NewInteger(test.defaultWidth))
-			descendant.Set("W", parser.NewArrayFromSlice(test.widths))
-			font := parser.NewDictionary()
-			font.Set("DescendantFonts", parser.NewArrayFromSlice([]parser.PdfObject{descendant}))
-
-			metrics := (&TextExtractor{}).loadCompositeFontMetrics(font)
+			metrics := (&TextExtractor{}).loadCompositeFontMetrics(
+				compositeFontWithWidths(test.widths, test.defaultWidth),
+			)
 			require.NotNil(t, metrics)
 			assert.Equal(t, float64(test.defaultWidth), metrics.defaultWidth)
-			assert.Equal(t, test.want, metrics.widths)
+			assert.Len(t, metrics.intervals, test.wantIntervals)
+			for cid, want := range test.wantWidths {
+				assert.Equal(t, want, metrics.width(cid), "CID %d", cid)
+			}
 		})
 	}
+}
+
+func TestCompositeFontFullCIDRangeHasConstantCardinality(t *testing.T) {
+	font := compositeFontWithWidths([]parser.PdfObject{
+		parser.NewInteger(0), parser.NewInteger(65_535), parser.NewInteger(500),
+	}, 1_000)
+	metrics := (&TextExtractor{}).loadCompositeFontMetrics(font)
+	require.NotNil(t, metrics)
+	require.Len(t, metrics.intervals, 1)
+	assert.Nil(t, metrics.widths, "a range must not expand into per-CID map entries")
+	assert.Equal(t, float64(500), metrics.width(0))
+	assert.Equal(t, float64(500), metrics.width(32_768))
+	assert.Equal(t, float64(500), metrics.width(65_535))
+
+	allocations := testing.AllocsPerRun(100, func() {
+		loaded := (&TextExtractor{}).loadCompositeFontMetrics(font)
+		if len(loaded.intervals) != 1 {
+			t.Fatalf("interval count = %d, want 1", len(loaded.intervals))
+		}
+	})
+	assert.LessOrEqual(t, allocations, float64(3), "full-range parsing must allocate by interval count, not CID count")
 }
