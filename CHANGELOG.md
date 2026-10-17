@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Non-ASCII text in Standard 14 fonts came out garbled**: text was written to the content stream as UTF-8 bytes, so "06:00 – 18:00" showed as "06:00 â€“ 18:00" in viewers and in extracted text. Text is now written in WinAnsiEncoding, which the font dictionaries already declare: Latin-1 letters (é ü ß Ø), € – — „ “ ” … • ™ Š Ž Œ and the rest of the encoding. Characters outside it (Cyrillic, Greek, CJK, Ł) are drawn and measured as `?`; they need an embedded TrueType font.
 - **Watermark text had no font**: the font resource of a `TextWatermark` pointed to object 0, so viewers drew it in a substitute font, without the font's encoding.
+- **An image drawn several times was stored several times**: every placement wrote its own copy of the image data, so a logo in the header of a 50-page document was embedded 50 times. Each distinct image is now written once and shared by all placements (creator `Page.DrawImage` and builder).
 - **CJK line breaking in builder text**: a word containing CJK characters always started a new line, even when it fit on the current one. CJK text now continues the line and wraps between characters, without starting a line with closing punctuation (、。」）！？) or ending one with opening punctuation (「（). Rich text wraps CJK text too (it used to run past the line), CJK cells no longer make `Auto` table columns as wide as their whole text, and text continued on the next page no longer gains a space at each CJK line break.
 
 ## [0.9.6] - 2026-10-16

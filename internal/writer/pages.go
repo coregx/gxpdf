@@ -538,6 +538,17 @@ func (w *PdfWriter) createAndAssignImageXObjects(graphicsOps []GraphicsOp, resou
 
 	// Create XObject for each image
 	for i, img := range images {
+		// The resource names (Im1, Im2, ...) were created during content
+		// stream generation, one per image operation, in this order.
+		imageResName := fmt.Sprintf("Im%d", i+1)
+
+		// An image drawn before (on this or an earlier page) reuses its XObject.
+		objNum, key, ok := w.writtenImage(img)
+		if ok {
+			w.setImageResourceObjNum(resources, imageResName, objNum)
+			continue
+		}
+
 		// Allocate object number for the image XObject
 		imageObjNum := w.allocateObjNum()
 
@@ -552,11 +563,9 @@ func (w *PdfWriter) createAndAssignImageXObjects(graphicsOps []GraphicsOp, resou
 		// Create the image XObject
 		imageObj := w.createImageXObject(imageObjNum, img, smaskObjNum)
 		objects = append(objects, imageObj)
+		w.rememberImage(img, key, imageObjNum)
 
-		// Set the object number in the resource dictionary
-		// The resource names (Im1, Im2, ...) were created during content stream generation
-		// We need to update them with the actual object numbers
-		imageResName := fmt.Sprintf("Im%d", i+1)
+		// Set the object number in the resource dictionary.
 		w.setImageResourceObjNum(resources, imageResName, imageObjNum)
 	}
 

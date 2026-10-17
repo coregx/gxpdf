@@ -719,6 +719,7 @@ func (c *Creator) collectAllPageContents() (map[int][]writer.TextOp, map[int][]w
 	textContents := make(map[int][]writer.TextOp)
 	graphicsContents := make(map[int][]writer.GraphicsOp)
 	totalPages := len(c.pages)
+	images := make(map[*Image]*writer.ImageData)
 
 	for i, creatorPage := range c.pages {
 		pageNum := i + 1 // 1-based page number
@@ -748,7 +749,7 @@ func (c *Creator) collectAllPageContents() (map[int][]writer.TextOp, map[int][]w
 			textContents[i] = convertTextOps(pageTextOps)
 		}
 		if len(pageGraphicsOps) > 0 {
-			graphicsContents[i] = convertGraphicsOps(pageGraphicsOps)
+			graphicsContents[i] = convertGraphicsOpsShared(pageGraphicsOps, images)
 		}
 	}
 
@@ -927,6 +928,14 @@ func convertTextOps(ops []TextOperation) []writer.TextOp {
 
 // convertGraphicsOps converts creator graphics operations to writer graphics operations.
 func convertGraphicsOps(ops []GraphicsOperation) []writer.GraphicsOp {
+	return convertGraphicsOpsShared(ops, nil)
+}
+
+// convertGraphicsOpsShared converts graphics operations, giving every placement
+// of the same *Image the same writer.ImageData (images is shared across the
+// pages of a document; nil disables sharing). The writer then emits a single
+// image XObject however often the image is drawn.
+func convertGraphicsOpsShared(ops []GraphicsOperation, images map[*Image]*writer.ImageData) []writer.GraphicsOp {
 	graphicsOps := make([]writer.GraphicsOp, 0, len(ops))
 	for _, op := range ops {
 		gop := writer.GraphicsOp{
@@ -965,14 +974,20 @@ func convertGraphicsOps(ops []GraphicsOperation) []writer.GraphicsOp {
 
 		// Convert Image fields
 		if op.Type == GraphicsOpImage && op.Image != nil {
-			gop.Image = &writer.ImageData{
-				Data:             op.Image.Data(),
-				AlphaMask:        op.Image.AlphaMask(),
-				Width:            op.Image.Width(),
-				Height:           op.Image.Height(),
-				ColorSpace:       string(op.Image.ColorSpace()),
-				Format:           op.Image.Format(),
-				BitsPerComponent: op.Image.BitsPerComponent(),
+			gop.Image = images[op.Image]
+			if gop.Image == nil {
+				gop.Image = &writer.ImageData{
+					Data:             op.Image.Data(),
+					AlphaMask:        op.Image.AlphaMask(),
+					Width:            op.Image.Width(),
+					Height:           op.Image.Height(),
+					ColorSpace:       string(op.Image.ColorSpace()),
+					Format:           op.Image.Format(),
+					BitsPerComponent: op.Image.BitsPerComponent(),
+				}
+				if images != nil {
+					images[op.Image] = gop.Image
+				}
 			}
 		}
 

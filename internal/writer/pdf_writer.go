@@ -37,6 +37,11 @@ type PdfWriter struct {
 	offsets     map[int]int64     // Byte offsets for each object number
 	nextObjNum  int               // Next available object number
 	closed      bool              // Whether Close() has been called
+
+	// Image XObjects already written, so that an image drawn on many pages
+	// (a logo in every header) is stored once. Created on first use.
+	imagesByData   map[*ImageData]int  // fast path: same ImageData value
+	imagesByDigest map[imageDigest]int // same content from different ImageData
 }
 
 // countingWriter wraps an io.Writer and tracks bytes written.
