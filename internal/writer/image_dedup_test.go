@@ -20,6 +20,7 @@ func TestDigestImage_EveryFieldCounts(t *testing.T) {
 		"color space": func(d *ImageData) { d.ColorSpace = "DeviceGray" },
 		"format":      func(d *ImageData) { d.Format = "jpeg" },
 		"bpc":         func(d *ImageData) { d.BitsPerComponent = 16 },
+		"decode":      func(d *ImageData) { d.Decode = []float64{1, 0, 1, 0, 1, 0} },
 		// The same bytes split differently between Data and AlphaMask.
 		"data/mask split": func(d *ImageData) { d.Data = []byte{1, 2}; d.AlphaMask = []byte{3, 4} },
 	}

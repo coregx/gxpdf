@@ -3,6 +3,7 @@ package writer
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 
 	"github.com/coregx/gxpdf/internal/document"
 	"github.com/coregx/gxpdf/logging"
@@ -610,6 +611,16 @@ func (w *PdfWriter) createImageXObject(objNum int, img *ImageData, smaskObjNum i
 	buf.WriteString(fmt.Sprintf(" /Width %d /Height %d", img.Width, img.Height))
 	buf.WriteString(fmt.Sprintf(" /ColorSpace /%s", img.ColorSpace))
 	buf.WriteString(fmt.Sprintf(" /BitsPerComponent %d", img.BitsPerComponent))
+	if len(img.Decode) > 0 {
+		buf.WriteString(" /Decode [")
+		for i, v := range img.Decode {
+			if i > 0 {
+				buf.WriteByte(' ')
+			}
+			buf.WriteString(strconv.FormatFloat(v, 'f', -1, 64))
+		}
+		buf.WriteByte(']')
+	}
 
 	// Add filter based on format
 	if img.Format == "jpeg" {

@@ -984,6 +984,7 @@ func convertGraphicsOpsShared(ops []GraphicsOperation, images map[*Image]*writer
 					ColorSpace:       string(op.Image.ColorSpace()),
 					Format:           op.Image.Format(),
 					BitsPerComponent: op.Image.BitsPerComponent(),
+					Decode:           op.Image.decode,
 				}
 				if images != nil {
 					images[op.Image] = gop.Image
