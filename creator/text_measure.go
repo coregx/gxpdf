@@ -7,6 +7,10 @@ import "github.com/coregx/gxpdf/internal/fonts"
 // This is used for layout calculations such as word wrapping, column sizing,
 // and text alignment.
 //
+// Standard 14 text is drawn in WinAnsiEncoding (Symbol and ZapfDingbats: their
+// built-in encodings); characters outside the encoding are drawn, and
+// measured, as '?'. Use an embedded font (LoadFont) for other scripts.
+//
 // Returns 0 if the font is not recognized.
 func MeasureText(font FontName, text string, size float64) float64 {
 	return fonts.MeasureString(string(font), text, size)

@@ -12,6 +12,7 @@ var symbolMetrics = &FontMetrics{
 	XHeight:      500,
 	DefaultWidth: 250,
 	CharWidths:   symbolWidths,
+	symbolic:     true,
 }
 
 // zapfDingbatsMetrics contains metrics for ZapfDingbats font.
@@ -22,6 +23,7 @@ var zapfDingbatsMetrics = &FontMetrics{
 	XHeight:      500,
 	DefaultWidth: 278,
 	CharWidths:   zapfDingbatsWidths,
+	symbolic:     true,
 }
 
 // symbolWidths contains character widths for Symbol font.

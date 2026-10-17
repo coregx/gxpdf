@@ -55,6 +55,48 @@ func EscapePDFString(s string) string {
 	return s
 }
 
+// literalString returns codes, the bytes of a simple font's character codes,
+// as a PDF literal string including the parentheses.
+//
+// Delimiters and backslash are escaped as in EscapePDFString; other bytes
+// outside printable ASCII are written as three-digit octal escapes (\226 for
+// an en dash in WinAnsiEncoding), so the content stream stays ASCII.
+//
+// Reference: PDF 1.7 Spec, Section 7.3.4.2 (Literal Strings).
+func literalString(codes []byte) string {
+	var b strings.Builder
+	b.Grow(len(codes) + 2)
+	b.WriteByte('(')
+	for _, c := range codes {
+		switch c {
+		case '\\', '(', ')':
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		default:
+			if c < 0x20 || c >= 0x7F {
+				b.WriteByte('\\')
+				b.WriteByte('0' + c>>6)
+				b.WriteByte('0' + c>>3&7)
+				b.WriteByte('0' + c&7)
+				continue
+			}
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte(')')
+	return b.String()
+}
+
 // isASCII reports whether every rune in s is in the ASCII range (U+0000–U+007F).
 func isASCII(s string) bool {
 	for _, r := range s {

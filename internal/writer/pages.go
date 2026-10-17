@@ -8,10 +8,11 @@ import (
 	"github.com/coregx/gxpdf/logging"
 )
 
-// hasTextBlockOps checks if any graphics operations contain TextBlock (type 22).
-func hasTextBlockOps(graphicsOps []GraphicsOp) bool {
+// hasTextGraphicsOps checks if any graphics operations draw text: TextBlock
+// (type 22) or Watermark (type 4). Their fonts need font objects.
+func hasTextGraphicsOps(graphicsOps []GraphicsOp) bool {
 	for _, gop := range graphicsOps {
-		if gop.Type == 22 { // TextBlock
+		if gop.Type == 22 || gop.Type == 4 { // TextBlock, Watermark
 			return true
 		}
 	}
@@ -334,7 +335,7 @@ func (w *PdfWriter) createPageWithAllContent(
 	// Generate content stream with graphics and text
 	if len(textOps) > 0 || len(graphicsOps) > 0 {
 		fontObjs = make([]*IndirectObject, 0)
-		hasTextContent := len(textOps) > 0 || hasTextBlockOps(graphicsOps)
+		hasTextContent := len(textOps) > 0 || hasTextGraphicsOps(graphicsOps)
 
 		// STEP 1: Collect fonts and BUILD SUBSETS FIRST.
 		// This is critical: content stream encoding needs GlyphMapping from built subsets.

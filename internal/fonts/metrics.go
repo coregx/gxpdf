@@ -19,8 +19,13 @@ type FontMetrics struct {
 	DefaultWidth int
 
 	// CharWidths maps runes to their widths in font units.
-	// For WinAnsiEncoding fonts, this covers code points 0-255.
+	// For WinAnsiEncoding fonts, it covers the characters of the encoding;
+	// for symbolic fonts, it is indexed by character code.
 	CharWidths map[rune]int
+
+	// symbolic marks Symbol and ZapfDingbats, whose text is given as the
+	// character codes of their built-in encodings (see code).
+	symbolic bool
 }
 
 // GetCharWidth returns the width of a character in font units (1000 units = 1 em).
@@ -34,10 +39,14 @@ func (m *FontMetrics) GetCharWidth(ch rune) int {
 
 // MeasureString returns the width of a string in points at the given font size.
 // Formula: width_points = (sum of char widths) * size / 1000.
+//
+// A character the font's encoding cannot represent is measured as the '?'
+// drawn in its place (see Encode).
 func (m *FontMetrics) MeasureString(text string, size float64) float64 {
 	var totalWidth int
 	for _, ch := range text {
-		totalWidth += m.GetCharWidth(ch)
+		_, drawn := m.code(ch)
+		totalWidth += m.GetCharWidth(drawn)
 	}
 	return float64(totalWidth) * size / 1000.0
 }

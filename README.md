@@ -104,7 +104,7 @@ fmt.Println(infos[0].SignedBy, infos[0].Valid) // "CN=Test" true
 - **Color Spaces** - RGB and CMYK support
 - **Tables** - Complex tables with merged cells, borders, backgrounds; row spans that keep their rows on one page or continue across page breaks (`CellAllowBreak`, `CellRepeatOnBreak`)
 - **Images** - JPEG and PNG with transparency support
-- **Fonts** - Standard 14 PDF fonts + TTF/OTF embedding with full Unicode support (Cyrillic, CJK, symbols)
+- **Fonts** - Standard 14 PDF fonts (WinAnsiEncoding: Latin-1, €, dashes, curly quotes) + TTF/OTF embedding with full Unicode support (Cyrillic, CJK, symbols)
 - **Document Structure** - Chapters, auto-generated Table of Contents
 - **Unicode Metadata** - Full Unicode support in PDF Info dictionary, annotations, form fields, and signatures (Cyrillic, CJK, Arabic, emoji)
 - **Annotations** - Sticky notes, highlights, underlines, stamps

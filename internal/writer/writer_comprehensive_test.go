@@ -656,26 +656,30 @@ func TestEncodeTextForEmbeddedFont_NilTTF(t *testing.T) {
 	assert.Equal(t, "<>", result)
 }
 
-// ---------- hasTextBlockOps ----------
+// ---------- hasTextGraphicsOps ----------
 
-func TestHasTextBlockOps_False(t *testing.T) {
+func TestHasTextGraphicsOps_False(t *testing.T) {
 	ops := []GraphicsOp{
 		{Type: 0}, // line
 		{Type: 1}, // rect
 	}
-	assert.False(t, hasTextBlockOps(ops))
+	assert.False(t, hasTextGraphicsOps(ops))
 }
 
-func TestHasTextBlockOps_True(t *testing.T) {
+func TestHasTextGraphicsOps_True(t *testing.T) {
 	ops := []GraphicsOp{
 		{Type: 0},
 		{Type: 22}, // TextBlock
 	}
-	assert.True(t, hasTextBlockOps(ops))
+	assert.True(t, hasTextGraphicsOps(ops))
 }
 
-func TestHasTextBlockOps_Empty(t *testing.T) {
-	assert.False(t, hasTextBlockOps(nil))
+func TestHasTextGraphicsOps_Watermark(t *testing.T) {
+	assert.True(t, hasTextGraphicsOps([]GraphicsOp{{Type: 4}}))
+}
+
+func TestHasTextGraphicsOps_Empty(t *testing.T) {
+	assert.False(t, hasTextGraphicsOps(nil))
 }
 
 // ---------- renderImage via GenerateContentStreamWithGraphics ----------

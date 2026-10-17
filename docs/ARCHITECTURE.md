@@ -216,6 +216,9 @@ Comprehensive font support:
 - Times family (Roman, Bold, Italic, BoldItalic)
 - Courier family (Regular, Bold, Oblique, BoldOblique)
 - Symbol, ZapfDingbats
+- Text is written in WinAnsiEncoding (Symbol and ZapfDingbats: their built-in
+  encodings, text given as character codes) and measured by the same mapping;
+  characters outside the encoding are drawn and measured as `?`
 
 **TrueType/OpenType Fonts** (embedded):
 - TTF/OTF file parsing

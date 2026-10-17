@@ -331,7 +331,7 @@ func GenerateContentStreamWithGraphics(textOps []TextOp, graphicsOps []GraphicsO
 		if op.CustomFont != nil {
 			csw.ShowTextEncoded(encodeTextForEmbeddedFont(op.Text, op.CustomFont))
 		} else {
-			csw.ShowText(op.Text)
+			csw.ShowCodes(fonts.EncodeText(op.Font, op.Text))
 		}
 
 		// End text object
@@ -1126,8 +1126,8 @@ func renderWatermark(csw *ContentStreamWriter, gop GraphicsOp, resources *Resour
 		csw.MoveTextPosition(gop.X, gop.Y)
 	}
 
-	// Show text
-	csw.ShowText(gop.Text)
+	// Show text in the encoding of the Standard 14 font.
+	csw.ShowCodes(fonts.EncodeText(gop.WatermarkFont, gop.Text))
 
 	// End text object
 	csw.EndText()
@@ -1224,12 +1224,22 @@ func CreateFontCollectionWithGraphics(textOps []TextOp, graphicsOps []GraphicsOp
 		collection.Standard14[op.Font] = font
 	}
 
-	// Collect fonts from graphics operations (TextBlock).
+	// Collect fonts from graphics operations (TextBlock, Watermark).
 	for _, gop := range graphicsOps {
 		if gop.Type == 22 && gop.TextFont != nil { // Type 22 = TextBlock
 			if _, exists := collection.Embedded[gop.TextFont.ID]; !exists {
 				collection.Embedded[gop.TextFont.ID] = gop.TextFont
 			}
+		}
+		if gop.Type == 4 && gop.WatermarkFont != "" { // Type 4 = Watermark
+			if _, exists := collection.Standard14[gop.WatermarkFont]; exists {
+				continue
+			}
+			font, err := getStandard14Font(gop.WatermarkFont)
+			if err != nil {
+				return nil, err
+			}
+			collection.Standard14[gop.WatermarkFont] = font
 		}
 	}
 

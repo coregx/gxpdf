@@ -43,10 +43,10 @@ func main() {
 	)
 
 	teams := []team{
-		{"Alpha", "Engine 1 (HLF 20)", "06:00 - 18:00", 4},
-		{"Bravo", "Engine 2 (LF 10)", "06:00 - 18:00", 6},
-		{"Charlie", "Ladder 1 (DLK 23/12)", "18:00 - 06:00", 5},
-		{"Delta", "Rescue 1 (RW 2)", "18:00 - 06:00", 7},
+		{"Alpha", "Engine 1 (HLF 20)", "06:00 – 18:00", 4},
+		{"Bravo", "Engine 2 (LF 10)", "06:00 – 18:00", 6},
+		{"Charlie", "Ladder 1 (DLK 23/12)", "18:00 – 06:00", 5},
+		{"Delta", "Rescue 1 (RW 2)", "18:00 – 06:00", 7},
 		{"Echo", "Tanker 1 (TLF 4000)", "On call", 9},
 		{"Reserve pool", "Assigned per incident by the shift commander", "On call", 70},
 	}

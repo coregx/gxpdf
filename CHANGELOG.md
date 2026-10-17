@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Non-ASCII text in Standard 14 fonts came out garbled**: text was written to the content stream as UTF-8 bytes, so "06:00 – 18:00" showed as "06:00 â€“ 18:00" in viewers and in extracted text. Text is now written in WinAnsiEncoding, which the font dictionaries already declare: Latin-1 letters (é ü ß Ø), € – — „ “ ” … • ™ Š Ž Œ and the rest of the encoding. Characters outside it (Cyrillic, Greek, CJK, Ł) are drawn and measured as `?`; they need an embedded TrueType font.
+- **Watermark text had no font**: the font resource of a `TextWatermark` pointed to object 0, so viewers drew it in a substitute font, without the font's encoding.
+
 ## [0.9.6] - 2026-10-16
 
 ### Fixed

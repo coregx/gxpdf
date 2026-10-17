@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/coregx/gxpdf/internal/encoding"
+	"github.com/coregx/gxpdf/internal/fonts"
 )
 
 // ContentStreamWriter builds PDF content streams.
@@ -132,15 +133,22 @@ func (csw *ContentStreamWriter) SetTextMatrix(a, b, c, d, e, f float64) {
 	csw.writeOp(fmt.Sprintf("%.2f %.2f %.2f %.2f %.2f %.2f", a, b, c, d, e, f), "Tm")
 }
 
-// ShowText shows a text string (Tj operator).
+// ShowText shows a text string (Tj operator) in a font with WinAnsiEncoding.
 //
 // Parameters:
-//   - text: Text to display (will be escaped)
+//   - text: Text to display; characters outside WinAnsiEncoding become '?'
 //
 // Reference: PDF 1.7 Spec, Section 9.4.3 (Text-Showing Operators).
 func (csw *ContentStreamWriter) ShowText(text string) {
-	escaped := EscapePDFString(text)
-	csw.writeOp(fmt.Sprintf("(%s)", escaped), "Tj")
+	csw.ShowCodes(fonts.EncodeWinAnsi(text))
+}
+
+// ShowCodes shows character codes of a simple font (Tj operator), written as
+// a literal string.
+//
+// Reference: PDF 1.7 Spec, Section 9.4.3 (Text-Showing Operators).
+func (csw *ContentStreamWriter) ShowCodes(codes []byte) {
+	csw.writeOp(literalString(codes), "Tj")
 }
 
 // ShowTextEncoded shows pre-encoded text using hex string (Tj operator).
@@ -162,12 +170,11 @@ func (csw *ContentStreamWriter) ShowTextEncoded(encodedText string) {
 // Equivalent to: T* followed by Tj.
 //
 // Parameters:
-//   - text: Text to display (will be escaped)
+//   - text: Text to display; characters outside WinAnsiEncoding become '?'
 //
 // Reference: PDF 1.7 Spec, Section 9.4.3 (Text-Showing Operators).
 func (csw *ContentStreamWriter) ShowTextNextLine(text string) {
-	escaped := EscapePDFString(text)
-	csw.writeOp(fmt.Sprintf("(%s)", escaped), "'")
+	csw.writeOp(literalString(fonts.EncodeWinAnsi(text)), "'")
 }
 
 // SetLeading sets the text leading (TL operator).
