@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/coregx/gxpdf/creator"
+	"github.com/coregx/gxpdf/internal/linebreak"
 	"github.com/coregx/gxpdf/layout"
 )
 
@@ -76,15 +77,12 @@ func (fb *FontBridge) Descender(font layout.FontRef, size float64) float64 {
 }
 
 // LineBreak implements layout.FontResolver. It splits text into lines that
-// each fit within maxWidth points, wrapping at word boundaries. CJK characters
-// are treated as their own break opportunities.
+// each fit within maxWidth points.
 //
-// The algorithm:
-//  1. Split text into words on whitespace.
-//  2. Accumulate words into a line until the next word would exceed maxWidth.
-//  3. For words wider than maxWidth (single long token), split at the
-//     character level.
-//  4. Handle CJK: any CJK rune is a valid break opportunity.
+// Lines break at whitespace, which is collapsed to single spaces, and inside
+// words at the break opportunities of CJK text (see internal/linebreak): a
+// CJK word continues the current line and wraps between its characters.
+// A piece wider than maxWidth on its own is split at character boundaries.
 func (fb *FontBridge) LineBreak(font layout.FontRef, text string, size float64, maxWidth float64) []string {
 	if text == "" {
 		return []string{""}
@@ -102,33 +100,30 @@ func (fb *FontBridge) LineBreak(font layout.FontRef, text string, size float64, 
 	current := ""
 
 	for _, word := range words {
-		// A word containing CJK breaks at character level.
-		if containsCJK(word) {
+		for i, piece := range linebreak.SplitWord(word) {
+			candidate := piece
+			if current != "" {
+				if i == 0 {
+					candidate = current + " " + piece
+				} else {
+					candidate = current + piece
+				}
+			}
+			if fb.MeasureString(font, candidate, size) <= maxWidth {
+				current = candidate
+				continue
+			}
+
+			// The piece doesn't fit on the current line.
 			if current != "" {
 				lines = append(lines, current)
 			}
-			lines, current = splitLast(lines, fb.breakCJK(font, word, size, maxWidth))
-			continue
-		}
-
-		candidate := word
-		if current != "" {
-			candidate = current + " " + word
-		}
-		if fb.MeasureString(font, candidate, size) <= maxWidth {
-			current = candidate
-			continue
-		}
-
-		// Word doesn't fit on current line.
-		if current != "" {
-			lines = append(lines, current)
-		}
-		current = word
-		if fb.MeasureString(font, word, size) > maxWidth {
-			// Force-split the oversized word at character level.
-			if pieces := fb.breakAtChars(font, word, size, maxWidth); len(pieces) > 1 {
-				lines, current = splitLast(lines, pieces)
+			current = piece
+			if fb.MeasureString(font, piece, size) > maxWidth {
+				// Force-split the oversized piece at character level.
+				if chars := fb.breakAtChars(font, piece, size, maxWidth); len(chars) > 1 {
+					lines, current = splitLast(lines, chars)
+				}
 			}
 		}
 	}
@@ -171,49 +166,4 @@ func (fb *FontBridge) breakAtChars(font layout.FontRef, word string, size, maxWi
 		lines = append(lines, current)
 	}
 	return lines
-}
-
-// breakCJK splits CJK text at individual character boundaries (every character
-// is a valid break point in CJK text), while still keeping non-CJK runs together.
-func (fb *FontBridge) breakCJK(font layout.FontRef, text string, size, maxWidth float64) []string {
-	var lines []string
-	current := ""
-
-	for _, r := range text {
-		candidate := current + string(r)
-		if fb.MeasureString(font, candidate, size) <= maxWidth {
-			current = candidate
-		} else {
-			if current != "" {
-				lines = append(lines, current)
-			}
-			current = string(r)
-		}
-	}
-	if current != "" {
-		lines = append(lines, current)
-	}
-	return lines
-}
-
-// containsCJK returns true if the string contains any CJK unified ideograph,
-// Hiragana, Katakana, Hangul, or CJK compatibility character.
-func containsCJK(s string) bool {
-	for _, r := range s {
-		if isCJKRune(r) {
-			return true
-		}
-	}
-	return false
-}
-
-// isCJKRune returns true for runes in the primary CJK Unicode ranges.
-func isCJKRune(r rune) bool {
-	return (r >= 0x4E00 && r <= 0x9FFF) || // CJK Unified Ideographs
-		(r >= 0x3400 && r <= 0x4DBF) || // CJK Extension A
-		(r >= 0x20000 && r <= 0x2A6DF) || // CJK Extension B
-		(r >= 0x3040 && r <= 0x309F) || // Hiragana
-		(r >= 0x30A0 && r <= 0x30FF) || // Katakana
-		(r >= 0xAC00 && r <= 0xD7AF) || // Hangul Syllables
-		(r >= 0xF900 && r <= 0xFAFF) // CJK Compatibility Ideographs
 }

@@ -9,53 +9,6 @@ import (
 )
 
 // ============================================================================
-// FontBridge.breakCJK — previously 0% coverage
-// ============================================================================
-
-func TestFontBridge_BreakCJK_ShortText(t *testing.T) {
-	fb := newTestBridge()
-	font := layout.FontRef{Family: "Helvetica"}
-
-	// Short CJK text that fits on one line.
-	lines := fb.breakCJK(font, "你好", 12, 1000)
-	if len(lines) != 1 {
-		t.Errorf("short CJK text in wide area should produce 1 line, got %d: %v", len(lines), lines)
-	}
-	if lines[0] != "你好" {
-		t.Errorf("line = %q, want %q", lines[0], "你好")
-	}
-}
-
-func TestFontBridge_BreakCJK_ForcesBreak(t *testing.T) {
-	fb := newTestBridge()
-	font := layout.FontRef{Family: "Helvetica"}
-
-	// Very narrow width forces break at individual CJK characters.
-	text := "你好世界"
-	lines := fb.breakCJK(font, text, 12, 1) // 1 point: impossible to fit even one char
-	// Should produce at least 1 line (each char on its own).
-	if len(lines) == 0 {
-		t.Fatal("breakCJK should return at least one line")
-	}
-	// All characters must be preserved across lines.
-	joined := strings.Join(lines, "")
-	if joined != text {
-		t.Errorf("breakCJK lost characters: got %q, want %q", joined, text)
-	}
-}
-
-func TestFontBridge_BreakCJK_EmptyString(t *testing.T) {
-	fb := newTestBridge()
-	font := layout.FontRef{Family: "Helvetica"}
-
-	lines := fb.breakCJK(font, "", 12, 100)
-	// Empty string produces zero lines (no current to flush).
-	if len(lines) != 0 {
-		t.Errorf("breakCJK on empty string should return [], got %v", lines)
-	}
-}
-
-// ============================================================================
 // FontBridge.LineBreak with CJK text — exercises CJK code path in LineBreak
 // ============================================================================
 

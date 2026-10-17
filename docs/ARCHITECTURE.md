@@ -24,6 +24,7 @@ github.com/coregx/gxpdf
     ├── encoding/         # Stream codecs (Flate, DCT, ASCII85, LZW)
     ├── extractor/        # Text, image, graphics extraction
     ├── fonts/            # Font handling (Standard 14 + TTF/OTF)
+    ├── linebreak/        # Line break opportunities inside words (CJK, kinsoku)
     ├── models/           # Data models
     │   ├── content/      # Content stream models
     │   ├── table/        # Table/Cell rich models

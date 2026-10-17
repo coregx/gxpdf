@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -150,50 +151,6 @@ func TestFontBridge_LineBreak_PreservesContent(t *testing.T) {
 	}
 }
 
-func TestFontBridge_ContainsCJK(t *testing.T) {
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{"hello", false},
-		{"你好", true},
-		{"こんにちは", true},
-		{"안녕", true},
-		{"hello世界", true},
-		{"", false},
-	}
-	for _, tc := range tests {
-		got := containsCJK(tc.input)
-		if got != tc.want {
-			t.Errorf("containsCJK(%q) = %v, want %v", tc.input, got, tc.want)
-		}
-	}
-}
-
-func TestFontBridge_IsCJKRune(t *testing.T) {
-	tests := []struct {
-		r    rune
-		want bool
-	}{
-		{'A', false},
-		{'z', false},
-		{'1', false},
-		{'你', true},      // CJK Unified Ideograph
-		{'あ', true},      // Hiragana
-		{'ア', true},      // Katakana
-		{'가', true},      // Hangul
-		{0x4E00, true},   // First CJK Unified Ideograph
-		{0x9FFF, true},   // Last CJK Unified Ideograph (basic)
-		{0x10000, false}, // Outside CJK range
-	}
-	for _, tc := range tests {
-		got := isCJKRune(tc.r)
-		if got != tc.want {
-			t.Errorf("isCJKRune(%q / U+%04X) = %v, want %v", tc.r, tc.r, got, tc.want)
-		}
-	}
-}
-
 func TestFontBridge_BreakAtChars(t *testing.T) {
 	fb := newTestBridge()
 	font := layout.FontRef{Family: "Helvetica"}
@@ -209,5 +166,69 @@ func TestFontBridge_BreakAtChars(t *testing.T) {
 	rejoined := strings.Join(lines, "")
 	if rejoined != word {
 		t.Errorf("breakAtChars lost chars: got %q, want %q", rejoined, word)
+	}
+}
+
+// TestFontBridge_LineBreak_CJKContinuesLine is the bug-014 repro: a word with
+// CJK characters started a new line even when it fit on the current one.
+func TestFontBridge_LineBreak_CJKContinuesLine(t *testing.T) {
+	fb := newTestBridge()
+	font := layout.FontRef{Family: "Helvetica"}
+
+	text := "Outside WinAnsi: Привет 中文"
+	got := fb.LineBreak(font, text, 10, 500)
+	if len(got) != 1 || got[0] != text {
+		t.Errorf("LineBreak(%q) = %q, want one line", text, got)
+	}
+}
+
+// TestFontBridge_LineBreak_CJKOpportunities checks where CJK text wraps: after
+// a space, between characters, and not before closing or after opening
+// punctuation.
+func TestFontBridge_LineBreak_CJKOpportunities(t *testing.T) {
+	fb := newTestBridge()
+	font := layout.FontRef{Family: "Helvetica"}
+	width := func(s string) float64 { return fb.MeasureString(font, s, 12) }
+
+	tests := []struct {
+		text     string
+		maxWidth float64
+		want     []string
+	}{
+		// The CJK word continues the line and wraps between its characters.
+		{"ab 一二三四", width("ab 一二"), []string{"ab 一二", "三四"}},
+		// A full stop may not start a line: the character before it moves too.
+		{"一二三。", width("一二三"), []string{"一二", "三。"}},
+		// An opening bracket may not end a line.
+		{"一二「三」", width("一二「"), []string{"一二", "「三」"}},
+		// Latin next to CJK breaks without a space; the Latin run stays whole.
+		{"中文abc", width("中文a"), []string{"中文", "abc"}},
+	}
+	for _, tt := range tests {
+		got := fb.LineBreak(font, tt.text, 12, tt.maxWidth)
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("LineBreak(%q, %.2f) = %q, want %q", tt.text, tt.maxWidth, got, tt.want)
+		}
+	}
+}
+
+// TestFontBridge_LineBreak_MixedTextFits checks that every line of mixed
+// Latin and CJK text fits and no character is lost.
+func TestFontBridge_LineBreak_MixedTextFits(t *testing.T) {
+	fb := newTestBridge()
+	font := layout.FontRef{Family: "Helvetica"}
+	text := strings.Repeat("GxPDF は Go 言語の PDF ライブラリです。「表」を抽出できます。 ", 6)
+
+	for _, maxWidth := range []float64{40, 75, 120, 333} {
+		lines := fb.LineBreak(font, text, 12, maxWidth)
+		for _, l := range lines {
+			if w := fb.MeasureString(font, l, 12); w > maxWidth {
+				t.Errorf("maxWidth %.0f: line %q is %.2f wide", maxWidth, l, w)
+			}
+		}
+		strip := func(s string) string { return strings.Join(strings.Fields(s), "") }
+		if got, want := strip(strings.Join(lines, "")), strip(text); got != want {
+			t.Errorf("maxWidth %.0f: lines lost text:\n got %q\nwant %q", maxWidth, got, want)
+		}
 	}
 }

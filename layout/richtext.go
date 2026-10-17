@@ -1,5 +1,7 @@
 package layout
 
+import "github.com/coregx/gxpdf/internal/linebreak"
+
 // RichText is a multi-style inline text element. It lays out a sequence of
 // styled fragments as a single paragraph with shared word-wrapping. Fragments
 // with different font sizes share a common baseline within each line: smaller
@@ -46,6 +48,7 @@ type richRun struct {
 	width    float64
 	fontSize float64 // s.FontSize after effective()
 	isSpace  bool
+	glued    bool   // follows the previous run without a space (CJK, style change)
 	url      string // non-empty for link fragments
 }
 
@@ -157,18 +160,24 @@ func fragmentsToRichRuns(fragments []RichTextFragment, resolver FontResolver) []
 			continue
 		}
 		s := fragments[i].Style.effective()
-		parts := splitIntoWordsAndSpaces(fragments[i].Text)
-		for _, part := range parts {
+		for _, part := range splitIntoWordsAndSpaces(fragments[i].Text) {
+			pieces := []string{part}
 			isSpace := isAllSpaces(part)
-			w := resolver.MeasureString(s.Font, part, s.FontSize)
-			runs = append(runs, richRun{
-				text:     part,
-				style:    s,
-				width:    w,
-				fontSize: s.FontSize,
-				isSpace:  isSpace,
-				url:      fragments[i].URL,
-			})
+			if !isSpace {
+				// CJK words break inside: one run per unbreakable piece.
+				pieces = linebreak.SplitWord(part)
+			}
+			for _, piece := range pieces {
+				runs = append(runs, richRun{
+					text:     piece,
+					style:    s,
+					width:    resolver.MeasureString(s.Font, piece, s.FontSize),
+					fontSize: s.FontSize,
+					isSpace:  isSpace,
+					glued:    !isSpace && len(runs) > 0 && !runs[len(runs)-1].isSpace,
+					url:      fragments[i].URL,
+				})
+			}
 		}
 	}
 	return runs
@@ -210,12 +219,13 @@ func isAllSpaces(s string) bool {
 	return len(s) > 0
 }
 
-// splitRichWords extracts non-space words from text (for MinWidth measurement).
+// splitRichWords extracts the unbreakable pieces of text (for MinWidth
+// measurement): its words, split at the break opportunities of CJK text.
 func splitRichWords(text string) []string {
 	var words []string
 	for _, part := range splitIntoWordsAndSpaces(text) {
 		if !isAllSpaces(part) && part != "" {
-			words = append(words, part)
+			words = append(words, linebreak.SplitWord(part)...)
 		}
 	}
 	return words
@@ -456,8 +466,9 @@ func rebuildRichOverflow(lines [][]richRun, align Align, lineHeight float64, fon
 	var fragments []RichTextFragment
 	for i, line := range lines {
 		if i > 0 {
-			// Re-insert a space between lines to restore word separation.
-			if len(line) > 0 {
+			// Re-insert the space the line broke at; a line broken inside a
+			// word (CJK text) had none.
+			if len(line) > 0 && !line[0].glued {
 				fragments = append(fragments, RichTextFragment{
 					Text:  " ",
 					Style: line[0].style,

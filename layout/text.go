@@ -1,6 +1,12 @@
 package layout
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/coregx/gxpdf/internal/linebreak"
+)
 
 // Text is a single-style text element that supports word wrapping and
 // justified alignment. It implements both Element and Measurable.
@@ -41,7 +47,7 @@ func (t *Text) PlanLayout(area Area) Plan {
 	for i, line := range lines {
 		if !Fits(cursorY+lineSpacing, area.Height) {
 			// Remaining lines overflow.
-			overflow := t.overflowText(joinStrings(lines[i:], " "), &s)
+			overflow := t.overflowText(remainingContent(t.Content, lines, i), &s)
 			status := Partial
 			if len(blocks) == 0 {
 				status = Nothing
@@ -96,7 +102,8 @@ func (t *Text) PlanLayout(area Area) Plan {
 }
 
 // MinWidth implements Measurable. It returns the width of the longest
-// unbreakable word in the content.
+// unbreakable piece of the content: a word, or in CJK text a character with
+// the punctuation that stays with it.
 func (t *Text) MinWidth() float64 {
 	s := t.Style.effective()
 	resolver := t.Fonts
@@ -106,12 +113,13 @@ func (t *Text) MinWidth() float64 {
 	font := s.Font
 	fontSize := s.FontSize
 
-	words := strings.Fields(t.Content)
 	max := 0.0
-	for _, w := range words {
-		ww := resolver.MeasureString(font, w, fontSize)
-		if ww > max {
-			max = ww
+	for _, w := range strings.Fields(t.Content) {
+		// CJK text breaks inside words: its unbreakable pieces are shorter.
+		for _, piece := range linebreak.SplitWord(w) {
+			if pw := resolver.MeasureString(font, piece, fontSize); pw > max {
+				max = pw
+			}
 		}
 	}
 	return max
@@ -164,6 +172,38 @@ func computeTextX(align Align, lineWidth, availWidth float64, line string, isLas
 }
 
 // joinStrings concatenates strings with the given separator.
+// remainingContent returns the part of content not shown by lines[:i]: the
+// content after the characters of those lines. Lines can break inside a word
+// (CJK text, oversized words), so joining the remaining lines with spaces
+// would add spaces that are not in the content.
+//
+// LineBreak implementations collapse whitespace but keep the other characters
+// in order; if lines do not match content that way (a resolver that adds
+// hyphens, say), the remaining lines are joined with spaces.
+func remainingContent(content string, lines []string, i int) string {
+	pos := 0
+	for _, line := range lines[:i] {
+		for _, r := range line {
+			if unicode.IsSpace(r) {
+				continue
+			}
+			for pos < len(content) {
+				c, size := utf8.DecodeRuneInString(content[pos:])
+				if !unicode.IsSpace(c) {
+					break
+				}
+				pos += size
+			}
+			c, size := utf8.DecodeRuneInString(content[pos:])
+			if pos >= len(content) || c != r {
+				return joinStrings(lines[i:], " ")
+			}
+			pos += size
+		}
+	}
+	return strings.TrimLeftFunc(content[pos:], unicode.IsSpace)
+}
+
 func joinStrings(ss []string, sep string) string {
 	if len(ss) == 0 {
 		return ""
