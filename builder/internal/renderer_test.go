@@ -10,7 +10,7 @@ import (
 // TestNewPDFRenderer_NilFonts verifies NewPDFRenderer does not panic with nil fonts.
 func TestNewPDFRenderer_NilFonts(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 	if r == nil {
 		t.Fatal("NewPDFRenderer returned nil")
 	}
@@ -19,7 +19,7 @@ func TestNewPDFRenderer_NilFonts(t *testing.T) {
 // TestRenderDocument_EmptyPages verifies that empty page slice creates one blank page.
 func TestRenderDocument_EmptyPages(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 	err := r.RenderDocument(nil, ExportedMetadata("", ""))
 	if err != nil {
 		t.Fatalf("RenderDocument(nil) failed: %v", err)
@@ -32,7 +32,7 @@ func TestRenderDocument_EmptyPages(t *testing.T) {
 // TestRenderDocument_SinglePage verifies a single page layout is rendered.
 func TestRenderDocument_SinglePage(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	pages := []layout.PageLayout{
 		{
@@ -52,7 +52,7 @@ func TestRenderDocument_SinglePage(t *testing.T) {
 // TestRenderDocument_MultiplePages verifies multiple pages are created.
 func TestRenderDocument_MultiplePages(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	pages := []layout.PageLayout{
 		{Size: layout.Size{Width: 595, Height: 842}},
@@ -71,7 +71,7 @@ func TestRenderDocument_MultiplePages(t *testing.T) {
 // TestRenderDocument_PageWithTextBlock verifies a page with a text Draw block renders.
 func TestRenderDocument_PageWithTextBlock(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	font := layout.FontRef{Family: "Helvetica"}
 	color := layout.Black
@@ -98,7 +98,7 @@ func TestRenderDocument_PageWithTextBlock(t *testing.T) {
 // TestRenderDocument_PageWithRectBlock verifies rectangle drawing does not error.
 func TestRenderDocument_PageWithRectBlock(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	fill := layout.Color{R: 0.9, G: 0.9, B: 0.9}
 	stroke := layout.Black
@@ -125,7 +125,7 @@ func TestRenderDocument_PageWithRectBlock(t *testing.T) {
 // TestRenderDocument_PageWithLineBlock verifies line drawing does not error.
 func TestRenderDocument_PageWithLineBlock(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	color := layout.Black
 
@@ -151,7 +151,7 @@ func TestRenderDocument_PageWithLineBlock(t *testing.T) {
 // TestRenderDocument_PageWithImageBlock verifies DrawImage stub does not error.
 func TestRenderDocument_PageWithImageBlock(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	pages := []layout.PageLayout{
 		{
@@ -160,7 +160,7 @@ func TestRenderDocument_PageWithImageBlock(t *testing.T) {
 				{
 					X: 50, Y: 100, Width: 200, Height: 150,
 					Draw: func(renderer layout.Renderer) {
-						renderer.DrawImage([]byte("FAKE"), 0, 0, 200, 150)
+						renderer.DrawImage(pngBytes(t, 4, 3), 0, 0, 200, 150)
 					},
 				},
 			},
@@ -175,7 +175,7 @@ func TestRenderDocument_PageWithImageBlock(t *testing.T) {
 // TestRenderDocument_BlockWithChildren verifies recursive child block rendering.
 func TestRenderDocument_BlockWithChildren(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	color := layout.Black
 	font := layout.FontRef{Family: "Helvetica"}
@@ -209,7 +209,7 @@ func TestRenderDocument_BlockWithChildren(t *testing.T) {
 // options do not panic.
 func TestRenderDocument_TextWithDecoration(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	font := layout.FontRef{Family: "Helvetica"}
 	color := layout.Black
@@ -241,7 +241,7 @@ func TestRenderDocument_TextWithDecoration(t *testing.T) {
 // TestRenderDocument_SetClipRect verifies SetClipRect/PopState do not panic.
 func TestRenderDocument_SetClipRect(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	pages := []layout.PageLayout{
 		{
@@ -267,7 +267,7 @@ func TestRenderDocument_SetClipRect(t *testing.T) {
 // TestRenderDocument_PushState verifies PushState is a safe no-op.
 func TestRenderDocument_PushState(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	pages := []layout.PageLayout{
 		{

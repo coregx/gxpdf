@@ -24,7 +24,8 @@ func TestTable_RowSpanContentNotDroppedByRounding(t *testing.T) {
 					tb.Row(func(r *TableRowBuilder) {
 						if i == 0 {
 							r.Cell(func(cb *CellBuilder) {
-								cb.Image([]byte{1}, FitHeight(Pt(imgH)), FitWidth(Pt(50)))
+								// 3x14 px at FitHeight: exactly imgH tall, 50pt wide.
+								cb.Image(testPNG(t, 3, 14), FitHeight(Pt(imgH)))
 							}, RowSpan(rows), CellPadding(Pt(0)))
 						}
 						r.Cell(func(cb *CellBuilder) { cb.Text(fmt.Sprintf("row %d", i)) })

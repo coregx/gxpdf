@@ -79,6 +79,8 @@ type Builder struct {
 	errs  []error
 	// fonts resolves font families for both layout and rendering.
 	fonts *builderinternal.FontSet
+	// images holds decoded images for both layout and rendering.
+	images *builderinternal.ImageSet
 }
 
 // NewBuilder creates a new Builder with the given document-level options.
@@ -103,7 +105,7 @@ func NewBuilder(opts ...Option) *Builder {
 	if err := fonts.CheckFallback(); err != nil {
 		errs = append(errs, err)
 	}
-	return &Builder{cfg: cfg, errs: errs, fonts: fonts}
+	return &Builder{cfg: cfg, errs: errs, fonts: fonts, images: builderinternal.NewImageSet()}
 }
 
 // Page adds a page definition to the document. The fn callback receives a
@@ -220,7 +222,7 @@ func (b *Builder) renderTo(cr *creator.Creator) error {
 	pageLayouts := b.layoutPages()
 
 	// Render page layouts via the PDF renderer.
-	renderer := builderinternal.NewPDFRenderer(cr, b.fonts)
+	renderer := builderinternal.NewPDFRenderer(cr, b.fonts, b.images)
 	meta := builderinternal.ExportedMetadata(b.cfg.meta.title, b.cfg.meta.author)
 	if err := renderer.RenderDocument(pageLayouts, meta); err != nil {
 		return fmt.Errorf("render: %w", err)

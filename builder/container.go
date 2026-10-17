@@ -1,6 +1,9 @@
 package builder
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/coregx/gxpdf/layout"
 )
 
@@ -121,15 +124,31 @@ func (c *Container) AutoRow(fn func(*RowBuilder)) {
 }
 
 // Image adds an image element to the container. The data parameter must be
-// raw JPEG or PNG bytes.
+// raw JPEG or PNG bytes; the image is embedded as an image XObject, once per
+// document however often the same bytes are placed (e.g. a logo in a header).
+//
+// Size: FitWidth and/or FitHeight keep the aspect ratio (with both, the image
+// fits inside that box); without options the image takes its intrinsic size,
+// 1 pixel = 1 point. It never gets wider than the available width, and an
+// image taller than an empty page is scaled down to the page.
+//
+// Data that is not a decodable JPEG or PNG makes Build return an error.
 //
 // Example:
 //
 //	c.Image(pngData, builder.FitWidth(layout.Mm(60)))
 func (c *Container) Image(data []byte, opts ...ImageOption) {
+	img, err := c.b.images.Load(data)
+	if err != nil {
+		c.b.errs = append(c.b.errs, fmt.Errorf("image (%d bytes): %w", len(data), err))
+		return
+	}
+	if img.Width() <= 0 || img.Height() <= 0 {
+		c.b.errs = append(c.b.errs, fmt.Errorf("image (%d bytes): no pixels (%dx%d)", len(data), img.Width(), img.Height()))
+		return
+	}
 	cfg := applyImageOptions(opts)
-	elem := newImageElement(data, cfg)
-	c.elements = append(c.elements, elem)
+	c.elements = append(c.elements, newImageElement(data, img.Width(), img.Height(), cfg))
 }
 
 // Line adds a horizontal rule (separator line) to the container.
@@ -284,59 +303,133 @@ func (e *lineElement) PlanLayout(area layout.Area) layout.Plan {
 	}
 }
 
-// imageElement is a placeholder image element. Full image support requires
-// integration with creator.Image loading; this stub reserves space and emits
-// a DrawImage call using the raw bytes.
-//
-// TODO(Phase 4): Load image bytes via creator.LoadImageFromBytes and resolve
-// actual pixel dimensions for correct aspect-ratio sizing.
+// imageElement places a decoded JPEG or PNG image, keeping its aspect ratio
+// (see displaySize). An image never splits across pages.
 type imageElement struct {
 	data []byte
 	cfg  imageConfig
+	// natW and natH are the intrinsic size in points (1 pixel = 1 point,
+	// 72 DPI), as in gpdf and folio.
+	natW, natH float64
 }
 
-func newImageElement(data []byte, cfg imageConfig) *imageElement {
-	return &imageElement{data: data, cfg: cfg}
+func newImageElement(data []byte, pixelsW, pixelsH int, cfg imageConfig) *imageElement {
+	return &imageElement{data: data, cfg: cfg, natW: float64(pixelsW), natH: float64(pixelsH)}
+}
+
+// fixedLength resolves v when it does not depend on the surrounding area
+// (pt, mm, cm, in). Percentages, fr, auto and non-positive values report false.
+func fixedLength(v *layout.Value) (float64, bool) {
+	if v == nil {
+		return 0, false
+	}
+	switch v.Unit {
+	case layout.UnitPct, layout.UnitFr, layout.UnitAuto:
+		return 0, false
+	}
+	n := v.Resolve(0, 12)
+	return n, n > 0
+}
+
+// displaySize returns the drawn size for an area of areaW x areaH points:
+//   - FitWidth only: that width, the height from the aspect ratio;
+//   - FitHeight only: that height, the width from the aspect ratio;
+//   - both: the largest size with the image's aspect ratio inside that box;
+//   - neither: the intrinsic size.
+//
+// Percentages refer to the area. A result wider than the area is scaled down
+// to its width, keeping the aspect ratio.
+func (e *imageElement) displaySize(areaW, areaH float64) (w, h float64) {
+	ratio := e.natH / e.natW
+	var boxW, boxH float64
+	if e.cfg.width != nil {
+		boxW = e.cfg.width.Resolve(areaW, 12)
+	}
+	if e.cfg.height != nil {
+		boxH = e.cfg.height.Resolve(areaH, 12)
+	}
+	switch {
+	case boxW > 0 && boxH > 0:
+		w, h = boxW, boxW*ratio
+		if h > boxH {
+			w, h = boxH/ratio, boxH
+		}
+	case boxW > 0:
+		w, h = boxW, boxW*ratio
+	case boxH > 0:
+		w, h = boxH/ratio, boxH
+	default:
+		w, h = e.natW, e.natH
+	}
+	if w > areaW {
+		w, h = areaW, areaW*ratio
+	}
+	return w, h
+}
+
+// MinWidth implements layout.Measurable. A size given in absolute units cannot
+// shrink; an intrinsic or percentage size can, down to nothing, like a CSS
+// replaced element whose width is capped by its container.
+func (e *imageElement) MinWidth() float64 {
+	w, fixed := e.fixedWidth()
+	if !fixed {
+		return 0
+	}
+	return w
+}
+
+// MaxWidth implements layout.Measurable: the width with no area limit.
+func (e *imageElement) MaxWidth() float64 {
+	w, _ := e.fixedWidth()
+	return w
+}
+
+// fixedWidth returns the width the image takes when nothing narrows it, and
+// whether that width comes only from absolute FitWidth/FitHeight values.
+func (e *imageElement) fixedWidth() (float64, bool) {
+	fw, okW := fixedLength(e.cfg.width)
+	fh, okH := fixedLength(e.cfg.height)
+	byHeight := fh * e.natW / e.natH
+	switch {
+	case okW && okH:
+		return math.Min(fw, byHeight), true
+	case okW:
+		// A percentage height may still narrow it.
+		return fw, e.cfg.height == nil
+	case okH:
+		return byHeight, e.cfg.width == nil
+	default:
+		return e.natW, false
+	}
 }
 
 func (e *imageElement) PlanLayout(area layout.Area) layout.Plan {
-	// Determine display width.
-	displayW := area.Width
-	if e.cfg.width != nil {
-		displayW = e.cfg.width.Resolve(area.Width, 12)
+	w, h := e.displaySize(area.Width, area.Height)
+	if w <= 0 || h <= 0 {
+		// A zero-width area (e.g. an Auto table column squeezed to its
+		// minimum) leaves no room: nothing to draw, nothing to report.
+		return layout.Plan{Status: layout.Full}
 	}
-
-	// Default height: 50% of display width (approximate square-ish aspect).
-	// Phase 4 will decode image headers for accurate aspect ratios.
-	displayH := displayW * 0.5
-	if e.cfg.height != nil {
-		displayH = e.cfg.height.Resolve(area.Height, 12)
-		if e.cfg.width == nil {
-			// If only height is constrained, match width to height.
-			displayW = displayH * 2.0
+	if !layout.Fits(h, area.Height) {
+		if !area.AtTop || area.Height <= 0 {
+			return layout.Plan{Status: layout.Nothing}
 		}
+		// Taller than an empty page: scale down to the page instead of
+		// running off it (no other page has more room).
+		w, h = w*area.Height/h, area.Height
 	}
 
-	if !layout.Fits(displayH, area.Height) {
-		return layout.Plan{Status: layout.Nothing}
-	}
-
-	captureData := e.data
-	captureW := displayW
-	captureH := displayH
-
+	data := e.data
 	block := layout.Block{
-		X:      0,
-		Y:      0,
-		Width:  captureW,
-		Height: captureH,
+		Width:  w,
+		Height: h,
 		Draw: func(r layout.Renderer) {
-			r.DrawImage(captureData, 0, 0, captureW, captureH)
+			r.DrawImage(data, 0, 0, w, h)
 		},
 	}
 	return layout.Plan{
 		Status:   layout.Full,
-		Consumed: displayH,
+		Consumed: h,
 		Blocks:   []layout.Block{block},
 	}
 }

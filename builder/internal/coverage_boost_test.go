@@ -73,7 +73,7 @@ func TestFontBridge_LineBreak_LongWordThatFits(t *testing.T) {
 
 func TestRenderDocument_JustifiedText(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	font := layout.FontRef{Family: "Helvetica"}
 	color := layout.Black
@@ -102,7 +102,7 @@ func TestRenderDocument_JustifiedText(t *testing.T) {
 
 func TestRenderDocument_JustifiedText_SingleWord(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	font := layout.FontRef{Family: "Helvetica"}
 	color := layout.Black
@@ -135,7 +135,7 @@ func TestRenderDocument_JustifiedText_SingleWord(t *testing.T) {
 
 func TestRenderDocument_EmptyTextEarlyReturn(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	font := layout.FontRef{Family: "Helvetica"}
 	color := layout.Black
@@ -166,7 +166,7 @@ func TestRenderDocument_EmptyTextEarlyReturn(t *testing.T) {
 
 func TestRenderDocument_DrawRect_NilFillAndStroke(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 
 	pages := []layout.PageLayout{
 		{
@@ -190,7 +190,7 @@ func TestRenderDocument_DrawRect_NilFillAndStroke(t *testing.T) {
 
 func TestRenderDocument_DrawLine_DefaultWidth(t *testing.T) {
 	cr := creator.New()
-	r := NewPDFRenderer(cr, nil)
+	r := NewPDFRenderer(cr, nil, nil)
 	color := layout.Black
 
 	pages := []layout.PageLayout{

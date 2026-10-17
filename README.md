@@ -103,7 +103,7 @@ fmt.Println(infos[0].SignedBy, infos[0].Valid) // "CN=Test" true
 - **Gradients** - Linear and radial gradient fills with full PDF Shading (multi-stop support)
 - **Color Spaces** - RGB and CMYK support
 - **Tables** - Complex tables with merged cells, borders, backgrounds; row spans that keep their rows on one page or continue across page breaks (`CellAllowBreak`, `CellRepeatOnBreak`)
-- **Images** - JPEG and PNG with transparency support
+- **Images** - JPEG and PNG with transparency support, in the creator and the builder (`Container.Image`, sized by its aspect ratio); an image placed many times is stored once
 - **Fonts** - Standard 14 PDF fonts (WinAnsiEncoding: Latin-1, €, dashes, curly quotes) + TTF/OTF embedding with full Unicode support (Cyrillic, CJK, symbols)
 - **Document Structure** - Chapters, auto-generated Table of Contents
 - **Unicode Metadata** - Full Unicode support in PDF Info dictionary, annotations, form fields, and signatures (Cyrillic, CJK, Arabic, emoji)

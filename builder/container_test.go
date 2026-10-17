@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/coregx/gxpdf/layout"
@@ -224,18 +225,21 @@ func TestContainer_Image_AddsElement(t *testing.T) {
 	b := testBuilder()
 	c := newContainer(b)
 
-	fakeData := []byte("FAKE_PNG_DATA")
-	c.Image(fakeData, FitWidth(Mm(60)))
+	data := testPNG(t, 200, 100)
+	c.Image(data, FitWidth(Mm(60)))
 
 	if len(c.elements) != 1 {
-		t.Fatalf("expected 1 element, got %d", len(c.elements))
+		t.Fatalf("expected 1 element, got %d (errs %v)", len(c.elements), b.errs)
 	}
 	img, ok := c.elements[0].(*imageElement)
 	if !ok {
 		t.Fatalf("expected *imageElement, got %T", c.elements[0])
 	}
-	if string(img.data) != "FAKE_PNG_DATA" {
+	if !bytes.Equal(img.data, data) {
 		t.Error("image data not preserved")
+	}
+	if img.natW != 200 || img.natH != 100 {
+		t.Errorf("intrinsic size %vx%v, want 200x100 from the PNG", img.natW, img.natH)
 	}
 	if img.cfg.width == nil || img.cfg.width.Amount != 60 {
 		t.Errorf("image FitWidth not applied: %v", img.cfg.width)

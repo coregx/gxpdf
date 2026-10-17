@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -21,15 +22,21 @@ type PDFRenderer struct {
 	cr *creator.Creator
 	// fonts resolves font families, shared with the layout's FontBridge.
 	fonts *FontSet
+	// images holds decoded images, shared with the layout's image elements.
+	images *ImageSet
 }
 
 // NewPDFRenderer creates a PDFRenderer using the given Creator, resolving
-// font families through fonts (nil: Standard 14 only).
-func NewPDFRenderer(cr *creator.Creator, fonts *FontSet) *PDFRenderer {
+// font families through fonts (nil: Standard 14 only) and image bytes through
+// images (nil: a fresh set).
+func NewPDFRenderer(cr *creator.Creator, fonts *FontSet, images *ImageSet) *PDFRenderer {
 	if fonts == nil {
 		fonts = NewFontSet(nil, "")
 	}
-	return &PDFRenderer{cr: cr, fonts: fonts}
+	if images == nil {
+		images = NewImageSet()
+	}
+	return &PDFRenderer{cr: cr, fonts: fonts, images: images}
 }
 
 // RenderDocument walks all PageLayouts, creating one creator.Page per layout
@@ -50,7 +57,8 @@ func (r *PDFRenderer) RenderDocument(pages []layout.PageLayout, meta metadata) e
 		return err
 	}
 
-	for _, pl := range pages {
+	var errs []error
+	for n, pl := range pages {
 		page, err := r.cr.NewPageWithDimensions(pl.Size.Width, pl.Size.Height)
 		if err != nil {
 			return fmt.Errorf("create page (%.0fx%.0f): %w", pl.Size.Width, pl.Size.Height, err)
@@ -59,12 +67,16 @@ func (r *PDFRenderer) RenderDocument(pages []layout.PageLayout, meta metadata) e
 			page:       page,
 			pageHeight: pl.Size.Height,
 			fonts:      r.fonts,
+			images:     r.images,
 		}
 		for i := range pl.Blocks {
 			pr.renderBlock(&pl.Blocks[i])
 		}
+		for _, err := range pr.errs {
+			errs = append(errs, fmt.Errorf("page %d: %w", n+1, err))
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // metadata holds document-level metadata for PDF generation.
@@ -86,6 +98,10 @@ type pageRenderer struct {
 	page       *creator.Page
 	pageHeight float64
 	fonts      *FontSet
+	images     *ImageSet
+	// errs collects content that could not be drawn; Build() reports them
+	// instead of returning a PDF that silently lacks the content.
+	errs []error
 }
 
 // renderBlock recursively renders a Block and its children. The baseX and baseY
@@ -234,15 +250,20 @@ func (a *blockAdaptor) DrawLine(x1, y1, x2, y2 float64, color layout.Color, widt
 	})
 }
 
-// DrawImage implements layout.Renderer.
-// TODO(Phase 4): Load image bytes via creator.LoadImageFromBytes and render
-// using creator.Page.DrawImage once the creator exposes byte-loading.
-// For now this emits a placeholder gray rectangle.
+// DrawImage implements layout.Renderer. It embeds data (JPEG or PNG) as an
+// image XObject scaled to width x height. Decoding goes through the shared
+// ImageSet, so the layout's earlier decode of the same bytes is reused and
+// repeated placements share one XObject.
 func (a *blockAdaptor) DrawImage(data []byte, x, y, width, height float64) {
+	img, err := a.pr.images.Load(data)
+	if err != nil {
+		a.pr.errs = append(a.pr.errs, fmt.Errorf("image: %w", err))
+		return
+	}
 	pdfX, pdfYTop := a.toPDFCoords(x, y)
-	pdfY := pdfYTop - height
-	placeholder := creator.Color{R: 0.9, G: 0.9, B: 0.9}
-	_ = a.pr.page.DrawRectFilled(pdfX, pdfY, width, height, placeholder)
+	if err := a.pr.page.DrawImage(img, pdfX, pdfYTop-height, width, height); err != nil {
+		a.pr.errs = append(a.pr.errs, fmt.Errorf("image: %w", err))
+	}
 }
 
 // PushState implements layout.Renderer. Currently a no-op stub; clip state

@@ -345,8 +345,9 @@ func TestBuild_DefaultStyle(t *testing.T) {
 	assertValidPDF(t, pdfBytes)
 }
 
-// TestBuild_ImagePlaceholder verifies image element builds without crashing.
-func TestBuild_ImagePlaceholder(t *testing.T) {
+// TestBuild_ImageBadData verifies that bytes which are not a JPEG or PNG make
+// Build fail instead of producing a PDF without the image (#101).
+func TestBuild_ImageBadData(t *testing.T) {
 	b := builder.NewBuilder()
 	b.Page(func(p *builder.PageBuilder) {
 		p.Content(func(c *builder.Container) {
@@ -355,10 +356,12 @@ func TestBuild_ImagePlaceholder(t *testing.T) {
 	})
 
 	pdfBytes, err := b.Build()
-	if err != nil {
-		t.Fatalf("Build() with image failed: %v", err)
+	if err == nil {
+		t.Fatalf("Build() = %d bytes, nil error; want an image error", len(pdfBytes))
 	}
-	assertValidPDF(t, pdfBytes)
+	if !strings.Contains(err.Error(), "image (4 bytes)") {
+		t.Errorf("error %q does not name the image", err)
+	}
 }
 
 // TestBuild_LongDocument verifies pagination works across many paragraphs.
