@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Builder images were never embedded** (#101). `Container.Image` drew a grey rectangle in place of the image, sized it with a guessed 2:1 aspect ratio, and `Build()` returned no error. The image is now embedded (JPEG as it is, PNG with its transparency mask) in headers, footers, rows, columns and table cells. `FitWidth` and `FitHeight` keep the image's aspect ratio; with both, the image fits inside that box. Without options an image takes its pixel size (1 pixel = 1 point), never wider than the available width; an image taller than a page is scaled down to the page. Bytes that are not a JPEG or PNG make `Build()` return an error.
 - **An image drawn several times was stored several times**: every placement wrote its own copy of the image data, so a logo in the header of a 50-page document was embedded 50 times. Each distinct image is now written once and shared by all placements (creator `Page.DrawImage` and builder).
 - **CJK line breaking in builder text**: a word containing CJK characters always started a new line, even when it fit on the current one. CJK text now continues the line and wraps between characters, without starting a line with closing punctuation (、。」）！？) or ending one with opening punctuation (「（). Rich text wraps CJK text too (it used to run past the line), CJK cells no longer make `Auto` table columns as wide as their whole text, and text continued on the next page no longer gains a space at each CJK line break.
-- **Form XObject text geometry** — compose page `cm`, Form `/Matrix`, and nested glyph transforms for unit-sized positioned text; isolate Form graphics state, use embedded font widths, and bound hostile composite `/W` ranges (#89)
+- **Form XObject text geometry** — compose page `cm`, Form `/Matrix`, and nested glyph transforms for unit-sized positioned text; isolate Form graphics state, use embedded font widths, and store hostile composite `/W` ranges without per-CID expansion (#89).
 
 ### Security
 - **Out-of-memory crash on a PDF with a huge `/Length`** (#92, by @chiliec). A stream's `/Length` sized the read buffer directly, so a few-hundred-byte PDF declaring `/Length 9000000000` made opening it or reading a page try to allocate ~9 GB and crash the process. Content streams and both XRef stream paths now read only the bytes actually present and report the length mismatch as an error.
@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Pages are indexed once; parsed Form XObject content is cached per page (2,000 invocations of one Form: 115–184 ms → 15–18 ms).
 - deps: testify v1.11.1 → v1.12.1, excelize v2.10.0 → v2.11.0.
+
 ---
 
 ## [0.9.4] - 2026-08-02
