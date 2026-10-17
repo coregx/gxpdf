@@ -79,8 +79,8 @@ func (m Matrix) isFinite() bool {
 
 // Multiply multiplies this matrix by another matrix (m * other).
 //
-// Matrix multiplication is used to combine transformations. PDF matrices use
-// row-vector order, so m.Multiply(other) applies m first, then other.
+// Matrix multiplication is used to combine transformations. Matrices act on
+// column vectors, so m.Multiply(other) applies other first, then m.
 //
 // The formula for matrix multiplication:
 //
@@ -91,12 +91,12 @@ func (m Matrix) isFinite() bool {
 // Reference: PDF 1.7 specification, Section 8.3.4 (Transformation Matrices).
 func (m Matrix) Multiply(other Matrix) Matrix {
 	return Matrix{
-		A: m.A*other.A + m.B*other.C,
-		B: m.A*other.B + m.B*other.D,
-		C: m.C*other.A + m.D*other.C,
-		D: m.C*other.B + m.D*other.D,
-		E: m.E*other.A + m.F*other.C + other.E,
-		F: m.E*other.B + m.F*other.D + other.F,
+		A: m.A*other.A + m.C*other.B,
+		B: m.B*other.A + m.D*other.B,
+		C: m.A*other.C + m.C*other.D,
+		D: m.B*other.C + m.D*other.D,
+		E: m.A*other.E + m.C*other.F + m.E,
+		F: m.B*other.E + m.D*other.F + m.F,
 	}
 }
 
@@ -208,13 +208,13 @@ func (ts *TextState) SetTextMatrix(a, b, c, d, e, f float64) {
 //
 // The Td operator updates both the text matrix and text line matrix:
 //
-//	Tlm = [1 0 0 1 tx ty] * Tlm
+//	Tlm = Tlm * [1 0 0 1 tx ty]
 //	Tm = Tlm
 //
 // Reference: PDF 1.7 specification, Section 9.4.2 (Text Positioning Operators).
 func (ts *TextState) Translate(tx, ty float64) {
 	translation := Translation(tx, ty)
-	ts.Tlm = translation.Multiply(ts.Tlm)
+	ts.Tlm = ts.Tlm.Multiply(translation)
 	ts.Tm = ts.Tlm
 	ts.updateCurrentPosition()
 }
@@ -267,7 +267,7 @@ func (ts *TextState) updateCurrentPosition() {
 func (ts *TextState) AdvanceX(width float64) {
 	// Update text matrix by translating in text space
 	translation := Translation(width, 0)
-	ts.Tm = translation.Multiply(ts.Tm)
+	ts.Tm = ts.Tm.Multiply(translation)
 	ts.updateCurrentPosition()
 }
 

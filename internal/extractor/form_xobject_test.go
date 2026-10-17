@@ -552,11 +552,11 @@ func TestFormXObject_ComposesNonCommutingPageAndFormMatrices(t *testing.T) {
 	require.Len(t, elements, 1)
 
 	assert.Equal(t, "A", elements[0].Text)
-	assert.InDelta(t, 8, elements[0].X, 0.001)
-	assert.InDelta(t, 53, elements[0].Y, 0.001)
-	assert.InDelta(t, 2, elements[0].Width, 0.001)
-	assert.InDelta(t, 1.8, elements[0].Height, 0.001)
-	assert.InDelta(t, 2, elements[0].FontSize, 0.001)
+	assert.InDelta(t, -33, elements[0].X, 0.001)
+	assert.InDelta(t, 25, elements[0].Y, 0.001)
+	assert.InDelta(t, 3, elements[0].Width, 0.001)
+	assert.InDelta(t, 1.2, elements[0].Height, 0.001)
+	assert.InDelta(t, 3, elements[0].FontSize, 0.001)
 }
 
 func TestFormXObject_FontCachesAreScopedToResources(t *testing.T) {

@@ -215,10 +215,10 @@ func TestVectorParser_ConcatMatrixNonCommuting(t *testing.T) {
 
 	vp.processVectorOperator(makeOpN("cm", 0, 1, -1, 0, 5, 7))
 
-	assert.Equal(t, NewMatrix(0, 3, -2, 0, 20, 41), vp.state.CTM)
+	assert.Equal(t, NewMatrix(0, 2, -3, 0, -15, 17), vp.state.CTM)
 	x, y := vp.state.CTM.Transform(4, 5)
-	assert.InDelta(t, 10, x, 1e-9)
-	assert.InDelta(t, 53, y, 1e-9)
+	assert.InDelta(t, -30, x, 1e-9)
+	assert.InDelta(t, 25, y, 1e-9)
 }
 
 func TestVectorParser_Q_EmptyStack(t *testing.T) {

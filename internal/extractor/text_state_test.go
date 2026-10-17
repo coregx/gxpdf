@@ -126,18 +126,18 @@ func TestMatrix_Transform(t *testing.T) {
 }
 
 func TestMatrix_Multiply(t *testing.T) {
-	// PDF row-vector order: Translation(100, 200) * Scaling(2, 2)
-	// applies the translation first, then the scale.
+	// Column-vector order: Translation(100, 200) * Scaling(2, 2)
+	// applies the scale first, then the translation.
 	translate := Translation(100, 200)
 	scale := Scaling(2, 2)
 	result := translate.Multiply(scale)
 
 	// Transform (10, 10):
-	// 1. Translate: (10, 10) -> (110, 210)
-	// 2. Scale: (110, 210) -> (220, 420)
+	// 1. Scale: (10, 10) -> (20, 20)
+	// 2. Translate: (20, 20) -> (120, 220)
 	x, y := result.Transform(10, 10)
-	assert.Equal(t, 220.0, x)
-	assert.Equal(t, 420.0, y)
+	assert.Equal(t, 120.0, x)
+	assert.Equal(t, 220.0, y)
 }
 
 func TestMatrix_MultiplyNonCommutingTransforms(t *testing.T) {
@@ -145,13 +145,13 @@ func TestMatrix_MultiplyNonCommutingTransforms(t *testing.T) {
 	second := NewMatrix(0, 1, -1, 0, 5, 7)
 	combined := first.Multiply(second)
 
-	firstX, firstY := first.Transform(4, 5)
-	wantX, wantY := second.Transform(firstX, firstY)
+	secondX, secondY := second.Transform(4, 5)
+	wantX, wantY := first.Transform(secondX, secondY)
 	gotX, gotY := combined.Transform(4, 5)
 
 	assert.InDelta(t, wantX, gotX, 1e-9)
 	assert.InDelta(t, wantY, gotY, 1e-9)
-	assert.Equal(t, NewMatrix(0, 2, -3, 0, -15, 17), combined)
+	assert.Equal(t, NewMatrix(0, 3, -2, 0, 20, 41), combined)
 }
 
 func TestMatrix_MultiplyIdentity(t *testing.T) {
