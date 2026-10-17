@@ -102,11 +102,21 @@ func TestCompositeFontFullCIDRangeHasConstantCardinality(t *testing.T) {
 	assert.Equal(t, float64(500), metrics.width(32_768))
 	assert.Equal(t, float64(500), metrics.width(65_535))
 
-	allocations := testing.AllocsPerRun(100, func() {
+	fullRangeAllocations := testing.AllocsPerRun(100, func() {
 		loaded := (&TextExtractor{}).loadCompositeFontMetrics(font)
 		if len(loaded.intervals) != 1 {
 			t.Fatalf("interval count = %d, want 1", len(loaded.intervals))
 		}
 	})
-	assert.LessOrEqual(t, allocations, float64(3), "full-range parsing must allocate by interval count, not CID count")
+	singleCIDFont := compositeFontWithWidths([]parser.PdfObject{
+		parser.NewInteger(0), parser.NewInteger(0), parser.NewInteger(500),
+	}, 1_000)
+	singleCIDAllocations := testing.AllocsPerRun(100, func() {
+		loaded := (&TextExtractor{}).loadCompositeFontMetrics(singleCIDFont)
+		if len(loaded.intervals) != 1 {
+			t.Fatalf("interval count = %d, want 1", len(loaded.intervals))
+		}
+	})
+	assert.LessOrEqual(t, fullRangeAllocations, singleCIDAllocations+1,
+		"full-range parsing must allocate by interval count, not CID count")
 }
