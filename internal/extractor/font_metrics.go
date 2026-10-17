@@ -82,9 +82,22 @@ func (te *TextExtractor) loadFontMetrics(fontDict *parser.Dictionary) *fontMetri
 	}
 
 	if subtype, ok := fontDict.Get("Subtype").(*parser.Name); ok && subtype.Value() == type0FontSubtype {
+		// /W is keyed by CID, not by the character code in a Tj/TJ string.
+		// Identity-H/V make code == CID. Other Encoding CMaps require parsing
+		// their code-to-CID mapping first; until then, retain the established
+		// estimated-width path rather than claiming a wrong precise width.
+		if !te.type0UsesIdentityCIDEncoding(fontDict) {
+			return nil
+		}
 		return te.loadCompositeFontMetrics(fontDict)
 	}
 	return te.loadSimpleFontMetrics(fontDict)
+}
+
+func (te *TextExtractor) type0UsesIdentityCIDEncoding(fontDict *parser.Dictionary) bool {
+	encoding := resolveObject(te.reader, fontDict.Get("Encoding"))
+	name, ok := encoding.(*parser.Name)
+	return ok && (name.Value() == "Identity-H" || name.Value() == "Identity-V")
 }
 
 func (te *TextExtractor) loadSimpleFontMetrics(fontDict *parser.Dictionary) *fontMetrics {

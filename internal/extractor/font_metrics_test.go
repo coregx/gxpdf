@@ -120,3 +120,41 @@ func TestCompositeFontFullCIDRangeHasConstantCardinality(t *testing.T) {
 	assert.LessOrEqual(t, fullRangeAllocations, singleCIDAllocations+1,
 		"full-range parsing must allocate by interval count, not CID count")
 }
+
+func TestLoadFontMetricsUsesCompositeWidthsForIdentityEncoding(t *testing.T) {
+	font := compositeFontWithWidths([]parser.PdfObject{
+		parser.NewInteger(65), parser.NewArrayFromSlice([]parser.PdfObject{parser.NewInteger(1_000)}),
+	}, 500)
+	font.Set("Subtype", parser.NewName(type0FontSubtype))
+	font.Set("Encoding", parser.NewName("Identity-H"))
+
+	metrics := (&TextExtractor{}).loadFontMetrics(font)
+	require.NotNil(t, metrics)
+	assert.True(t, metrics.precise)
+	assert.Equal(t, float64(1_000), metrics.width(65))
+}
+
+func TestLoadFontMetricsRejectsNonIdentityCompositeCodeWidths(t *testing.T) {
+	font := compositeFontWithWidths([]parser.PdfObject{
+		parser.NewInteger(65), parser.NewArrayFromSlice([]parser.PdfObject{parser.NewInteger(1_000)}),
+	}, 500)
+	font.Set("Subtype", parser.NewName(type0FontSubtype))
+	// This Encoding CMap maps character code 1 to CID 65. Reading /W with the
+	// raw code would incorrectly use /DW=500 instead of CID 65's width=1000.
+	font.Set("Encoding", parser.NewStream(parser.NewDictionary(), []byte(
+		"begincmap 1 begincidchar <0001> 65 endcidchar endcmap",
+	)))
+
+	extractor := NewTextExtractor(nil)
+	assert.Nil(t, extractor.loadFontMetrics(font))
+
+	decoder := NewFontDecoder(nil, "Custom-H", true)
+	decoder.isCompositeFont = true
+	extractor.textState.SetFont("F1", 10)
+	extractor.fontDecoders["F1"] = decoder
+	extractor.fontMetrics["F1"] = nil
+	advance, width, precise := extractor.measureGlyphBytes([]byte{0, 1})
+	assert.False(t, precise)
+	assert.InDelta(t, 6, advance, 1e-9)
+	assert.InDelta(t, 6, width, 1e-9)
+}
