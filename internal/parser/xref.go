@@ -517,10 +517,17 @@ func (p *Parser) ParseXRefStreamWithFileAccess(file io.ReadSeeker, xrefOffset in
 		return nil, fmt.Errorf("failed to seek to stream data: %w", err)
 	}
 
-	// Read stream data
-	streamData := make([]byte, length)
-	if _, err := io.ReadFull(file, streamData); err != nil {
+	// Read stream data. length comes from the untrusted /Length entry, so it
+	// must not size an allocation directly: io.ReadAll over a LimitReader grows
+	// the buffer to the bytes actually present, so a stream claiming a huge
+	// length but backed by a short body cannot force a multi-gigabyte
+	// allocation before the length mismatch is detected below.
+	streamData, err := io.ReadAll(io.LimitReader(file, length))
+	if err != nil {
 		return nil, fmt.Errorf("failed to read stream data: %w", err)
+	}
+	if int64(len(streamData)) != length {
+		return nil, fmt.Errorf("expected %d bytes, got %d", length, len(streamData))
 	}
 
 	// Decode the stream based on filter
@@ -735,14 +742,17 @@ func (p *Parser) parseStreamData(dict *Dictionary) ([]byte, error) {
 		return nil, fmt.Errorf("expected newline after 'stream', got byte %02x", buf[0])
 	}
 
-	// Read stream data
-	data := make([]byte, length)
-	n, err = io.ReadFull(p.lexer.reader, data)
+	// Read stream data. length comes from the untrusted /Length entry, so it
+	// must not size an allocation directly: io.ReadAll over a LimitReader grows
+	// the buffer to the bytes actually present, so a stream claiming a huge
+	// length but backed by a short body cannot force a multi-gigabyte
+	// allocation before the length mismatch is detected below.
+	data, err := io.ReadAll(io.LimitReader(p.lexer.reader, length))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read stream data (length=%d): %w", length, err)
 	}
-	if int64(n) != length {
-		return nil, fmt.Errorf("stream length mismatch: expected %d bytes, got %d", length, n)
+	if int64(len(data)) != length {
+		return nil, fmt.Errorf("stream length mismatch: expected %d bytes, got %d", length, len(data))
 	}
 
 	// Now we should skip forward to find 'endstream'

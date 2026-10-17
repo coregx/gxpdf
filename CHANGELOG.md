@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An image drawn several times was stored several times**: every placement wrote its own copy of the image data, so a logo in the header of a 50-page document was embedded 50 times. Each distinct image is now written once and shared by all placements (creator `Page.DrawImage` and builder).
 - **CJK line breaking in builder text**: a word containing CJK characters always started a new line, even when it fit on the current one. CJK text now continues the line and wraps between characters, without starting a line with closing punctuation (、。」）！？) or ending one with opening punctuation (「（). Rich text wraps CJK text too (it used to run past the line), CJK cells no longer make `Auto` table columns as wide as their whole text, and text continued on the next page no longer gains a space at each CJK line break.
 
+### Security
+- **Out-of-memory crash on a PDF with a huge `/Length`** (#92, by @chiliec). A stream's `/Length` sized the read buffer directly, so a few-hundred-byte PDF declaring `/Length 9000000000` made opening it or reading a page try to allocate ~9 GB and crash the process. Content streams and both XRef stream paths now read only the bytes actually present and report the length mismatch as an error.
+
 ## [0.9.6] - 2026-10-16
 
 ### Fixed
