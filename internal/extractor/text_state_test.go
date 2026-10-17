@@ -140,10 +140,10 @@ func TestMatrix_Multiply(t *testing.T) {
 	assert.Equal(t, 220.0, y)
 }
 
-func TestMatrix_MultiplyNonCommutingTransforms(t *testing.T) {
+func TestMatrix_ComposeColumnAffineNonCommutingTransforms(t *testing.T) {
 	first := NewMatrix(2, 0, 0, 3, 10, 20)
 	second := NewMatrix(0, 1, -1, 0, 5, 7)
-	combined := first.Multiply(second)
+	combined := first.composeColumnAffine(second)
 
 	secondX, secondY := second.Transform(4, 5)
 	wantX, wantY := first.Transform(secondX, secondY)

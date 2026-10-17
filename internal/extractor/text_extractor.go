@@ -607,7 +607,7 @@ func (te *TextExtractor) processOperator(op *Operator) {
 				operand := NewMatrix(*values[0], *values[1], *values[2], *values[3], *values[4], *values[5])
 				// Text geometry maps glyph space outward through each enclosing
 				// transform, so append this local operand to the accumulated CTM.
-				combined := te.ctm.Multiply(operand)
+				combined := te.ctm.composeColumnAffine(operand)
 				if operand.isFinite() && combined.isFinite() {
 					te.ctm = combined
 				}
@@ -947,7 +947,7 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 		return
 	}
 	// The Form matrix maps Form space into its caller's current user space.
-	combinedCTM := te.ctm.Multiply(formMatrix)
+	combinedCTM := te.ctm.composeColumnAffine(formMatrix)
 	if !combinedCTM.isFinite() {
 		return
 	}

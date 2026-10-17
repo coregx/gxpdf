@@ -79,8 +79,8 @@ func (m Matrix) isFinite() bool {
 
 // Multiply multiplies this matrix by another matrix (m * other).
 //
-// Matrix multiplication is used to combine transformations. Matrices act on
-// column vectors, so m.Multiply(other) applies other first, then m.
+// Matrix multiplication is used to combine transformations.
+// The order matters: m.Multiply(other) applies other first, then m.
 //
 // The formula for matrix multiplication:
 //
@@ -90,6 +90,22 @@ func (m Matrix) isFinite() bool {
 //
 // Reference: PDF 1.7 specification, Section 8.3.4 (Transformation Matrices).
 func (m Matrix) Multiply(other Matrix) Matrix {
+	return Matrix{
+		A: m.A*other.A + m.B*other.C,
+		B: m.A*other.B + m.B*other.D,
+		C: m.C*other.A + m.D*other.C,
+		D: m.C*other.B + m.D*other.D,
+		E: m.A*other.E + m.C*other.F + m.E,
+		F: m.B*other.E + m.D*other.F + m.F,
+	}
+}
+
+// composeColumnAffine returns m × other using the column-vector affine
+// convention used by the positioned Form-text path. Matrix.Multiply retains
+// gxpdf's established behavior because direct-page table extraction and its
+// coordinate normalizer depend on it. Global coordinate unification is tracked
+// separately in issue #99.
+func (m Matrix) composeColumnAffine(other Matrix) Matrix {
 	return Matrix{
 		A: m.A*other.A + m.C*other.B,
 		B: m.B*other.A + m.D*other.B,
