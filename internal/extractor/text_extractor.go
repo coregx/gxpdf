@@ -605,7 +605,9 @@ func (te *TextExtractor) processOperator(op *Operator) {
 			if values[0] != nil && values[1] != nil && values[2] != nil &&
 				values[3] != nil && values[4] != nil && values[5] != nil {
 				operand := NewMatrix(*values[0], *values[1], *values[2], *values[3], *values[4], *values[5])
-				combined := te.ctm.Multiply(operand)
+				// Match GraphicsParser and VectorParser: PDF cm pre-concatenates
+				// its operand, so new CTM = operand × current CTM.
+				combined := operand.Multiply(te.ctm)
 				if operand.isFinite() && combined.isFinite() {
 					te.ctm = combined
 				}
@@ -944,7 +946,8 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 	if !validMatrix {
 		return
 	}
-	combinedCTM := te.ctm.Multiply(formMatrix)
+	// Painting a Form concatenates its /Matrix in the same order as cm.
+	combinedCTM := formMatrix.Multiply(te.ctm)
 	if !combinedCTM.isFinite() {
 		return
 	}

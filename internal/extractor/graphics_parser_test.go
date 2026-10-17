@@ -375,6 +375,18 @@ func TestConcatMatrix_Translation(t *testing.T) {
 	assert.InDelta(t, 40.0, gp.state.CTM.F, 1e-6, "translation f must be 40")
 }
 
+func TestGraphicsParser_ConcatMatrixNonCommuting(t *testing.T) {
+	gp := &GraphicsParser{state: NewGraphicsState()}
+	gp.state.CTM = NewMatrix(2, 0, 0, 3, 10, 20)
+
+	gp.processOperator(gpOpN("cm", 0, 1, -1, 0, 5, 7))
+
+	assert.Equal(t, NewMatrix(0, 3, -2, 0, 20, 41), gp.state.CTM)
+	x, y := gp.state.CTM.Transform(4, 5)
+	assert.InDelta(t, 10, x, 1e-9)
+	assert.InDelta(t, 53, y, 1e-9)
+}
+
 // TestSaveRestoreState verifies that q/Q operators correctly save and restore
 // the graphics state including CTM. After Q the previous CTM must be active.
 func TestSaveRestoreState(t *testing.T) {

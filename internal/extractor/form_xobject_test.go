@@ -135,6 +135,24 @@ func buildSimpleFontXObjectPDF(t *testing.T) []byte {
 	return b.finalize(catalogN)
 }
 
+func buildNonCommutingFormMatrixPDF(t *testing.T) []byte {
+	t.Helper()
+	b := newXObjPDFBuilder(15)
+	fontN := b.addRaw("<< /Type /Font /Subtype /TrueType /BaseFont /Test /FirstChar 65 /LastChar 65 /Widths [600] >>")
+	formN := b.addStream(
+		fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 612 792] /Matrix [0 1 -1 0 5 7] /Resources << /Font << /F1 %d 0 R >> >>", fontN),
+		[]byte("BT /F1 1 Tf 1 0 0 1 4 5 Tm (A) Tj ET"),
+	)
+	pageContentN := b.addStream("", []byte("2 0 0 3 10 20 cm /Fm Do"))
+	pageN := b.addRaw(fmt.Sprintf(
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Fm %d 0 R >> >> /Contents %d 0 R >>",
+		formN, pageContentN,
+	))
+	pagesN := b.addRaw(fmt.Sprintf("<< /Type /Pages /Kids [%d 0 R] /Count 1 >>", pageN))
+	catalogN := b.addRaw(fmt.Sprintf("<< /Type /Catalog /Pages %d 0 R >>", pagesN))
+	return b.finalize(catalogN)
+}
+
 // buildUnbalancedRestoreXObjectPDF places an unmatched Q at the start of a
 // Form. PDF Form execution has its own graphics-state stack, so that malformed
 // operator must not consume the page's surrounding q or change later geometry.
@@ -525,6 +543,20 @@ func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestFormXObject_ComposesNonCommutingPageAndFormMatrices(t *testing.T) {
+	reader := openPDFBytes(t, buildNonCommutingFormMatrixPDF(t))
+	elements, err := NewTextExtractor(reader).ExtractFromPage(0)
+	require.NoError(t, err)
+	require.Len(t, elements, 1)
+
+	assert.Equal(t, "A", elements[0].Text)
+	assert.InDelta(t, 8, elements[0].X, 0.001)
+	assert.InDelta(t, 53, elements[0].Y, 0.001)
+	assert.InDelta(t, 2, elements[0].Width, 0.001)
+	assert.InDelta(t, 1.8, elements[0].Height, 0.001)
+	assert.InDelta(t, 2, elements[0].FontSize, 0.001)
 }
 
 func TestFormXObject_FontCachesAreScopedToResources(t *testing.T) {

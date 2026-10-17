@@ -209,6 +209,18 @@ func TestVectorParser_GraphicsStateStack(t *testing.T) {
 	assert.InDelta(t, 1.0, vp.state.LineWidth, 1e-9, "line width should be restored after Q")
 }
 
+func TestVectorParser_ConcatMatrixNonCommuting(t *testing.T) {
+	vp := makeVectorParser()
+	vp.state.CTM = NewMatrix(2, 0, 0, 3, 10, 20)
+
+	vp.processVectorOperator(makeOpN("cm", 0, 1, -1, 0, 5, 7))
+
+	assert.Equal(t, NewMatrix(0, 3, -2, 0, 20, 41), vp.state.CTM)
+	x, y := vp.state.CTM.Transform(4, 5)
+	assert.InDelta(t, 10, x, 1e-9)
+	assert.InDelta(t, 53, y, 1e-9)
+}
+
 func TestVectorParser_Q_EmptyStack(t *testing.T) {
 	// Q on empty stack — should not panic.
 	vp := makeVectorParser()
