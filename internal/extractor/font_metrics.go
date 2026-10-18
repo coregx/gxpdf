@@ -192,9 +192,9 @@ func (te *TextExtractor) loadCompositeFontMetrics(fontDict *parser.Dictionary) *
 			break
 		}
 		last := lastObj.Value()
-		// CID values are unsigned 16-bit identifiers. Clamp both ends before
-		// iterating so a hostile negative cFirst cannot turn a malformed /W
-		// range into billions of no-op loop iterations.
+		// CID values are unsigned 16-bit identifiers. Clamp the interval to
+		// that domain before storing it; range widths are never expanded
+		// into one entry per CID.
 		if first < 0 {
 			first = 0
 		}
