@@ -769,11 +769,17 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 	// Decode glyph bytes to Unicode text
 	decodedText := te.decodeTextBytes(glyphBytes)
 
-	advance, width, precise := te.measureGlyphBytes(glyphBytes)
 	positionedFormGeometry := te.usesPositionedFormGeometry()
-	if !positionedFormGeometry {
+	var advance, width float64
+	precise := false
+	if positionedFormGeometry {
+		advance, width, precise = te.measureGlyphBytes(glyphBytes)
+	} else {
+		// Direct-page and larger Form text retain the established estimated
+		// geometry. Do not compute authoritative widths only to discard them:
+		// that path is reserved for positioned Form glyphs.
 		width = float64(len(decodedText)) * te.textState.FontSize * 0.6 * (te.textState.HorizScale / 100.0)
-		advance, precise = width, false
+		advance = width
 	}
 	x, y := te.textState.CurrentX, te.textState.CurrentY
 	height, effectiveFontSize := te.textState.FontSize, te.textState.FontSize
@@ -1185,6 +1191,11 @@ func (te *TextExtractor) getPageResources(page *parser.Dictionary) *parser.Dicti
 // a default decoder that will use fallback encoding (Latin-1).
 func (te *TextExtractor) loadFontDecoder(fontName string) {
 	if _, exists := te.fontDecoders[fontName]; exists {
+		// fontDecoders contains bindings for the current Resources dictionary,
+		// not a page-global name cache. Entering a Form with its own Resources
+		// replaces this map and restores it on return, so an existing local name
+		// already identifies the correct font for this scope. Cross-scope reuse
+		// happens below through fontCache, keyed by resolved dictionary identity.
 		return
 	}
 

@@ -595,6 +595,8 @@ func TestFontCacheUsesResolvedIdentityAcrossResourceAliases(t *testing.T) {
 	firstMetrics := extractor.fontMetrics["F1"]
 	require.NotNil(t, firstDecoder)
 	require.NotNil(t, firstMetrics)
+	extractor.loadFontDecoder("F1")
+	assert.Equal(t, 1, extractor.fontCacheLoads, "a local resource binding must return from its scoped cache")
 
 	// Entering a resource scope creates new local-name bindings, while the
 	// resolved-font cache remains shared for the page.
@@ -686,25 +688,51 @@ func TestGraphicsStateRestoresTextParametersButNotTextMatrix(t *testing.T) {
 	assert.InDelta(t, 40, extractor.textState.CurrentY, 0.001, "q/Q must not restore the text matrix")
 }
 
-func TestPositionedTJAdjustmentHonorsHorizontalScaling(t *testing.T) {
-	extractor := NewTextExtractor(nil)
-	extractor.xobjectDepth = 1
-	extractor.ctm = Scaling(10, 10)
-	extractor.textState.SetFont("F1", 1)
-	extractor.textState.HorizScale = 50
-	extractor.fontMetrics["F1"] = &fontMetrics{
-		widths:       map[uint16]float64{65: 600, 66: 600},
-		defaultWidth: 600,
-		precise:      true,
+func TestTJAdjustmentHonorsHorizontalScaling(t *testing.T) {
+	tests := []struct {
+		name            string
+		positionedForm  bool
+		horizontalScale float64
+		adjustment      int64
+		wantSecondX     float64
+	}{
+		{name: "direct negative at fifty percent", horizontalScale: 50, adjustment: -100, wantSecondX: 3.5},
+		{name: "direct positive at fifty percent", horizontalScale: 50, adjustment: 100, wantSecondX: 2.5},
+		{name: "direct negative at two hundred percent", horizontalScale: 200, adjustment: -100, wantSecondX: 14},
+		{name: "positioned Form negative at fifty percent", positionedForm: true, horizontalScale: 50, adjustment: -100, wantSecondX: 5.5},
+		{name: "positioned Form positive at fifty percent", positionedForm: true, horizontalScale: 50, adjustment: 100, wantSecondX: 4.5},
+		{name: "positioned Form negative at two hundred percent", positionedForm: true, horizontalScale: 200, adjustment: -100, wantSecondX: 22},
 	}
-	items := parser.NewArrayFromSlice([]parser.PdfObject{
-		parser.NewString("A"), parser.NewInteger(-100), parser.NewString("B"),
-	})
 
-	extractor.processTextArray(items)
-	require.Len(t, extractor.elements, 2)
-	assert.InDelta(t, 0, extractor.elements[0].X, 0.001)
-	assert.InDelta(t, 3.5, extractor.elements[1].X, 0.001)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			extractor := NewTextExtractor(nil)
+			fontSize := 10.0
+			if test.positionedForm {
+				extractor.xobjectDepth = 1
+				extractor.ctm = Scaling(10, 10)
+				fontSize = 1
+			}
+			extractor.textState.SetFont("F1", fontSize)
+			extractor.textState.HorizScale = test.horizontalScale
+			extractor.fontMetrics["F1"] = &fontMetrics{
+				// Deliberately differs from the legacy 600-unit estimate:
+				// direct text retains that estimate, while positioned Forms use
+				// this authoritative width.
+				widths:       map[uint16]float64{65: 1_000, 66: 1_000},
+				defaultWidth: 1_000,
+				precise:      true,
+			}
+			items := parser.NewArrayFromSlice([]parser.PdfObject{
+				parser.NewString("A"), parser.NewInteger(test.adjustment), parser.NewString("B"),
+			})
+
+			extractor.processTextArray(items)
+			require.Len(t, extractor.elements, 2)
+			assert.InDelta(t, 0, extractor.elements[0].X, 0.001)
+			assert.InDelta(t, test.wantSecondX, extractor.elements[1].X, 0.001)
+		})
+	}
 }
 
 func TestPositionedFormGeometryRejectsNonFiniteBounds(t *testing.T) {
