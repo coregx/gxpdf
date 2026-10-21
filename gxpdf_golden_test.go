@@ -319,3 +319,20 @@ func TestGolden_Issue79_AutoMode(t *testing.T) {
 		opts,
 	)
 }
+
+// TestGolden_TransformedTextLattice freezes the public table handoff where
+// direct-page rulings/header text and nested-Form body text share a nonidentity
+// page CTM and a nonzero MediaBox origin.
+func TestGolden_TransformedTextLattice(t *testing.T) {
+	opts := DefaultExtractionOptions().
+		WithMethod(MethodLattice).
+		WithPages(0)
+
+	runGoldenTest(t,
+		"transformed_text_lattice_table0",
+		latticeFixture,
+		0,
+		0,
+		opts,
+	)
+}

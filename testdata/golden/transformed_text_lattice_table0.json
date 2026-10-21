@@ -1,0 +1,37 @@
+{
+  "pdf": "testdata/pdfs/transformed_text_lattice.pdf",
+  "page": 0,
+  "method": "Lattice",
+  "rows": 2,
+  "cols": 2,
+  "cells": [
+    {
+      "row": 0,
+      "col": 0,
+      "text": "Line Item",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "text": "2024",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "text": "Revenue",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "text": "1200",
+      "rowSpan": 1,
+      "colSpan": 1
+    }
+  ]
+}

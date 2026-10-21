@@ -1,0 +1,84 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [8 0 R 10 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /TrueType /BaseFont /Synthetic /FirstChar 32 /LastChar 126 /Widths [600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600 600] >>
+endobj
+4 0 obj
+<< /Type /XObject /Subtype /Form /BBox [-200 -200 1000 1000] /Matrix [1 0 0 1 0 0] /Resources << /Font << /F1 3 0 R /F2 3 0 R >>  >> /Length 87 >>
+stream
+BT /F2 10 Tf 1 0 0 1 15 5 Tm (Revenue) Tj ET
+BT /F2 10 Tf 1 0 0 1 115 5 Tm (1200) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /XObject /Subtype /Form /BBox [-200 -200 1000 1000] /Matrix [1 0 0 1 0 0] /Resources << /Font << /F1 3 0 R /F2 3 0 R >> /XObject << /Body 4 0 R >> >> /Length 8 >>
+stream
+/Body Do
+endstream
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [-200 -200 1000 1000] /Matrix [1 0 0 1 0 0] /Resources << /Font << /F1 3 0 R /F2 3 0 R >>  >> /Length 118 >>
+stream
+BT /F2 10 Tf 4 Tw 1 0 0 1 130 10 Tm (A ) Tj (B) Tj 1 0 0 1 130 25 Tm (C) Tj ( D) Tj 1 0 0 1 130 40 Tm (E) Tj (F) Tj ET
+endstream
+endobj
+7 0 obj
+<<  /Length 235 >>
+stream
+q 1.5 0 0 2 30 40 cm
+0 0 m 160 0 l S 0 20 m 160 20 l S 0 40 m 160 40 l S
+0 -40 m 0 80 l S 100 -40 m 100 80 l S 160 -40 m 160 80 l S
+BT /F1 10 Tf 1 0 0 1 15 25 Tm (Line Item) Tj ET
+BT /F1 10 Tf 1 0 0 1 115 25 Tm (2024) Tj ET
+/Outer Do
+Q
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [-20 10 500 700] /Resources << /Font << /F1 3 0 R >> /XObject << /Outer 5 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<<  /Length 661 >>
+stream
+0 0 m 240 0 l S 0 60 m 240 60 l S 0 120 m 240 120 l S
+0 -120 m 0 240 l S 120 -120 m 120 240 l S 240 -120 m 240 240 l S
+BT /F1 4 Tf 0 1 -1 0 110 65 Tm (Note) Tj ET
+BT /F1 10 Tf -1 0 0 1 100 80 Tm (Net) Tj ET
+BT /F1 10 Tf -1 0 0 1 55 80 Tm (Income) Tj ET
+BT /F1 10 Tf -1 0 0 1 100 100 Tm (Gross) Tj ET
+BT /F1 10 Tf -1 0 0 1 65 100 Tm (Profit) Tj ET
+BT /F1 5 Tf 0 1 -1 0 200 70 Tm (Second) Tj ET
+BT /F1 5 Tf 0 1 -1 0 200 105 Tm (Line) Tj ET
+BT /F1 5 Tf 0 1 -1 0 160 70 Tm (Rotated) Tj ET
+BT /F1 5 Tf 0 1 -1 0 160 105 Tm (Header) Tj ET
+BT /F1 10 Tf 4 Tw 1 0 0 1 10 10 Tm (A ) Tj (B) Tj 1 0 0 1 10 25 Tm (C) Tj ( D) Tj 1 0 0 1 10 40 Tm (E) Tj (F) Tj ET
+/SpaceBody Do
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 180] /Resources << /Font << /F1 3 0 R >> /XObject << /SpaceBody 6 0 R >> >> /Contents 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f
+0000000015 00000 n
+0000000064 00000 n
+0000000128 00000 n
+0000000619 00000 n
+0000000886 00000 n
+0000001099 00000 n
+0000001398 00000 n
+0000001685 00000 n
+0000001842 00000 n
+0000002555 00000 n
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+2714
+%%EOF

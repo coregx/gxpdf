@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"math"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/coregx/gxpdf/internal/parser"
 	"github.com/coregx/gxpdf/logging"
@@ -41,13 +43,6 @@ const wordSpaceGapFactor = 1.0
 // widths. Exact widths let us preserve real word gaps without the generous
 // tolerance required by the legacy estimated-width path.
 const preciseGlyphGapFactor = 0.2
-
-// positionedGlyphFontSizeLimit identifies the Form-XObject pattern emitted by
-// Quartz and similar generators: every glyph uses a unit-sized font and a cm
-// matrix supplies the actual size and position. Direct-page/larger text keeps
-// the established raw-coordinate behavior until gxpdf's graphics and lattice
-// coordinate paths can migrate together without changing existing tables.
-const positionedGlyphFontSizeLimit = 2.0
 
 // maxXObjectDepth limits Form XObject nesting.
 //
@@ -262,13 +257,13 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 // elements with a separating space they produce "D O M I C I L I O"
 // instead of "DOMICILIO".
 //
-// The function groups consecutive elements that:
-//   - Share the same font and approximate Y coordinate (same text line), and
-//   - Have a gap between the right edge of the previous element and the left
-//     edge of the current one that is at most glyphMergeGapFactor × fontSize.
+// Extracted elements are compared along their transformed baselines, so scale,
+// rotation, reflection, and shear do not change line or gap classification.
+// Manually constructed legacy elements without affine metadata retain the
+// established horizontal axis-aligned behavior.
 //
-// Merged elements receive the concatenated text, the X/Y of the first element,
-// and a combined width. Elements separated by a larger gap are kept distinct
+// Merged elements receive the concatenated text and the union of the painted
+// page-space envelopes. Elements separated by a larger gap are kept distinct
 // (word boundary) so that word-spacing logic in callers remains correct.
 //
 // This operation is idempotent: running it on already-merged output is a no-op.
@@ -283,17 +278,7 @@ func mergeAdjacentElements(elements []*TextElement) []*TextElement {
 	for _, next := range elements[1:] {
 		// Determine whether 'next' should be merged into 'current'.
 		if canMerge(current, next) {
-			// Extend current element: append text and widen bounding box.
-			current = &TextElement{
-				Text:         current.Text + next.Text,
-				X:            current.X,
-				Y:            current.Y,
-				Width:        (next.X + next.Width) - current.X,
-				Height:       current.Height,
-				FontName:     current.FontName,
-				FontSize:     current.FontSize,
-				preciseWidth: current.preciseWidth && next.preciseWidth,
-			}
+			current = mergedTextRun(current, next)
 		} else {
 			// Word boundary — commit the current run and start a new one.
 			merged = append(merged, current)
@@ -307,15 +292,6 @@ func mergeAdjacentElements(elements []*TextElement) []*TextElement {
 }
 
 // canMerge reports whether two TextElements should be merged into one run.
-//
-// Two elements are merge-candidates when:
-//  1. They share the same font name.
-//  2. Their Y coordinates are within half a font-height of each other
-//     (same text line, tolerating minor baseline shifts from Ts).
-//  3. The gap from the right edge of 'a' to the left edge of 'b' is no wider
-//     than glyphMergeGapFactor × fontSize (intra-word kerning, not a word gap).
-//  4. 'b' starts to the right of 'a' (horizontal flow only; vertical moves
-//     like T* are excluded by the Y-coordinate check).
 func canMerge(a, b *TextElement) bool {
 	// Same font is required — different fonts signal a formatting change.
 	if a.FontName != b.FontName {
@@ -326,6 +302,16 @@ func canMerge(a, b *TextElement) bool {
 	const fontSizeTol = 0.5
 	if a.FontSize-b.FontSize > fontSizeTol || b.FontSize-a.FontSize > fontSizeTol {
 		return false
+	}
+	if sameLine, forward, gap, threshold, ok := affineTextRelation(a, b); ok {
+		if !sameLine || !forward {
+			return false
+		}
+		factor := glyphMergeGapFactor
+		if a.preciseWidth && b.preciseWidth {
+			factor = preciseGlyphGapFactor
+		}
+		return gap <= threshold*factor
 	}
 
 	// Same line: Y coordinates must be within half the font height.
@@ -364,12 +350,55 @@ func canMerge(a, b *TextElement) bool {
 	return gap <= threshold
 }
 
+func mergedTextRun(a, b *TextElement) *TextElement {
+	minX := math.Min(a.Left(), b.Left())
+	minY := math.Min(a.Bottom(), b.Bottom())
+	maxX := math.Max(a.Right(), b.Right())
+	maxY := math.Max(a.Top(), b.Top())
+	merged := &TextElement{
+		Text: a.Text + b.Text,
+		X:    minX, Y: minY, Width: maxX - minX, Height: maxY - minY,
+		FontName: a.FontName, FontSize: a.FontSize,
+		preciseWidth: a.preciseWidth && b.preciseWidth,
+	}
+	if a.flow != nil && b.flow != nil {
+		flow := *a.flow
+		flow.endX, flow.endY = b.flow.endX, b.flow.endY
+		flow.lineHeight = math.Max(a.flow.lineHeight, b.flow.lineHeight)
+		merged.flow = &flow
+	}
+	return merged
+}
+
+// affineTextRelation compares two runs in transformed baseline space. The
+// final bool is false for manually constructed legacy elements.
+func affineTextRelation(a, b *TextElement) (sameLine, forward bool, gap, em float64, ok bool) {
+	if a == nil || b == nil || a.flow == nil || b.flow == nil {
+		return false, false, 0, 0, false
+	}
+	directionDot := a.flow.directionX*b.flow.directionX + a.flow.directionY*b.flow.directionY
+	if directionDot < 0.995 {
+		return false, false, 0, a.flow.emAdvance, true
+	}
+	deltaStartX := b.flow.originX - a.flow.originX
+	deltaStartY := b.flow.originY - a.flow.originY
+	alongStart := deltaStartX*a.flow.directionX + deltaStartY*a.flow.directionY
+	crossStart := math.Abs(deltaStartX*(-a.flow.directionY) + deltaStartY*a.flow.directionX)
+	lineTolerance := math.Max(a.flow.lineHeight, b.flow.lineHeight) * 0.5
+	if lineTolerance < 0.25 {
+		lineTolerance = 0.25
+	}
+	deltaEndX := b.flow.originX - a.flow.endX
+	deltaEndY := b.flow.originY - a.flow.endY
+	gap = deltaEndX*a.flow.directionX + deltaEndY*a.flow.directionY
+	return crossStart <= lineTolerance, alongStart >= -lineTolerance, gap, a.flow.emAdvance, true
+}
+
 // AssembleText converts a slice of TextElements into a readable string.
 //
-// Word boundaries are detected spatially: when the gap between the right
-// edge of one element and the left edge of the next exceeds
-// wordSpaceGapFactor × fontSize, a space is inserted. Elements on different
-// lines (Y change > half font-height) receive a newline.
+// Extracted runs use transformed baseline geometry for line and word-gap
+// decisions. Legacy elements without affine metadata retain the axis-aligned
+// FontSize-based behavior.
 //
 // This function is used by the public API (document.go / page.go) and is
 // exported so that table-extraction consumers can apply the same logic.
@@ -380,12 +409,36 @@ func AssembleText(elements []*TextElement) string {
 
 	var sb strings.Builder
 	sb.Grow(len(elements) * 4) // rough pre-allocation
+	var prev *TextElement
+	prevText := ""
 
-	sb.WriteString(elements[0].Text)
+	for _, curr := range elements {
+		if curr == nil || curr.Text == "" {
+			continue
+		}
+		if prev == nil {
+			sb.WriteString(curr.Text)
+			prev, prevText = curr, curr.Text
+			continue
+		}
 
-	for i := 1; i < len(elements); i++ {
-		prev := elements[i-1]
-		curr := elements[i]
+		separator := byte(0)
+		if sameLine, forward, gap, threshold, ok := affineTextRelation(prev, curr); ok {
+			if !sameLine || !forward {
+				separator = '\n'
+			} else {
+				factor := wordSpaceGapFactor
+				if prev.preciseWidth && curr.preciseWidth {
+					factor = preciseGlyphGapFactor
+				}
+				if gap > threshold*factor {
+					separator = ' '
+				}
+			}
+			appendTextRun(&sb, separator, prevText, curr.Text)
+			prev, prevText = curr, curr.Text
+			continue
+		}
 
 		// Detect line break (different Y).
 		lineToleranceY := prev.Height * 0.5
@@ -397,8 +450,8 @@ func AssembleText(elements []*TextElement) string {
 			dy = -dy
 		}
 		if dy > lineToleranceY {
-			sb.WriteByte('\n')
-			sb.WriteString(curr.Text)
+			appendTextRun(&sb, '\n', prevText, curr.Text)
+			prev, prevText = curr, curr.Text
 			continue
 		}
 
@@ -409,12 +462,83 @@ func AssembleText(elements []*TextElement) string {
 			gapFactor = preciseGlyphGapFactor
 		}
 		if gap > prev.FontSize*gapFactor {
-			sb.WriteByte(' ')
+			separator = ' '
 		}
-		sb.WriteString(curr.Text)
+		appendTextRun(&sb, separator, prevText, curr.Text)
+		prev, prevText = curr, curr.Text
 	}
 
 	return sb.String()
+}
+
+// appendTextRun inserts a synthetic separator only when neither adjacent run
+// already supplies boundary whitespace. PDF text strings may retain explicit
+// spaces even when geometry also indicates a word or line gap.
+func appendTextRun(sb *strings.Builder, separator byte, previous, current string) {
+	if sb.Len() > 0 && separator != 0 {
+		hasBoundary := hasTrailingWhitespace(previous) || hasLeadingWhitespace(current)
+		if separator == '\n' {
+			hasBoundary = hasTrailingLineBreak(previous) || hasLeadingLineBreak(current)
+		}
+		if !hasBoundary {
+			sb.WriteByte(separator)
+		}
+	}
+	sb.WriteString(current)
+}
+
+func hasLeadingLineBreak(text string) bool {
+	for _, r := range text {
+		if isLineBreakRune(r) {
+			return true
+		}
+		if !unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return false
+}
+
+func hasTrailingLineBreak(text string) bool {
+	for len(text) > 0 {
+		r, size := utf8.DecodeLastRuneInString(text)
+		if isLineBreakRune(r) {
+			return true
+		}
+		if !unicode.IsSpace(r) {
+			return false
+		}
+		text = text[:len(text)-size]
+	}
+	return false
+}
+
+// isLineBreakRune reports the Unicode line-boundary controls recognized by
+// AssembleText. In addition to CR/LF, Unicode defines NEL, line separator, and
+// paragraph separator as explicit line breaks; a synthetic newline beside any
+// of them would duplicate an existing boundary.
+func isLineBreakRune(r rune) bool {
+	switch r {
+	case '\n', '\r', '\u0085', '\u2028', '\u2029':
+		return true
+	default:
+		return false
+	}
+}
+
+func hasLeadingWhitespace(text string) bool {
+	for _, r := range text {
+		return unicode.IsSpace(r)
+	}
+	return false
+}
+
+func hasTrailingWhitespace(text string) bool {
+	if text == "" {
+		return false
+	}
+	r, _ := utf8.DecodeLastRuneInString(text)
+	return unicode.IsSpace(r)
 }
 
 // getPageContent retrieves and decodes the content stream(s) for a page.
@@ -607,7 +731,7 @@ func (te *TextExtractor) processOperator(op *Operator) {
 				operand := NewMatrix(*values[0], *values[1], *values[2], *values[3], *values[4], *values[5])
 				// Text geometry maps glyph space outward through each enclosing
 				// transform, so append this local operand to the accumulated CTM.
-				combined := te.ctm.composeColumnAffine(operand)
+				combined := te.ctm.Multiply(operand)
 				if operand.isFinite() && combined.isFinite() {
 					te.ctm = combined
 				}
@@ -769,26 +893,10 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 	// Decode glyph bytes to Unicode text
 	decodedText := te.decodeTextBytes(glyphBytes)
 
-	positionedFormGeometry := te.usesPositionedFormGeometry()
-	var advance, width float64
-	precise := false
-	if positionedFormGeometry {
-		advance, width, precise = te.measureGlyphBytes(glyphBytes)
-	} else {
-		// Direct-page and larger Form text retain the established estimated
-		// geometry. Do not compute authoritative widths only to discard them:
-		// that path is reserved for positioned Form glyphs.
-		width = float64(len(decodedText)) * te.textState.FontSize * 0.6 * (te.textState.HorizScale / 100.0)
-		advance = width
-	}
-	x, y := te.textState.CurrentX, te.textState.CurrentY
-	height, effectiveFontSize := te.textState.FontSize, te.textState.FontSize
-	if positionedFormGeometry {
-		var finite bool
-		x, y, width, height, effectiveFontSize, finite = te.transformedTextBounds(width)
-		if !finite {
-			return
-		}
+	advance, width, precise := te.measureGlyphBytes(glyphBytes)
+	x, y, width, height, effectiveFontSize, flow, finite := te.transformedTextGeometry(width)
+	if !finite {
+		return
 	}
 	if !allFiniteNumbers(x, y, width, height, effectiveFontSize, advance) {
 		return
@@ -797,21 +905,20 @@ func (te *TextExtractor) addTextBytes(glyphBytes []byte) {
 	// Create text element with decoded text
 	elem := NewTextElement(decodedText, x, y, width, height, te.textState.FontName, effectiveFontSize)
 	elem.preciseWidth = precise
+	elem.flow = flow
 	te.elements = append(te.elements, elem)
 
 	// Advance text position
 	te.textState.AdvanceX(advance)
 }
 
-// transformedTextBounds maps the text-space bounding box through the text
-// matrix and current transformation matrix and returns its axis-aligned bounds.
-func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64, float64, float64, float64, bool) {
-	// Existing direct-page extraction intentionally remains in raw text space
-	// for compatibility with the lattice coordinate normalizer. Form XObjects,
-	// however, cannot be positioned without inheriting the caller CTM and their
-	// own /Matrix. The caller invokes this function only for that positioned
-	// Form path, so the accumulated CTM is always authoritative here.
-	coordinateMatrix := te.ctm
+// transformedTextGeometry maps the four painted text-space corners through
+// the text matrix and accumulated graphics CTM exactly once. It returns the
+// public axis-aligned page-space envelope and private affine baseline geometry.
+func (te *TextExtractor) transformedTextGeometry(width float64) (
+	float64, float64, float64, float64, float64, *textFlowGeometry, bool,
+) {
+	coordinateMatrix := te.ctm.Multiply(te.textState.Tm)
 	bottom := te.textState.Rise
 	top := bottom + te.textState.FontSize
 	points := [4][2]float64{{0, bottom}, {width, bottom}, {0, top}, {width, top}}
@@ -819,35 +926,43 @@ func (te *TextExtractor) transformedTextBounds(width float64) (float64, float64,
 	minX, minY := math.Inf(1), math.Inf(1)
 	maxX, maxY := math.Inf(-1), math.Inf(-1)
 	for _, point := range points {
-		tx, ty := te.textState.Tm.Transform(point[0], point[1])
-		x, y := coordinateMatrix.Transform(tx, ty)
+		x, y := coordinateMatrix.Transform(point[0], point[1])
 		minX = math.Min(minX, x)
 		minY = math.Min(minY, y)
 		maxX = math.Max(maxX, x)
 		maxY = math.Max(maxY, y)
 	}
 
-	baseX, baseY := te.textState.Tm.Transform(0, bottom)
-	topX, topY := te.textState.Tm.Transform(0, top)
-	baseX, baseY = coordinateMatrix.Transform(baseX, baseY)
-	topX, topY = coordinateMatrix.Transform(topX, topY)
+	baseX, baseY := coordinateMatrix.Transform(0, bottom)
+	topX, topY := coordinateMatrix.Transform(0, top)
 	effectiveFontSize := math.Hypot(topX-baseX, topY-baseY)
+	endX, endY := coordinateMatrix.Transform(width, bottom)
+	flowUnit := 1.0
+	if te.textState.HorizScale < 0 {
+		flowUnit = -1
+	}
+	unitX, unitY := coordinateMatrix.Transform(flowUnit, bottom)
+	directionX, directionY := unitX-baseX, unitY-baseY
+	baselineScale := math.Hypot(directionX, directionY)
+	if baselineScale > 0 {
+		directionX, directionY = directionX/baselineScale, directionY/baselineScale
+	}
+	lineHeight := math.Abs((topX-baseX)*(-directionY) + (topY-baseY)*directionX)
+	emAdvance := math.Abs(te.textState.FontSize * baselineScale * te.textState.HorizScale / 100)
 
 	resultWidth, resultHeight := maxX-minX, maxY-minY
-	if !allFiniteNumbers(minX, minY, resultWidth, resultHeight, effectiveFontSize) {
-		return 0, 0, 0, 0, 0, false
+	if baselineScale == 0 || !allFiniteNumbers(
+		minX, minY, resultWidth, resultHeight, effectiveFontSize,
+		baseX, baseY, endX, endY, directionX, directionY, lineHeight, emAdvance,
+	) {
+		return 0, 0, 0, 0, 0, nil, false
 	}
-	return minX, minY, resultWidth, resultHeight, effectiveFontSize, true
-}
-
-func (te *TextExtractor) usesPositionedFormGeometry() bool {
-	if te.xobjectDepth == 0 || te.textState.FontSize <= 0 {
-		return false
+	flow := &textFlowGeometry{
+		originX: baseX, originY: baseY, endX: endX, endY: endY,
+		directionX: directionX, directionY: directionY,
+		emAdvance: emAdvance, lineHeight: lineHeight,
 	}
-	baseX, baseY := te.textState.Tm.Transform(0, te.textState.Rise)
-	topX, topY := te.textState.Tm.Transform(0, te.textState.Rise+te.textState.FontSize)
-	rawTextSize := math.Hypot(topX-baseX, topY-baseY)
-	return rawTextSize > 0 && rawTextSize <= positionedGlyphFontSizeLimit
+	return minX, minY, resultWidth, resultHeight, effectiveFontSize, flow, true
 }
 
 // processTextArray processes a TJ array with positioning adjustments.
@@ -953,7 +1068,7 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 		return
 	}
 	// The Form matrix maps Form space into its caller's current user space.
-	combinedCTM := te.ctm.composeColumnAffine(formMatrix)
+	combinedCTM := te.ctm.Multiply(formMatrix)
 	if !combinedCTM.isFinite() {
 		return
 	}

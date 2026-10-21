@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Text inside Form XObjects ignored nested transformation matrices** (#89). Text that Quartz and similar generators draw in a Form, one glyph at a time with a unit-sized font and a `cm` that sets its size and position, now combines the page `cm`, the Form `/Matrix` and nested glyph transforms, so extracted positions and sizes match what viewers draw. Form graphics state no longer leaks into the page, embedded font widths are used when character codes map directly to CIDs, and composite-font `/W` ranges are stored as ranges, so a PDF declaring a huge range no longer allocates a width per CID.
 - **`TJ` adjustments ignored horizontal scaling** (#89). Numeric `TJ` adjustments now scale with the active `Tz` value, in page and Form text alike.
 
+### Changed
+- **Text coordinates now include the page and Form transforms at every font size** (#96). Only Form text drawn with a font size of 2 or less was transformed; direct page text and larger Form text kept text-space coordinates, so the same text came out at different positions depending on how the PDF drew it. `TextElement` now reports the box the text covers on the page and its rendered height, for all text. This changes the reported coordinates of direct page text and of Form text larger than 2 units. `/Rotate` is still display metadata and is not applied.
+
 ## [0.9.7] - 2026-10-17
 
 ### Fixed

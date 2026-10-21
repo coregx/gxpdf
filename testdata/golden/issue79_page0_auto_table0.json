@@ -8,21 +8,21 @@
     {
       "row": 0,
       "col": 0,
-      "text": "TIME\nSlot 1: \n9:00 AM\n - \n11:00 AM",
-      "rowSpan": 14,
-      "colSpan": 1
-    },
-    {
-      "row": 0,
-      "col": 1,
-      "text": "",
+      "text": "Day 1 : Jul 19, 2026 ( Sunday )",
       "rowSpan": 1,
-      "colSpan": 3
+      "colSpan": 4
     },
     {
       "row": 1,
-      "col": 2,
-      "text": "Day 1 : Jul 19,2026 ( Sunday )",
+      "col": 0,
+      "text": "",
+      "rowSpan": 1,
+      "colSpan": 4
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "text": "TIME",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -41,6 +41,20 @@
       "colSpan": 1
     },
     {
+      "row": 2,
+      "col": 3,
+      "text": "VENUE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "text": "Slot 1: \n9:00 AM\n - \n11:00 AM",
+      "rowSpan": 11,
+      "colSpan": 1
+    },
+    {
       "row": 3,
       "col": 1,
       "text": "ARTIFICIAL INTELLIGENCE AND EXPERT SYSTEM",
@@ -52,6 +66,13 @@
       "col": 2,
       "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y",
       "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
+      "rowSpan": 11,
       "colSpan": 1
     },
     {
@@ -225,7 +246,7 @@
     {
       "row": 15,
       "col": 1,
-      "text": "BANGLADESH ECONOMIC STUDIES AND",
+      "text": "BANGLADESH ECONOMIC STUDIES AND \nCONTEMPORARY ISSUES",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -239,32 +260,39 @@
     {
       "row": 16,
       "col": 1,
-      "text": "CONTEMPORARY ISSUES",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 17,
-      "col": 1,
       "text": "BASIC MECHANICAL ENGINEERING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 17,
+      "row": 16,
       "col": 2,
       "text": "A,B,C,D,E,F",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 18,
+      "row": 17,
       "col": 1,
       "text": "BUILDING SERVICES - III : ELECTRICAL INSTALLATIONS \nIN BUILDINGS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 17,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 18,
+      "col": 1,
+      "text": "CARBOHYDRATE METABOLISM",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 18,
       "col": 2,
       "text": "A",
@@ -274,154 +302,182 @@
     {
       "row": 19,
       "col": 1,
-      "text": "CARBOHYDRATE METABOLISM",
+      "text": "COST ACCOUNTING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 19,
       "col": 2,
-      "text": "A",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 20,
-      "col": 1,
-      "text": "COST ACCOUNTING",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 20,
-      "col": 2,
       "text": "B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 21,
+      "row": 20,
       "col": 1,
       "text": "DIGITAL LOGIC \u0026 ELECTRONICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 21,
+      "row": 20,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 23,
+      "row": 21,
       "col": 1,
       "text": "ENGLISH READING SKILLS \u0026 PUBLIC SPEAKING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 23,
+      "row": 21,
       "col": 2,
       "text": "B1,B2,B3,B4,B5,B6,B7,B8,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D1,E1,E2,H1,H2,J1,P1",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 25,
+      "row": 22,
       "col": 1,
-      "text": "ENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN\nGAME THEORY",
-      "rowSpan": 1,
-      "colSpan": 3
-    },
-    {
-      "row": 25,
-      "col": 2,
-      "text": "A,A",
+      "text": "ENVIRONMENT AND DESIGN I:CLIMATE AND DESIGN",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 26,
-      "col": 1,
-      "text": "INTRODUCTION TO MACROECONOMICS\nMONETARY ECONOMICS",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 26,
-      "col": 2,
-      "text": "A\nA",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 27,
-      "col": 1,
-      "text": "OBJECT ORIENTED ANALYSIS AND DESIGN",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 27,
-      "col": 2,
-      "text": "A,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 28,
-      "col": 1,
-      "text": "PHONETICS \u0026 PHONOLOGY",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 28,
+      "row": 22,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 29,
+      "row": 23,
+      "col": 1,
+      "text": "GAME THEORY",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 23,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 24,
+      "col": 1,
+      "text": "INTRODUCTION TO MACROECONOMICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 24,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 25,
+      "col": 1,
+      "text": "MONETARY ECONOMICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 25,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 26,
+      "col": 1,
+      "text": "OBJECT ORIENTED ANALYSIS AND DESIGN",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 26,
+      "col": 2,
+      "text": "A,B,C,D,E,F,G,H,I,K,L,M,N,O,P,S,T",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 27,
+      "col": 1,
+      "text": "PHONETICS \u0026 PHONOLOGY",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 27,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 28,
       "col": 1,
       "text": "POWER STATIONS AND SUBSTATIONS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 29,
+      "row": 28,
       "col": 2,
       "text": "A,B,C,D",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 30,
+      "row": 29,
       "col": 1,
       "text": "PRINCIPLES OF FINANCE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 30,
+      "row": 29,
       "col": 2,
       "text": "B,C,D,E,F,H",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 30,
+      "col": 1,
+      "text": "PUBLIC RELATIONS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 30,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 31,
       "col": 1,
-      "text": "PUBLIC RELATIONS\nROMANTIC POETRY",
+      "text": "ROMANTIC POETRY",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 31,
       "col": 2,
-      "text": "A,B\nA",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
@@ -443,136 +499,150 @@
       "row": 33,
       "col": 0,
       "text": "Slot 3: \n3:00 PM\n - \n5:00 PM",
-      "rowSpan": 12,
+      "rowSpan": 15,
       "colSpan": 1
     },
     {
       "row": 33,
-      "col": 3,
-      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
-      "rowSpan": 12,
-      "colSpan": 1
-    },
-    {
-      "row": 34,
       "col": 1,
       "text": "BEHAVIORAL ECONOMICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 34,
+      "row": 33,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 35,
+      "row": 33,
+      "col": 3,
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
+      "rowSpan": 15,
+      "colSpan": 1
+    },
+    {
+      "row": 34,
       "col": 1,
       "text": "COMMUNICATIONS FOR ARCHITECTS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 35,
+      "row": 34,
       "col": 2,
       "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 36,
+      "row": 35,
       "col": 1,
       "text": "COMPREHENSIVE FINANCIAL CASE ANALYSIS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 36,
+      "row": 35,
       "col": 2,
       "text": "B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 37,
+      "row": 36,
       "col": 1,
       "text": "ENGINEERING MANAGEMENT",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 37,
+      "row": 36,
       "col": 2,
       "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 38,
+      "row": 37,
       "col": 1,
       "text": "ENGINEERING MANAGEMENT [IPE]",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 38,
+      "row": 37,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 39,
+      "row": 38,
       "col": 1,
       "text": "FINANCIAL ACCOUNTING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 39,
+      "row": 38,
       "col": 2,
       "text": "A,A1,A2,A3,A4,A5,A6,A7",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 40,
+      "row": 39,
       "col": 1,
       "text": "FINANCIAL MANAGEMENT",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 40,
+      "row": 39,
       "col": 2,
       "text": "A,B,D,E,F,G",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 41,
+      "row": 40,
       "col": 1,
       "text": "HISTORY OF ENGLISH LANGUAGE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 41,
+      "row": 40,
       "col": 2,
       "text": "B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 42,
+      "row": 41,
       "col": 1,
       "text": "INVESTIGATIVE JOURNALISM",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 41,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 42,
+      "col": 1,
+      "text": "LOGISTICS AND DISTRIBUTION MANAGEMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 42,
       "col": 2,
       "text": "A",
@@ -582,79 +652,72 @@
     {
       "row": 43,
       "col": 1,
-      "text": "LOGISTICS AND DISTRIBUTION MANAGEMENT",
+      "text": "MACHINE TOOLS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 43,
       "col": 2,
-      "text": "A",
+      "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 44,
       "col": 1,
-      "text": "MACHINE TOOLS",
+      "text": "MANAGERIAL ACCOUNTING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 44,
+      "col": 2,
+      "text": "A,B,C,D,E,G",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 45,
+      "col": 1,
+      "text": "SEMANTICS AND PRAGMATICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 45,
       "col": 2,
       "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 45,
-      "col": 1,
-      "text": "MANAGERIAL ACCOUNTING\nSEMANTICS AND PRAGMATICS",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 45,
-      "col": 2,
-      "text": "A,B,C,D,E,G\nA,B",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 46,
-      "col": 0,
-      "text": "Date: 09-Jul-2026 2:52 PM",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
       "row": 46,
       "col": 1,
-      "text": "STRUCTURE III : STEEL AND TIMBER STRUCTURES\nTEACHING GRAMMAR AND VOCABULARY",
+      "text": "STRUCTURE III : STEEL AND TIMBER STRUCTURES",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 46,
       "col": 2,
-      "text": "A,B\nA",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 46,
-      "col": 3,
-      "text": "Page: 1 of 8",
+      "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 47,
-      "col": 0,
-      "text": "",
+      "col": 1,
+      "text": "TEACHING GRAMMAR AND VOCABULARY",
       "rowSpan": 1,
-      "colSpan": 4
+      "colSpan": 1
+    },
+    {
+      "row": 47,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
     }
   ]
 }

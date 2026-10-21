@@ -140,10 +140,10 @@ func TestMatrix_Multiply(t *testing.T) {
 	assert.Equal(t, 220.0, y)
 }
 
-func TestMatrix_ComposeColumnAffineNonCommutingTransforms(t *testing.T) {
+func TestMatrix_MultiplyMatchesSequentialNonCommutingTransforms(t *testing.T) {
 	first := NewMatrix(2, 0, 0, 3, 10, 20)
 	second := NewMatrix(0, 1, -1, 0, 5, 7)
-	combined := first.composeColumnAffine(second)
+	combined := first.Multiply(second)
 
 	secondX, secondY := second.Transform(4, 5)
 	wantX, wantY := first.Transform(secondX, secondY)
@@ -152,6 +152,56 @@ func TestMatrix_ComposeColumnAffineNonCommutingTransforms(t *testing.T) {
 	assert.InDelta(t, wantX, gotX, 1e-9)
 	assert.InDelta(t, wantY, gotY, 1e-9)
 	assert.Equal(t, NewMatrix(0, 3, -2, 0, 20, 41), combined)
+}
+
+func TestMatrix_MultiplyAffineParityAcrossRotationReflectionAndShear(t *testing.T) {
+	tests := []struct {
+		name  string
+		outer Matrix
+		inner Matrix
+		point [2]float64
+	}{
+		{
+			name:  "rotation after nonuniform scale",
+			outer: Rotation(math.Pi / 2),
+			inner: NewMatrix(2, 0, 0, 3, 11, -7),
+			point: [2]float64{4, 5},
+		},
+		{
+			name:  "reflection after shear",
+			outer: NewMatrix(-1, 0, 0, 1, 20, 30),
+			inner: NewMatrix(1, 0.75, -0.25, 1, 3, 4),
+			point: [2]float64{-6, 9},
+		},
+		{
+			name:  "two noncommuting general affines",
+			outer: NewMatrix(0.5, -1.25, 2, 0.75, -13, 17),
+			inner: NewMatrix(1.5, 0.25, -0.5, 3, 19, -23),
+			point: [2]float64{8, -2},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			innerX, innerY := test.inner.Transform(test.point[0], test.point[1])
+			wantX, wantY := test.outer.Transform(innerX, innerY)
+			gotX, gotY := test.outer.Multiply(test.inner).Transform(test.point[0], test.point[1])
+			assert.InDelta(t, wantX, gotX, 1e-12)
+			assert.InDelta(t, wantY, gotY, 1e-12)
+		})
+	}
+}
+
+func TestMatrix_MultiplyMatchesSequentialShearRotationTranslation(t *testing.T) {
+	outer := NewMatrix(1, 0.25, -0.5, 2, 17, -9)
+	inner := NewMatrix(0, -1, 1, 0, 4, 11)
+	combined := outer.Multiply(inner)
+	for _, point := range [][2]float64{{0, 0}, {3, -7}, {-2.5, 8.25}} {
+		innerX, innerY := inner.Transform(point[0], point[1])
+		wantX, wantY := outer.Transform(innerX, innerY)
+		gotX, gotY := combined.Transform(point[0], point[1])
+		assert.InDelta(t, wantX, gotX, 1e-12)
+		assert.InDelta(t, wantY, gotY, 1e-12)
+	}
 }
 
 func TestMatrix_MultiplyIdentity(t *testing.T) {

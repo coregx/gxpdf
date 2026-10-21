@@ -93,7 +93,11 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 		return nil, fmt.Errorf("lattice mode requires grid structure")
 	}
 
-	grid := region.Grid
+	// Extraction may extend edge bounds to recover text outside a missing outer
+	// border. Work on a private grid so the ruling-derived topology remains
+	// immutable for span detection and for callers that reuse a detected region.
+	topologyGrid := region.Grid
+	grid := cloneGrid(topologyGrid)
 	rowCount := grid.RowCount()
 	colCount := grid.ColumnCount()
 
@@ -108,18 +112,15 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	// Convert extractor.Rectangle to domaintable.Rectangle
 	tbl.Bounds = domaintable.NewRectangle(region.Bounds.X, region.Bounds.Y, region.Bounds.Width, region.Bounds.Height)
 
-	// Extend edge cell bounds BEFORE merged cell detection and extraction.
-	extendGridEdgeBounds(grid)
-
-	// Pass grid row boundaries to CellExtractor for grid-aware continuation.
-	te.cellExtractor.WithGridRows(grid.Rows)
-
-	// Detect merged cells when ruling lines are available.
+	// Detect merged cells against the original ruling-derived grid. Edge-bound
+	// extension is an extraction aid for text outside a missing outer border;
+	// using those synthetic bounds for topology makes otherwise complete
+	// terminal-row separators appear too short and manufactures column spans.
 	var mergedOwners map[mergedKey]MergedCellInfo
 	var coveredCells map[mergedKey]bool
 
 	if len(region.RulingLines) > 0 {
-		gridMerges := DetectMergedCells(grid, region.RulingLines, defaultMergeTolerance)
+		gridMerges := DetectMergedCells(topologyGrid, region.RulingLines, defaultMergeTolerance)
 		if len(gridMerges) > 0 {
 			// Convert grid-space row indices to output-space row indices.
 			// output row = rowCount - 1 - gridRow
@@ -137,6 +138,12 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 			coveredCells = buildCoveredMap(outputMerges)
 		}
 	}
+
+	// Extend edge cell bounds only after the ruling topology is fixed.
+	extendGridEdgeBounds(grid)
+
+	// Pass grid row boundaries to CellExtractor for grid-aware continuation.
+	te.cellExtractor.WithGridRows(grid.Rows)
 
 	// Two-pass extraction: non-merged cells first, then merged cells.
 	//
@@ -210,6 +217,12 @@ func (te *TableExtractor) extractLatticeTable(region *TableRegion) (*domaintable
 	mergeTextContinuations(tbl)
 
 	return tbl, nil
+}
+
+func cloneGrid(grid *Grid) *Grid {
+	cloned := NewGrid(grid.Rows, grid.Columns)
+	cloned.Cells = NewDefaultGridBuilder().createCells(cloned.Rows, cloned.Columns)
+	return cloned
 }
 
 // extractStreamTable extracts a table using stream mode (row/column coordinates).

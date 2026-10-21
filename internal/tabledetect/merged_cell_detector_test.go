@@ -532,6 +532,41 @@ func TestExtractLatticeTable_NoRulingLines_NoMerges(t *testing.T) {
 	assert.False(t, tbl.HasMergedCells(), "no ruling lines → no merged cells detected")
 }
 
+func TestExtractLatticeTable_EdgeExtensionDoesNotManufactureTerminalColumnSpan(t *testing.T) {
+	rows := []float64{100, 120, 140}
+	cols := []float64{0, 80, 180}
+	grid := makeGrid(rows, cols)
+	lines := []*RulingLine{
+		hLine(0, 100, 180), hLine(0, 120, 180), hLine(0, 140, 180),
+		vLine(0, 100, 140), vLine(80, 100, 140), vLine(180, 100, 140),
+	}
+	textElements := []*extractor.TextElement{
+		extractor.NewTextElement("Title", 10, 105, 35, 10, "/F1", 10),
+		extractor.NewTextElement("A", 100, 105, 8, 10, "/F1", 10),
+	}
+	region := &TableRegion{
+		Bounds:      extractor.NewRectangle(0, 100, 180, 40),
+		Method:      MethodLattice,
+		Grid:        grid,
+		RulingLines: lines,
+	}
+
+	tbl, err := NewTableExtractor(textElements).ExtractTable(region)
+	require.NoError(t, err)
+	require.Equal(t, 2, tbl.RowCount)
+	require.Equal(t, 2, tbl.ColCount)
+	assert.False(t, tbl.HasMergedCells())
+	assert.Equal(t, "Title", tbl.GetCell(1, 0).Text)
+	assert.Equal(t, "A", tbl.GetCell(1, 1).Text)
+	assert.Equal(t, rows, grid.Rows, "extraction must not mutate ruling-derived topology")
+
+	second, err := NewTableExtractor(textElements).ExtractTable(region)
+	require.NoError(t, err)
+	assert.False(t, second.HasMergedCells())
+	assert.Equal(t, "Title", second.GetCell(1, 0).Text)
+	assert.Equal(t, "A", second.GetCell(1, 1).Text)
+}
+
 // ---------------------------------------------------------------------------
 // Integration test: real PDF with merged cells (issue #79)
 // ---------------------------------------------------------------------------

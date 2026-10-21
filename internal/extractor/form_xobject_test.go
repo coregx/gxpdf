@@ -537,7 +537,7 @@ func TestFormXObject_AppliesPageAndFormTransformsToGlyphGeometry(t *testing.T) {
 				assert.InDelta(t, 20, elements[2].Y, 0.001)
 				assert.InDelta(t, 6, elements[2].Width, 0.001)
 				assert.InDelta(t, 10, elements[2].FontSize, 0.001)
-				assert.False(t, elements[2].preciseWidth, "direct-page text must retain legacy width behavior")
+				assert.True(t, elements[2].preciseWidth, "direct and Form text must share font metrics")
 
 				assert.Equal(t, "AB C\nD", AssembleText(elements))
 			})
@@ -692,33 +692,37 @@ func TestTJAdjustmentHonorsHorizontalScaling(t *testing.T) {
 	tests := []struct {
 		name            string
 		positionedForm  bool
+		scaledPage      bool
 		horizontalScale float64
 		adjustment      int64
 		wantSecondX     float64
 	}{
-		{name: "direct negative at fifty percent", horizontalScale: 50, adjustment: -100, wantSecondX: 3.5},
-		{name: "direct positive at fifty percent", horizontalScale: 50, adjustment: 100, wantSecondX: 2.5},
-		{name: "direct negative at two hundred percent", horizontalScale: 200, adjustment: -100, wantSecondX: 14},
+		{name: "direct negative at fifty percent", horizontalScale: 50, adjustment: -100, wantSecondX: 5.5},
+		{name: "direct positive at fifty percent", horizontalScale: 50, adjustment: 100, wantSecondX: 4.5},
+		{name: "direct negative at two hundred percent", horizontalScale: 200, adjustment: -100, wantSecondX: 22},
 		{name: "positioned Form negative at fifty percent", positionedForm: true, horizontalScale: 50, adjustment: -100, wantSecondX: 5.5},
 		{name: "positioned Form positive at fifty percent", positionedForm: true, horizontalScale: 50, adjustment: 100, wantSecondX: 4.5},
 		{name: "positioned Form negative at two hundred percent", positionedForm: true, horizontalScale: 200, adjustment: -100, wantSecondX: 22},
+		{name: "scaled page negative at fifty percent", scaledPage: true, horizontalScale: 50, adjustment: -100, wantSecondX: 5.5},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			extractor := NewTextExtractor(nil)
 			fontSize := 10.0
-			if test.positionedForm {
-				extractor.xobjectDepth = 1
+			if test.positionedForm || test.scaledPage {
 				extractor.ctm = Scaling(10, 10)
 				fontSize = 1
+			}
+			if test.positionedForm {
+				extractor.xobjectDepth = 1
 			}
 			extractor.textState.SetFont("F1", fontSize)
 			extractor.textState.HorizScale = test.horizontalScale
 			extractor.fontMetrics["F1"] = &fontMetrics{
-				// Deliberately differs from the legacy 600-unit estimate:
-				// direct text retains that estimate, while positioned Forms use
-				// this authoritative width.
+				// Deliberately differs from the legacy 600-unit estimate, so
+				// the test shows that direct and positioned Form text both
+				// use this authoritative width.
 				widths:       map[uint16]float64{65: 1_000, 66: 1_000},
 				defaultWidth: 1_000,
 				precise:      true,
@@ -735,9 +739,8 @@ func TestTJAdjustmentHonorsHorizontalScaling(t *testing.T) {
 	}
 }
 
-func TestPositionedFormGeometryRejectsNonFiniteBounds(t *testing.T) {
+func TestTransformedTextGeometryRejectsNonFiniteBounds(t *testing.T) {
 	extractor := NewTextExtractor(nil)
-	extractor.xobjectDepth = 1
 	extractor.ctm = Scaling(math.MaxFloat64, math.MaxFloat64)
 	extractor.textState.SetFont("F1", 1)
 	extractor.textState.SetTextMatrix(1, 0, 0, 1, 2, 2)

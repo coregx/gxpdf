@@ -296,7 +296,7 @@ func (vp *VectorParser) processVectorOperator(op *Operator) {
 			vp.state = gs
 		}
 
-	case "cm": // Modify CTM: CTM = operand × CTM.
+	case "cm": // Concatenate a local transform with the current CTM.
 		if len(op.Operands) >= 6 {
 			a := getNumber(op.Operands[0])
 			b := getNumber(op.Operands[1])
@@ -306,8 +306,7 @@ func (vp *VectorParser) processVectorOperator(op *Operator) {
 			f := getNumber(op.Operands[5])
 			if a != nil && b != nil && c != nil && d != nil && e != nil && f != nil {
 				operand := NewMatrix(*a, *b, *c, *d, *e, *f)
-				// PDF spec: new CTM = operand × old CTM.
-				vp.state.CTM = operand.Multiply(vp.state.CTM)
+				vp.state.CTM = vp.state.CTM.Multiply(operand)
 			}
 		}
 

@@ -53,8 +53,9 @@ func (p *Page) ExtractText() string {
 // This is useful for layout analysis, text highlighting, and advanced
 // document intelligence tasks.
 //
-// Coordinates follow the PDF convention: origin (0,0) is at the bottom-left
-// of the page, X increases to the right, Y increases upward, in points
+// Coordinates are the run's axis-aligned bounds in transformed PDF page user
+// space. Page and Form matrices are applied once; MediaBox/CropBox origins are
+// not subtracted, and /Rotate remains display metadata. Values are in points
 // (1 pt = 1/72 inch).
 //
 // Example:
@@ -148,28 +149,8 @@ func (p *Page) ExtractTablesWithOptions(opts *ExtractionOptions) ([]*Table, erro
 	}
 
 	var tables []*Table
-
-	// For Lattice tables, text and graphics may be in different coordinate
-	// spaces (text: raw Tm/Td, graphics: CTM-normalised). Detect mismatch
-	// and transform text coordinates to match the grid.
-	normalizedText := textElements
-	if opts.Method != MethodStream && len(detectedTables) > 0 {
-		pageHeight := extractor.ReadPageHeight(p.doc.reader, p.index)
-		if pageHeight > 0 {
-			for _, region := range detectedTables {
-				if region.Grid != nil {
-					bounds := region.Grid.Bounds()
-					cn := extractor.NewCoordinateNormalizer(pageHeight)
-					normalizedText = cn.NormalizeTextToGridSpace(
-						normalizedText, bounds.Y, bounds.Y+bounds.Height,
-					)
-					break
-				}
-			}
-		}
-	}
-
-	tableExtractor := tabledetect.NewTableExtractor(normalizedText)
+	// Text and ruling geometry are both emitted in transformed PDF page space.
+	tableExtractor := tabledetect.NewTableExtractor(textElements)
 
 	for _, region := range detectedTables {
 		extracted, err := tableExtractor.ExtractTable(region)

@@ -1,6 +1,10 @@
 package extractor
 
 import (
+	"fmt"
+	"math"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -229,6 +233,389 @@ func TestCellExtractor_buildTextFromLines(t *testing.T) {
 
 	expected := "Hello World\nSecond Line"
 	assert.Equal(t, expected, text)
+}
+
+func TestCellExtractor_AffineReadingDirection(t *testing.T) {
+	affineElement := func(text string, x, y, endX, endY, dirX, dirY float64) *TextElement {
+		element := NewTextElement(text, minFloat(x, endX), minFloat(y, endY), abs(endX-x)+8, abs(endY-y)+8, "/F1", 10)
+		element.preciseWidth = true
+		element.flow = &textFlowGeometry{
+			originX: x, originY: y, endX: endX, endY: endY,
+			directionX: dirX, directionY: dirY, emAdvance: 10, lineHeight: 10,
+		}
+		return element
+	}
+	tests := []struct {
+		name     string
+		elements []*TextElement
+		want     string
+	}{
+		{
+			name: "horizontal reflection",
+			elements: []*TextElement{
+				affineElement("Income", 45, 20, 15, 20, -1, 0),
+				affineElement("Net", 100, 20, 80, 20, -1, 0),
+			},
+			want: "Net Income",
+		},
+		{
+			name: "quarter turn",
+			elements: []*TextElement{
+				affineElement("Header", 20, 65, 20, 95, 0, 1),
+				affineElement("Rotated", 20, 10, 20, 45, 0, 1),
+			},
+			want: "Rotated Header",
+		},
+		{
+			name: "three quarter turn",
+			elements: []*TextElement{
+				affineElement("Second", 20, 50, 20, 20, 0, -1),
+				affineElement("First", 20, 100, 20, 70, 0, -1),
+			},
+			want: "First Second",
+		},
+		{
+			name: "half turn",
+			elements: []*TextElement{
+				affineElement("Line", 45, 20, 15, 20, -1, 0),
+				affineElement("Second", 100, 20, 65, 20, -1, 0),
+			},
+			want: "Second Line",
+		},
+		{
+			name: "shear",
+			elements: []*TextElement{
+				affineElement("Flow", 60, 35, 90, 50, 0.8944271909999159, 0.4472135954999579),
+				affineElement("Skewed", 10, 10, 45, 27.5, 0.8944271909999159, 0.4472135954999579),
+			},
+			want: "Skewed Flow",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			content := NewCellExtractor(test.elements).ExtractCellContent(NewRectangle(-20, -20, 160, 160))
+			assert.Equal(t, test.want, content)
+		})
+	}
+}
+
+func TestCellExtractor_AffineLinesUseSpatialReadingOrder(t *testing.T) {
+	affineElement := func(text string, x, y, endX, endY, dirX, dirY, size float64) *TextElement {
+		element := NewTextElement(text, minFloat(x, endX), minFloat(y, endY), abs(endX-x)+size, abs(endY-y)+size, "/F1", size)
+		element.preciseWidth = true
+		element.flow = &textFlowGeometry{
+			originX: x, originY: y, endX: endX, endY: endY,
+			directionX: dirX, directionY: dirY, emAdvance: size, lineHeight: size,
+		}
+		return element
+	}
+	tests := []struct {
+		name     string
+		elements []*TextElement
+		want     string
+	}{
+		{
+			name: "reflected horizontal lines",
+			elements: []*TextElement{
+				affineElement("Bottom", 100, 20, 60, 20, -1, 0, 10),
+				affineElement("Top", 100, 50, 80, 50, -1, 0, 10),
+			},
+			want: "Top\nBottom",
+		},
+		{
+			name: "quarter turn lines",
+			elements: []*TextElement{
+				affineElement("Right", 80, 10, 80, 40, 0, 1, 10),
+				affineElement("Left", 20, 10, 20, 35, 0, 1, 10),
+			},
+			want: "Left\nRight",
+		},
+		{
+			name: "three quarter turn lines",
+			elements: []*TextElement{
+				affineElement("Right", 80, 70, 80, 40, 0, -1, 10),
+				affineElement("Left", 20, 70, 20, 45, 0, -1, 10),
+			},
+			want: "Left\nRight",
+		},
+		{
+			name: "sheared lines",
+			elements: []*TextElement{
+				affineElement("Lower", 0, 0, 36, 18, 0.8944271909999159, 0.4472135954999579, 10),
+				affineElement("Upper", -8.944, 17.889, 27.056, 35.889, 0.8944271909999159, 0.4472135954999579, 10),
+			},
+			want: "Upper\nLower",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			content := NewCellExtractor(test.elements).ExtractCellContent(NewRectangle(-50, -50, 200, 200))
+			assert.Equal(t, test.want, content)
+		})
+	}
+}
+
+func TestCellExtractor_AffineLineSortIsStableForSpatialTies(t *testing.T) {
+	first := &TextElement{Text: "First", Width: 10, Height: 10, flow: &textFlowGeometry{originX: 0, directionX: 1}}
+	second := &TextElement{Text: "Second", Width: 10, Height: 10, flow: &textFlowGeometry{originX: 0, directionX: 1}}
+	lines := []*textLine{
+		{affine: true, dirX: 1, elements: []*TextElement{first}},
+		{affine: true, dirX: 1, elements: []*TextElement{second}},
+	}
+
+	NewCellExtractor(nil).sortLines(lines)
+	assert.Same(t, first, lines[0].elements[0])
+	assert.Same(t, second, lines[1].elements[0])
+}
+
+func TestCellExtractor_MixedAffineOrientationsSortEachCohortSpatially(t *testing.T) {
+	affineElement := func(text string, x, y, endX, endY, dirX, dirY, size float64) *TextElement {
+		element := NewTextElement(text, minFloat(x, endX), minFloat(y, endY), abs(endX-x)+size, abs(endY-y)+size, "/F1", size)
+		element.preciseWidth = true
+		element.flow = &textFlowGeometry{
+			originX: x, originY: y, endX: endX, endY: endY,
+			directionX: dirX, directionY: dirY, emAdvance: size, lineHeight: size,
+		}
+		return element
+	}
+	elements := []*TextElement{
+		// The rotated annotation is painted first. It must not disable sorting
+		// of the bottom-first horizontal cohort.
+		affineElement("Annotation", 90, 30, 90, 65, 0, 1, 10),
+		affineElement("Bottom", 10, 20, 50, 20, 1, 0, 10),
+		affineElement("Top", 10, 80, 30, 80, 1, 0, 10),
+	}
+
+	content := NewCellExtractor(elements).ExtractCellContent(NewRectangle(0, 0, 140, 120))
+	assert.Equal(t, "Top\nBottom\nAnnotation", content)
+}
+
+func TestCellExtractor_MultipleAffineOrientationCohortsHaveDeterministicPageOrder(t *testing.T) {
+	affineElement := func(text string, x, y, endX, endY, dirX, dirY, size float64) *TextElement {
+		element := NewTextElement(text, minFloat(x, endX), minFloat(y, endY), abs(endX-x)+size, abs(endY-y)+size, "/F1", size)
+		element.flow = &textFlowGeometry{
+			originX: x, originY: y, endX: endX, endY: endY,
+			directionX: dirX, directionY: dirY, emAdvance: size, lineHeight: size,
+		}
+		return element
+	}
+	elements := []*TextElement{
+		// Every cohort is deliberately painted in reverse spatial order.
+		affineElement("VerticalRight", 80, 10, 80, 45, 0, 1, 8),
+		affineElement("VerticalLeft", 20, 10, 20, 40, 0, 1, 8),
+		affineElement("ReflectedBottom", 100, 80, 50, 80, -1, 0, 8),
+		affineElement("ReflectedTop", 100, 110, 60, 110, -1, 0, 8),
+		affineElement("ShearedLower", 10, 150, 50, 170, 0.8944271909999159, 0.4472135954999579, 8),
+		affineElement("ShearedUpper", 1, 168, 41, 188, 0.8944271909999159, 0.4472135954999579, 8),
+	}
+
+	want := "ShearedUpper\nShearedLower\nReflectedTop\nReflectedBottom\nVerticalLeft\nVerticalRight"
+	orders := [][]int{
+		{0, 1, 2, 3, 4, 5},
+		{5, 4, 3, 2, 1, 0},
+		{2, 5, 0, 4, 1, 3},
+	}
+	for _, order := range orders {
+		ordered := make([]*TextElement, len(order))
+		for index, source := range order {
+			ordered[index] = elements[source]
+		}
+		content := NewCellExtractor(ordered).ExtractCellContent(NewRectangle(-20, 0, 180, 220))
+		assert.Equal(t, want, content)
+	}
+}
+
+func TestCellExtractor_AffineCohortGeometryBreaksOrientationTiesBeforePaintOrder(t *testing.T) {
+	horizontal := NewTextElement("Horizontal", 0, 0, 20, 20, "/F1", 10)
+	horizontal.flow = &textFlowGeometry{originX: 0, originY: 0, endX: 20, directionX: 1, lineHeight: 10}
+	vertical := NewTextElement("Vertical", 0, 0, 20, 20, "/F1", 10)
+	vertical.flow = &textFlowGeometry{originX: 0, originY: 0, endY: 20, directionY: 1, lineHeight: 10}
+
+	// Bounds are identical and vertical is painted first. The documented
+	// orientation key, rather than content order, provides the deterministic tie.
+	content := NewCellExtractor([]*TextElement{vertical, horizontal}).ExtractCellContent(NewRectangle(-10, -10, 50, 50))
+	assert.Equal(t, "Horizontal\nVertical", content)
+}
+
+func TestCellExtractor_AffineAxialSeamsArePermutationInvariant(t *testing.T) {
+	for _, seam := range []float64{0, 45, 90, 135} {
+		seam := seam
+		t.Run(fmt.Sprintf("%.0f_degrees", seam), func(t *testing.T) {
+			angles := []float64{seam - 0.001, seam + 180.001, seam + 0.0005, seam + 179.9995}
+			seamRadians := seam * math.Pi / 180
+			normalX, normalY := -math.Sin(seamRadians), math.Cos(seamRadians)
+			if normalY < 0 || math.Abs(normalY) < 1e-12 && normalX > 0 {
+				normalX, normalY = -normalX, -normalY
+			}
+			linePositions := []float64{80, 60, 40, 20}
+			elements := make([]*TextElement, len(angles))
+			for index, angle := range angles {
+				x := 50 + normalX*linePositions[index]
+				y := 20 + normalY*linePositions[index]
+				elements[index] = affineCellElementAtAngle(fmt.Sprintf("L%d", index+1), x, y, angle)
+			}
+			for _, order := range [][]int{{0, 1, 2, 3}, {3, 2, 1, 0}, {1, 3, 0, 2}} {
+				ordered := reorderAffineCellElements(elements, order)
+				lines := groupByAffineLine(ordered)
+				require.Len(t, buildAffineLineCohorts(lines), 1)
+				content := NewCellExtractor(ordered).ExtractCellContent(NewRectangle(-100, -100, 300, 300))
+				assert.Equal(t, "L1\nL2\nL3\nL4", content)
+			}
+		})
+	}
+}
+
+func TestCellExtractor_AffineCohortsHaveBoundedDiameterWithoutSingleLinkChaining(t *testing.T) {
+	angles := []float64{0, 185, 10, 195, 20, 205, 30, 215, 40}
+	elements := make([]*TextElement, len(angles))
+	for index, angle := range angles {
+		elements[index] = affineCellElementAtAngle(fmt.Sprintf("A%d", index), 10, float64(100-index*15), angle)
+	}
+	wantCohorts := []string{"A0,A1", "A2,A3", "A4,A5", "A6,A7", "A8"}
+	orders := [][]int{
+		{0, 1, 2, 3, 4, 5, 6, 7, 8},
+		{8, 7, 6, 5, 4, 3, 2, 1, 0},
+		{2, 0, 8, 4, 1, 7, 3, 6, 5},
+		{5, 3, 1, 7, 0, 8, 6, 4, 2},
+	}
+	for offset := 1; offset < len(elements); offset++ {
+		order := make([]int, len(elements))
+		for index := range order {
+			order[index] = (index + offset) % len(elements)
+		}
+		orders = append(orders, order)
+	}
+	for _, order := range orders {
+		cohorts := buildAffineLineCohorts(groupByAffineLine(reorderAffineCellElements(elements, order)))
+		got := make([]string, 0, len(cohorts))
+		for _, cohort := range cohorts {
+			names := make([]string, 0, len(cohort.entries))
+			for _, entry := range cohort.entries {
+				names = append(names, entry.line.elements[0].Text)
+			}
+			sort.Strings(names)
+			got = append(got, strings.Join(names, ","))
+			span := cohort.entries[len(cohort.entries)-1].unwrappedKey - cohort.entries[0].unwrappedKey
+			assert.LessOrEqual(t, span, quantizeAffineAngle(math.Acos(affineOrientationDot)))
+		}
+		sort.Strings(got)
+		assert.Equal(t, wantCohorts, got)
+	}
+}
+
+func TestCellExtractor_AffineCohortCompatibilityBoundaryIsQuantized(t *testing.T) {
+	toleranceDegrees := math.Acos(affineOrientationDot) * 180 / math.Pi
+	elements := []*TextElement{
+		affineCellElementAtAngle("Base", 10, 60, 0),
+		affineCellElementAtAngle("Within", 10, 40, toleranceDegrees-0.000001),
+		affineCellElementAtAngle("Outside", 10, 20, toleranceDegrees+0.000001),
+	}
+	cohorts := buildAffineLineCohorts(groupByAffineLine(elements))
+	require.Len(t, cohorts, 2)
+	assert.Len(t, cohorts[0].entries, 2)
+	assert.Len(t, cohorts[1].entries, 1)
+}
+
+func TestCellExtractor_AffineCohortsHandleOppositeAndNearCancelingDirections(t *testing.T) {
+	elements := []*TextElement{
+		affineCellElementAtAngle("NearZero", 10, 80, 1),
+		affineCellElementAtAngle("NearPi", 10, 60, 179),
+		affineCellElementAtAngle("NearVerticalA", 10, 40, 89),
+		affineCellElementAtAngle("NearVerticalB", 10, 20, 271),
+	}
+	for _, order := range [][]int{{0, 1, 2, 3}, {3, 1, 0, 2}, {2, 0, 3, 1}} {
+		cohorts := buildAffineLineCohorts(groupByAffineLine(reorderAffineCellElements(elements, order)))
+		require.Len(t, cohorts, 2)
+		for _, cohort := range cohorts {
+			require.Len(t, cohort.entries, 2)
+			assert.InDelta(t, 1, math.Hypot(cohort.normalX, cohort.normalY), 1e-12)
+		}
+	}
+}
+
+func TestCellExtractor_AffineOrderingUsesQuantizedTotalKeys(t *testing.T) {
+	newLine := func(text string, delta float64) *textLine {
+		element := NewTextElement(text, 10, 20+delta, 10, 10, "/F1", 10)
+		element.flow = &textFlowGeometry{
+			originX: 10, originY: 20 + delta, endX: 20, endY: 20 + delta,
+			directionX: math.Cos(1e-13), directionY: math.Sin(1e-13), lineHeight: 10,
+		}
+		return &textLine{
+			elements: []*TextElement{element}, affine: true,
+			dirX: element.flow.directionX, dirY: element.flow.directionY,
+			originX: element.flow.originX, originY: element.flow.originY,
+		}
+	}
+
+	first := newLine("First", 0)
+	ulpEquivalent := newLine("ULP", 0.4e-6)
+	lines := []*textLine{first, ulpEquivalent}
+	sortAffineLineCohorts(lines)
+	assert.Same(t, first, lines[0], "sub-quantum transform differences fall back to paint order")
+
+	aboveQuantum := newLine("Higher", 0.6e-6)
+	lines = []*textLine{first, aboveQuantum}
+	sortAffineLineCohorts(lines)
+	assert.Same(t, aboveQuantum, lines[0], "a distinct quantized position keeps spatial order")
+}
+
+func affineCellElementAtAngle(text string, x, y, angleDegrees float64) *TextElement {
+	angle := angleDegrees * math.Pi / 180
+	directionX, directionY := math.Cos(angle), math.Sin(angle)
+	element := NewTextElement(text, x, y, 10, 10, "/F1", 10)
+	element.flow = &textFlowGeometry{
+		originX: x, originY: y,
+		endX: x + directionX*8, endY: y + directionY*8,
+		directionX: directionX, directionY: directionY, emAdvance: 10, lineHeight: 10,
+	}
+	return element
+}
+
+func reorderAffineCellElements(elements []*TextElement, order []int) []*TextElement {
+	ordered := make([]*TextElement, len(order))
+	for index, source := range order {
+		ordered[index] = elements[source]
+	}
+	return ordered
+}
+
+func TestCellExtractor_AffineSameBaselineAllowsDifferentRenderedSizes(t *testing.T) {
+	label := NewTextElement("Label", 0, 0, 10, 12, "/F1", 12)
+	label.preciseWidth = true
+	label.flow = &textFlowGeometry{originX: 0, endX: 10, directionX: 1, emAdvance: 12, lineHeight: 12}
+	note := NewTextElement("note", 20, 0, 5, 8, "/F1", 8)
+	note.preciseWidth = true
+	note.flow = &textFlowGeometry{originX: 20, endX: 25, directionX: 1, emAdvance: 16, lineHeight: 8}
+
+	content := NewCellExtractor([]*TextElement{note, label}).ExtractCellContent(NewRectangle(-10, -10, 100, 50))
+	assert.Equal(t, "Label note", content)
+	assert.False(t, canMerge(label, note), "merge-size compatibility remains independent of baseline grouping")
+}
+
+func TestCellExtractor_MixedAffineAndLegacyUsesLegacyOrdering(t *testing.T) {
+	affine := NewTextElement("Right", 50, 20, 20, 10, "/F1", 10)
+	affine.flow = &textFlowGeometry{originX: 70, originY: 20, endX: 50, endY: 20, directionX: -1, emAdvance: 10, lineHeight: 10}
+	legacy := NewTextElement("Left", 10, 20, 20, 10, "/F1", 10)
+
+	content := NewCellExtractor([]*TextElement{affine, legacy}).ExtractCellContent(NewRectangle(0, 0, 100, 50))
+	assert.Equal(t, "Left Right", content)
+}
+
+func TestCellExtractor_DoesNotDuplicateBoundaryWhitespace(t *testing.T) {
+	elements := []*TextElement{
+		NewTextElement("A ", 10, 20, 10, 10, "/F1", 10),
+		NewTextElement("", 25, 20, 0, 10, "/F1", 10),
+		NewTextElement("B", 40, 20, 10, 10, "/F1", 10),
+	}
+	content := NewCellExtractor(elements).ExtractCellContent(NewRectangle(0, 0, 100, 50))
+	assert.Equal(t, "A B", content)
+}
+
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func TestCellExtractor_calculateAverageFontSize(t *testing.T) {
