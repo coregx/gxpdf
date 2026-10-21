@@ -42,13 +42,20 @@ func formPage(t *testing.T, pageContent string, forms map[string]string, order [
 
 func extractWithin(t *testing.T, r *parser.Reader, limit time.Duration) ([]*TextElement, error) {
 	t.Helper()
+	return extractorWithin(t, NewTextExtractor(r), limit)
+}
+
+// extractorWithin runs extractor on page 0 and fails the test if it does not
+// finish within limit. Tests use it to inspect the extractor afterwards.
+func extractorWithin(t *testing.T, extractor *TextExtractor, limit time.Duration) ([]*TextElement, error) {
+	t.Helper()
 	type result struct {
 		elements []*TextElement
 		err      error
 	}
 	done := make(chan result, 1)
 	go func() {
-		elements, err := NewTextExtractor(r).ExtractFromPage(0)
+		elements, err := extractor.ExtractFromPage(0)
 		done <- result{elements, err}
 	}()
 	select {
@@ -138,7 +145,7 @@ func TestFormXObject_RepeatedInvocationsUseCachedContent(t *testing.T) {
 	r := formPage(t, "/X Do /X Do /X Do",
 		map[string]string{"X": "BT /F1 12 Tf 72 700 Td (A) Tj ET"}, []string{"X"})
 	extractor := NewTextExtractor(r)
-	elements, err := extractor.ExtractFromPage(0)
+	elements, err := extractorWithin(t, extractor, 5*time.Second)
 	if err != nil {
 		t.Fatalf("ExtractFromPage: %v", err)
 	}
