@@ -249,6 +249,23 @@ func runGoldenTest(t *testing.T, name, pdfPath string, pageNum, tableIndex int, 
 
 // ---------- Golden test cases ----------
 
+// TestGolden_FormPositionedTable_Stream snapshots the whitespace-owned path
+// for the transformed Form fixture. It intentionally freezes the recovered
+// terminal 2024 column separately from the fixture's ruling-grid path.
+func TestGolden_FormPositionedTable_Stream(t *testing.T) {
+	opts := DefaultExtractionOptions().
+		WithMethod(MethodStream).
+		WithPages(0)
+
+	runGoldenTest(t,
+		"form_positioned_table_stream_table0",
+		"testdata/pdfs/form_positioned_table.pdf",
+		0,
+		0,
+		opts,
+	)
+}
+
 // TestGolden_Issue79_Page0_Table0 snapshots the first table on page 0 of the
 // issue-79 sample PDF. This PDF uses filled rectangles for borders (wkhtmltopdf
 // / Chrome-print style) and was the primary fixture for the Lattice detection

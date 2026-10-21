@@ -1019,7 +1019,247 @@ func (cbd *ColumnBoundaryDetector) detectBoundariesEdgeClustering(elements []*ex
 	boundaries := cbd.convertBoundariesToFloats(boundaryObjs)
 	sort.Float64s(boundaries)
 
-	return boundaries
+	return cbd.recoverTerminalRightBoundary(elements, boundaries)
+}
+
+type terminalEdgeObservation struct {
+	x   float64
+	row int
+}
+
+type terminalEdgeCandidate struct {
+	x    float64
+	rows []int
+}
+
+type terminalRecoveryRow struct {
+	y         float64
+	tolerance float64
+	intervals map[int]struct{}
+}
+
+type terminalRecoveryIndex struct {
+	rows         []terminalRecoveryRow
+	rowByElement map[*extractor.TextElement]int
+}
+
+// recoverTerminalRightBoundary repairs the one edge that edge clustering can
+// systematically suppress: a repeated right edge less than minColumnWidth
+// beyond the last retained boundary. Recovery is deliberately geometry-only
+// and append-only. A candidate needs support on at least two distinct rows, and
+// every supporting row must also contain text in a common retained interval.
+// Ambiguous candidates and malformed geometry preserve the original result.
+func (cbd *ColumnBoundaryDetector) recoverTerminalRightBoundary(
+	elements []*extractor.TextElement,
+	boundaries []float64,
+) []float64 {
+	return cbd.recoverTerminalRightBoundaryWithWork(elements, boundaries, nil)
+}
+
+func (cbd *ColumnBoundaryDetector) recoverTerminalRightBoundaryWithWork(
+	elements []*extractor.TextElement,
+	boundaries []float64,
+	work *int,
+) []float64 {
+	if len(boundaries) < 2 || len(elements) < 2 || cbd.minColumnWidth <= 0 || cbd.minGapWidth <= 0 {
+		return boundaries
+	}
+	for index, boundary := range boundaries {
+		addTerminalRecoveryWork(work, 1)
+		if !isFiniteCoordinate(boundary) {
+			return boundaries
+		}
+		if index > 0 && boundary <= boundaries[index-1] {
+			return boundaries
+		}
+	}
+	for _, element := range elements {
+		addTerminalRecoveryWork(work, 1)
+		if element == nil || !isFiniteTextElement(element) {
+			return boundaries
+		}
+	}
+	index := buildTerminalRecoveryIndex(elements, boundaries, work)
+
+	last := boundaries[len(boundaries)-1]
+	edgeTolerance := cbd.minGapWidth / 2
+	observations := make([]terminalEdgeObservation, 0, len(elements))
+	for _, element := range elements {
+		addTerminalRecoveryWork(work, 1)
+		right := element.Right()
+		// The terminal element must begin near the retained last boundary and
+		// genuinely occupy the interval to its right. This excludes ordinary
+		// variation among elements centered in an already-retained interval.
+		if occupiesRecoveredTerminalInterval(element, last) &&
+			right-last < cbd.minColumnWidth && math.Abs(element.X-last) <= edgeTolerance {
+			observations = append(observations, terminalEdgeObservation{
+				x: right, row: index.rowByElement[element],
+			})
+		}
+	}
+	if len(observations) < 2 {
+		return boundaries
+	}
+	sort.SliceStable(observations, func(i, j int) bool {
+		addTerminalRecoveryWork(work, 1)
+		if observations[i].x != observations[j].x {
+			return observations[i].x < observations[j].x
+		}
+		return observations[i].row < observations[j].row
+	})
+
+	candidates := make([]terminalEdgeCandidate, 0, 1)
+	for start := 0; start < len(observations); {
+		addTerminalRecoveryWork(work, 1)
+		end := start + 1
+		for end < len(observations) && observations[end].x-observations[start].x <= edgeTolerance {
+			addTerminalRecoveryWork(work, 1)
+			end++
+		}
+		candidate := terminalEdgeCandidate{
+			x:    medianSortedTerminalEdge(observations[start:end]),
+			rows: distinctTerminalRows(observations[start:end], work),
+		}
+		if len(candidate.rows) >= 2 && candidateRowsAlignToRetainedStructure(candidate.rows, index.rows, work) {
+			candidates = append(candidates, candidate)
+		}
+		start = end
+	}
+	if len(candidates) != 1 {
+		return boundaries
+	}
+
+	result := append([]float64(nil), boundaries...)
+	return append(result, candidates[0].x)
+}
+
+// occupiesRecoveredTerminalInterval reports whether an element will be
+// available to a cell appended after the last retained boundary. CellExtractor
+// assigns cells from left to right and expands each cell by CellBoundsPadding,
+// so the preceding cell owns centers through that padded edge. Strict
+// comparison matches Rectangle.Contains' inclusive right edge without adding
+// a second tolerance.
+func occupiesRecoveredTerminalInterval(element *extractor.TextElement, last float64) bool {
+	if element == nil || !isFiniteCoordinate(last) || !isFiniteTextElement(element) || element.Width <= 0 {
+		return false
+	}
+	precedingCellRight := last + extractor.CellBoundsPadding
+	return isFiniteCoordinate(precedingCellRight) &&
+		element.CenterX() > precedingCellRight && element.Right() > last
+}
+
+func medianSortedTerminalEdge(observations []terminalEdgeObservation) float64 {
+	middle := len(observations) / 2
+	if len(observations)%2 == 0 {
+		return (observations[middle-1].x + observations[middle].x) / 2
+	}
+	return observations[middle].x
+}
+
+func buildTerminalRecoveryIndex(
+	elements []*extractor.TextElement,
+	boundaries []float64,
+	work *int,
+) terminalRecoveryIndex {
+	ordered := append([]*extractor.TextElement(nil), elements...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		addTerminalRecoveryWork(work, 1)
+		if ordered[i].CenterY() != ordered[j].CenterY() {
+			return ordered[i].CenterY() > ordered[j].CenterY()
+		}
+		if ordered[i].X != ordered[j].X {
+			return ordered[i].X < ordered[j].X
+		}
+		return ordered[i].Right() < ordered[j].Right()
+	})
+	index := terminalRecoveryIndex{rowByElement: make(map[*extractor.TextElement]int, len(elements))}
+	for _, element := range ordered {
+		addTerminalRecoveryWork(work, 1)
+		tolerance := math.Max(1, element.Height*0.2)
+		rowIndex := len(index.rows) - 1
+		if rowIndex < 0 || math.Abs(index.rows[rowIndex].y-element.CenterY()) > math.Max(index.rows[rowIndex].tolerance, tolerance) {
+			index.rows = append(index.rows, terminalRecoveryRow{
+				y: element.CenterY(), tolerance: tolerance, intervals: make(map[int]struct{}),
+			})
+			rowIndex++
+		} else if tolerance > index.rows[rowIndex].tolerance {
+			index.rows[rowIndex].tolerance = tolerance
+		}
+		index.rowByElement[element] = rowIndex
+		center := element.CenterX()
+		boundary := sort.Search(len(boundaries), func(index int) bool {
+			addTerminalRecoveryWork(work, 1)
+			return boundaries[index] >= center
+		})
+		if boundary == 0 && center == boundaries[0] {
+			index.rows[rowIndex].intervals[0] = struct{}{}
+			continue
+		}
+		if boundary > 0 && boundary < len(boundaries) {
+			index.rows[rowIndex].intervals[boundary-1] = struct{}{}
+			if center == boundaries[boundary] && boundary < len(boundaries)-1 {
+				index.rows[rowIndex].intervals[boundary] = struct{}{}
+			}
+		}
+	}
+	return index
+}
+
+func distinctTerminalRows(observations []terminalEdgeObservation, work *int) []int {
+	seen := make(map[int]struct{}, len(observations))
+	rows := make([]int, 0, len(observations))
+	for _, observation := range observations {
+		if _, exists := seen[observation.row]; exists {
+			continue
+		}
+		seen[observation.row] = struct{}{}
+		rows = append(rows, observation.row)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		addTerminalRecoveryWork(work, 1)
+		return rows[i] < rows[j]
+	})
+	return rows
+}
+
+func candidateRowsAlignToRetainedStructure(rows []int, index []terminalRecoveryRow, work *int) bool {
+	if len(rows) == 0 {
+		return false
+	}
+	commonIntervals := make(map[int]struct{}, len(index[rows[0]].intervals))
+	for interval := range index[rows[0]].intervals {
+		commonIntervals[interval] = struct{}{}
+	}
+	for _, row := range rows[1:] {
+		for interval := range commonIntervals {
+			addTerminalRecoveryWork(work, 1)
+			if _, ok := index[row].intervals[interval]; !ok {
+				delete(commonIntervals, interval)
+			}
+		}
+		if len(commonIntervals) == 0 {
+			return false
+		}
+	}
+	return len(commonIntervals) > 0
+}
+
+func addTerminalRecoveryWork(work *int, amount int) {
+	if work != nil {
+		*work += amount
+	}
+}
+
+func isFiniteTextElement(element *extractor.TextElement) bool {
+	return isFiniteCoordinate(element.X) && isFiniteCoordinate(element.Y) &&
+		isFiniteCoordinate(element.Width) && isFiniteCoordinate(element.Height) &&
+		element.Width >= 0 && element.Height >= 0 &&
+		isFiniteCoordinate(element.Right()) && isFiniteCoordinate(element.CenterX()) &&
+		isFiniteCoordinate(element.CenterY())
+}
+
+func isFiniteCoordinate(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 // collectEdges collects all left and right edge X-coordinates.

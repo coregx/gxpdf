@@ -37,7 +37,7 @@ func TestCellExtractor_NegativeHeight_P1(t *testing.T) {
 	p1 := elements[2]
 	t.Logf("Cell bounds: Y=[%.1f, %.1f]", bounds.Y, bounds.Y+bounds.Height)
 	t.Logf("P1 element (normalized): Y=%.1f, Height=%.1f, CenterY=%.1f", p1.Y, p1.Height, p1.CenterY())
-	t.Logf("Expanded bounds: Y=[%.1f, %.1f]", bounds.Y-cellBoundsPadding, bounds.Y+bounds.Height+cellBoundsPadding)
+	t.Logf("Expanded bounds: Y=[%.1f, %.1f]", bounds.Y-CellBoundsPadding, bounds.Y+bounds.Height+CellBoundsPadding)
 	t.Logf("Extracted: %q", content)
 
 	if !strings.Contains(content, "P1") {
@@ -46,8 +46,8 @@ func TestCellExtractor_NegativeHeight_P1(t *testing.T) {
 			"With padding=%.1f, expanded bottom=%.1f.\n"+
 			"Need: CenterY >= expanded bottom, but %.1f < %.1f",
 			409.3, 414.9-409.3, 414.9,
-			cellBoundsPadding, bounds.Y-cellBoundsPadding,
-			409.3, bounds.Y-cellBoundsPadding)
+			CellBoundsPadding, bounds.Y-CellBoundsPadding,
+			409.3, bounds.Y-CellBoundsPadding)
 	}
 
 	if !strings.Contains(content, "B1") {
