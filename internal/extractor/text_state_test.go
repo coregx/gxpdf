@@ -126,8 +126,8 @@ func TestMatrix_Transform(t *testing.T) {
 }
 
 func TestMatrix_Multiply(t *testing.T) {
-	// Test: Translation(100, 200) * Scaling(2, 2)
-	// First scale, then translate
+	// Column-vector order: Translation(100, 200) * Scaling(2, 2)
+	// applies the scale first, then the translation.
 	translate := Translation(100, 200)
 	scale := Scaling(2, 2)
 	result := translate.Multiply(scale)
@@ -138,6 +138,20 @@ func TestMatrix_Multiply(t *testing.T) {
 	x, y := result.Transform(10, 10)
 	assert.Equal(t, 120.0, x)
 	assert.Equal(t, 220.0, y)
+}
+
+func TestMatrix_ComposeColumnAffineNonCommutingTransforms(t *testing.T) {
+	first := NewMatrix(2, 0, 0, 3, 10, 20)
+	second := NewMatrix(0, 1, -1, 0, 5, 7)
+	combined := first.composeColumnAffine(second)
+
+	secondX, secondY := second.Transform(4, 5)
+	wantX, wantY := first.Transform(secondX, secondY)
+	gotX, gotY := combined.Transform(4, 5)
+
+	assert.InDelta(t, wantX, gotX, 1e-9)
+	assert.InDelta(t, wantY, gotY, 1e-9)
+	assert.Equal(t, NewMatrix(0, 3, -2, 0, 20, 41), combined)
 }
 
 func TestMatrix_MultiplyIdentity(t *testing.T) {
@@ -260,6 +274,16 @@ func TestTextState_Translate(t *testing.T) {
 	assert.Equal(t, 230.0, ts.CurrentY)
 }
 
+func TestTextState_TranslateUsesExistingRotatedBasis(t *testing.T) {
+	ts := NewTextState()
+	ts.SetTextMatrix(0, 1, -1, 0, 100, 200)
+
+	ts.Translate(50, 30)
+
+	assert.InDelta(t, 70, ts.CurrentX, 1e-9)
+	assert.InDelta(t, 250, ts.CurrentY, 1e-9)
+}
+
 func TestTextState_TranslateSetLeading(t *testing.T) {
 	ts := NewTextState()
 	ts.SetTextMatrix(1, 0, 0, 1, 100, 200)
@@ -303,6 +327,16 @@ func TestTextState_AdvanceX(t *testing.T) {
 	// X should be advanced
 	assert.Equal(t, 150.0, ts.CurrentX)
 	assert.Equal(t, 200.0, ts.CurrentY) // Y unchanged
+}
+
+func TestTextState_AdvanceXUsesExistingRotatedBasis(t *testing.T) {
+	ts := NewTextState()
+	ts.SetTextMatrix(0, 1, -1, 0, 100, 200)
+
+	ts.AdvanceX(50)
+
+	assert.InDelta(t, 100, ts.CurrentX, 1e-9)
+	assert.InDelta(t, 250, ts.CurrentY, 1e-9)
 }
 
 func TestTextState_String(t *testing.T) {

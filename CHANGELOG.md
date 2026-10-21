@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Text inside Form XObjects ignored nested transformation matrices** (#89). Text that Quartz and similar generators draw in a Form, one glyph at a time with a unit-sized font and a `cm` that sets its size and position, now combines the page `cm`, the Form `/Matrix` and nested glyph transforms, so extracted positions and sizes match what viewers draw. Form graphics state no longer leaks into the page, embedded font widths are used when character codes map directly to CIDs, and composite-font `/W` ranges are stored as ranges, so a PDF declaring a huge range no longer allocates a width per CID.
+- **`TJ` adjustments ignored horizontal scaling** (#89). Numeric `TJ` adjustments now scale with the active `Tz` value, in page and Form text alike.
+
 ## [0.9.7] - 2026-10-17
 
 ### Fixed

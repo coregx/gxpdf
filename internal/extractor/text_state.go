@@ -71,6 +71,12 @@ func (m Matrix) Transform(x, y float64) (float64, float64) {
 	return nx, ny
 }
 
+func (m Matrix) isFinite() bool {
+	return isFiniteNumber(m.A) && isFiniteNumber(m.B) &&
+		isFiniteNumber(m.C) && isFiniteNumber(m.D) &&
+		isFiniteNumber(m.E) && isFiniteNumber(m.F)
+}
+
 // Multiply multiplies this matrix by another matrix (m * other).
 //
 // Matrix multiplication is used to combine transformations.
@@ -89,6 +95,22 @@ func (m Matrix) Multiply(other Matrix) Matrix {
 		B: m.A*other.B + m.B*other.D,
 		C: m.C*other.A + m.D*other.C,
 		D: m.C*other.B + m.D*other.D,
+		E: m.A*other.E + m.C*other.F + m.E,
+		F: m.B*other.E + m.D*other.F + m.F,
+	}
+}
+
+// composeColumnAffine returns m × other using the column-vector affine
+// convention used by the positioned Form-text path. Matrix.Multiply retains
+// gxpdf's established behavior because direct-page table extraction and its
+// coordinate normalizer depend on it. Global coordinate unification is tracked
+// separately in issue #99.
+func (m Matrix) composeColumnAffine(other Matrix) Matrix {
+	return Matrix{
+		A: m.A*other.A + m.C*other.B,
+		B: m.B*other.A + m.D*other.B,
+		C: m.A*other.C + m.C*other.D,
+		D: m.B*other.C + m.D*other.D,
 		E: m.A*other.E + m.C*other.F + m.E,
 		F: m.B*other.E + m.D*other.F + m.F,
 	}
