@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"compress/zlib"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -321,5 +322,57 @@ func BenchmarkParseXRefStreamEntries(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestParseXRefStreamEntriesRejectsMalformedWAndIndex(t *testing.T) {
+	integers := func(values ...int64) *Array {
+		array := NewArray()
+		for _, value := range values {
+			array.Append(NewInteger(value))
+		}
+		return array
+	}
+	tests := []struct {
+		name    string
+		w       PdfObject
+		index   PdfObject
+		wantErr string // "" means the arrays are valid
+	}{
+		{name: "W entry is a name", w: NewArrayFromSlice([]PdfObject{NewInteger(1), NewName("W"), NewInteger(1)}), wantErr: "/W"},
+		{name: "W entry is a string", w: NewArrayFromSlice([]PdfObject{NewString("1"), NewInteger(1), NewInteger(1)}), wantErr: "/W"},
+		{name: "W entry is a real", w: NewArrayFromSlice([]PdfObject{NewInteger(1), NewReal(2), NewInteger(1)}), wantErr: "/W"},
+		{name: "W entry is negative", w: integers(1, -2, 1), wantErr: "/W"},
+		{name: "W entry is wider than 8 bytes", w: integers(1, 9, 1), wantErr: "/W"},
+		{name: "W entries 8 bytes wide are valid", w: integers(1, 8, 1)},
+		{name: "Index entry is a name", w: integers(1, 1, 1), index: NewArrayFromSlice([]PdfObject{NewInteger(0), NewName("N")}), wantErr: "/Index"},
+		{name: "Index has an odd number of entries", w: integers(1, 1, 1), index: integers(0, 1, 5), wantErr: "/Index"},
+		{name: "Index start is negative", w: integers(1, 1, 1), index: integers(-1, 1), wantErr: "/Index"},
+		{name: "Index count is negative", w: integers(1, 1, 1), index: integers(0, -1), wantErr: "/Index"},
+		{name: "Index value does not fit an int32", w: integers(1, 1, 1), index: integers(1<<40, 1), wantErr: "/Index"},
+		{name: "Index pair overflows int32", w: integers(1, 1, 1), index: integers(math.MaxInt32, 2), wantErr: "/Index"},
+		{name: "Index pair ending at the int32 limit is valid", w: integers(1, 1, 1), index: integers(math.MaxInt32, 1)},
+		{name: "Index is not an array", w: integers(1, 1, 1), index: NewName("Index"), wantErr: "/Index"},
+		{name: "empty Index is valid", w: integers(1, 1, 1), index: NewArray()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dict := NewDictionary()
+			dict.Set("W", tt.w)
+			dict.Set("Size", NewInteger(1))
+			if tt.index != nil {
+				dict.Set("Index", tt.index)
+			}
+			p := &Parser{}
+			var err error
+			require.NotPanics(t, func() {
+				_, err = p.parseXRefStreamEntries(dict, bytes.Repeat([]byte{1}, 64))
+			})
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
 	}
 }

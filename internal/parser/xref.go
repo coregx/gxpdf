@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 )
 
@@ -791,6 +792,48 @@ func abs(x int) int {
 	return x
 }
 
+// xrefStreamWidths reads the three /W field widths. Each must be an integer
+// from 0 to 8: a wider field does not fit in an int64.
+func xrefStreamWidths(wObj PdfObject) ([3]int, error) {
+	var widths [3]int
+	wArray, ok := wObj.(*Array)
+	if !ok || wArray.Len() != 3 {
+		return widths, fmt.Errorf("invalid /W array: must have 3 elements")
+	}
+	for i := range widths {
+		width, ok := wArray.Get(i).(*Integer)
+		if !ok || width.Value() < 0 || width.Value() > 8 {
+			return widths, fmt.Errorf("invalid /W[%d]: must be an integer from 0 to 8", i)
+		}
+		widths[i] = int(width.Value())
+	}
+	return widths, nil
+}
+
+// xrefStreamIndex reads /Index as pairs of nonnegative start and count
+// integers whose object numbers fit in an int32, so they also fit an int on
+// 32-bit platforms.
+func xrefStreamIndex(indexObj PdfObject) ([]int, error) {
+	indexArray, ok := indexObj.(*Array)
+	if !ok || indexArray.Len()%2 != 0 {
+		return nil, fmt.Errorf("invalid /Index: must be an array of start and count pairs")
+	}
+	index := make([]int, 0, indexArray.Len())
+	for i := 0; i < indexArray.Len(); i++ {
+		value, ok := indexArray.Get(i).(*Integer)
+		if !ok || value.Value() < 0 || value.Value() > math.MaxInt32 {
+			return nil, fmt.Errorf("invalid /Index[%d]: must be a nonnegative integer", i)
+		}
+		index = append(index, int(value.Value()))
+	}
+	for i := 0; i < len(index); i += 2 {
+		if index[i+1] > 0 && index[i+1]-1 > math.MaxInt32-index[i] {
+			return nil, fmt.Errorf("invalid /Index pair %d: object numbers overflow", i/2)
+		}
+	}
+	return index, nil
+}
+
 // parseXRefStreamEntries parses binary xref entries from decoded stream data.
 //
 // The /W array specifies field widths: [type_bytes field2_bytes field3_bytes]
@@ -808,14 +851,11 @@ func (p *Parser) parseXRefStreamEntries(dict *Dictionary, data []byte) (*XRefTab
 	if wObj == nil {
 		return nil, fmt.Errorf("xref stream missing /W array")
 	}
-	wArray, ok := wObj.(*Array)
-	if !ok || wArray.Len() != 3 {
-		return nil, fmt.Errorf("invalid /W array: must have 3 elements")
+	widths, err := xrefStreamWidths(wObj)
+	if err != nil {
+		return nil, err
 	}
-
-	w1 := int(wArray.Get(0).(*Integer).Value())
-	w2 := int(wArray.Get(1).(*Integer).Value())
-	w3 := int(wArray.Get(2).(*Integer).Value())
+	w1, w2, w3 := widths[0], widths[1], widths[2]
 	entrySize := w1 + w2 + w3
 
 	// Note: entrySize == 0 is valid per PDF spec. When all widths are 0,
@@ -826,11 +866,9 @@ func (p *Parser) parseXRefStreamEntries(dict *Dictionary, data []byte) (*XRefTab
 	var index []int
 	indexObj := dict.Get("Index")
 	if indexObj != nil {
-		indexArray, ok := indexObj.(*Array)
-		if ok {
-			for i := 0; i < indexArray.Len(); i++ {
-				index = append(index, int(indexArray.Get(i).(*Integer).Value()))
-			}
+		index, err = xrefStreamIndex(indexObj)
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		// Default: [0 Size]
