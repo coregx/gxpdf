@@ -97,13 +97,14 @@ type BezierSegment struct {
 
 // ImageData represents image data for embedding in PDF.
 type ImageData struct {
-	Data             []byte // Raw image data (JPEG bytes or compressed PNG pixels)
-	AlphaMask        []byte // Alpha mask data for PNG with transparency
-	Width            int    // Image width in pixels
-	Height           int    // Image height in pixels
-	ColorSpace       string // Color space: "DeviceRGB", "DeviceCMYK", "DeviceGray"
-	Format           string // Image format: "jpeg" or "png"
-	BitsPerComponent int    // Bits per component (usually 8)
+	Data             []byte    // Raw image data (JPEG bytes or compressed PNG pixels)
+	AlphaMask        []byte    // Alpha mask data for PNG with transparency
+	Width            int       // Image width in pixels
+	Height           int       // Image height in pixels
+	ColorSpace       string    // Color space: "DeviceRGB", "DeviceCMYK", "DeviceGray"
+	Format           string    // Image format: "jpeg" or "png"
+	BitsPerComponent int       // Bits per component (usually 8)
+	Decode           []float64 // /Decode array; nil = default (Adobe CMYK JPEGs are inverted)
 }
 
 // GraphicsOp represents a graphics drawing operation.

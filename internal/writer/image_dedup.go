@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"hash"
+	"math"
 )
 
 // imageDigest identifies image content: two ImageData values with the same
@@ -22,6 +23,13 @@ func digestImage(img *ImageData) imageDigest {
 	binary.BigEndian.PutUint64(dims[8:], uint64(img.Height))
 	binary.BigEndian.PutUint64(dims[16:], uint64(img.BitsPerComponent))
 	h.Write(dims[:])
+	var dec [8]byte
+	binary.BigEndian.PutUint64(dec[:], uint64(len(img.Decode)))
+	h.Write(dec[:])
+	for _, v := range img.Decode {
+		binary.BigEndian.PutUint64(dec[:], math.Float64bits(v))
+		h.Write(dec[:])
+	}
 	writeField(h, img.Data)
 	writeField(h, img.AlphaMask)
 	var d imageDigest
