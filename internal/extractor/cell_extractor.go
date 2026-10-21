@@ -70,17 +70,19 @@ func (ce *CellExtractor) ExtractCellContent(bounds Rectangle) string {
 	return ce.buildTextFromLines(lines)
 }
 
-// cellBoundsPadding is added to cell bounds when checking text element
+// CellBoundsPadding is added to cell bounds when checking text element
 // containment. Text positioned near grid lines (within a few points) may
 // have its center point outside the strict cell rectangle due to coordinate
 // transformation precision, font metrics, or baseline vs bounding-box
-// differences. A 2pt padding matches the grid builder tolerance.
-const cellBoundsPadding = 2.0
+// differences. A 2pt padding matches the grid builder tolerance. It is
+// exported within the internal extractor package so boundary detection can
+// apply the same ownership rule before adding a cell boundary.
+const CellBoundsPadding = 2.0
 
 // FindElementsInBounds returns all text elements that are within the bounds.
 //
 // An element is considered "within" if its center point is inside the bounds
-// expanded by cellBoundsPadding on all sides. This handles coordinate
+// expanded by CellBoundsPadding on all sides. This handles coordinate
 // precision issues at grid boundaries without pulling in text from adjacent cells
 // (grid rows are typically 10-15pt apart).
 //
@@ -89,10 +91,10 @@ func (ce *CellExtractor) FindElementsInBounds(bounds Rectangle) []*TextElement {
 	var result []*TextElement
 
 	expanded := NewRectangle(
-		bounds.X-cellBoundsPadding,
-		bounds.Y-cellBoundsPadding,
-		bounds.Width+2*cellBoundsPadding,
-		bounds.Height+2*cellBoundsPadding,
+		bounds.X-CellBoundsPadding,
+		bounds.Y-CellBoundsPadding,
+		bounds.Width+2*CellBoundsPadding,
+		bounds.Height+2*CellBoundsPadding,
 	)
 
 	for _, elem := range ce.textElements {
@@ -160,7 +162,7 @@ func (ce *CellExtractor) findGridBand(yMin, yMax float64) (float64, float64) {
 	bandMin := ce.gridRows[0]
 	bandMax := ce.gridRows[len(ce.gridRows)-1]
 	for i := 0; i < len(ce.gridRows)-1; i++ {
-		if yMin >= ce.gridRows[i]-cellBoundsPadding && yMin <= ce.gridRows[i+1]+cellBoundsPadding {
+		if yMin >= ce.gridRows[i]-CellBoundsPadding && yMin <= ce.gridRows[i+1]+CellBoundsPadding {
 			bandMin = ce.gridRows[i]
 			bandMax = ce.gridRows[i+1]
 			break
