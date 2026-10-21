@@ -7,11 +7,12 @@ import (
 
 // Matrix represents a transformation matrix used in PDF graphics and text.
 //
-// PDF uses 3x3 transformation matrices in homogeneous coordinate space:
+// Matrix stores the canonical affine column-vector representation used by
+// Transform:
 //
-//	[ a  b  0 ]
-//	[ c  d  0 ]
-//	[ e  f  1 ]
+//	[ a  c  e ]
+//	[ b  d  f ]
+//	[ 0  0  1 ]
 //
 // The matrix is specified by six numbers: [a b c d e f]
 //
@@ -82,30 +83,12 @@ func (m Matrix) isFinite() bool {
 // Matrix multiplication is used to combine transformations.
 // The order matters: m.Multiply(other) applies other first, then m.
 //
-// The formula for matrix multiplication:
-//
-//	[ a1 b1 0 ]   [ a2 b2 0 ]   [ a1*a2+b1*c2  a1*b2+b1*d2  0 ]
-//	[ c1 d1 0 ] × [ c2 d2 0 ] = [ c1*a2+d1*c2  c1*b2+d1*d2  0 ]
-//	[ e1 f1 1 ]   [ e2 f2 1 ]   [ e1*a2+f1*c2+e2  e1*b2+f1*d2+f2  1 ]
+// Its representation is [A C E; B D F; 0 0 1], so composition is
+// independently checkable as m.Multiply(other).Transform(p) ==
+// m.Transform(other.Transform(p)).
 //
 // Reference: PDF 1.7 specification, Section 8.3.4 (Transformation Matrices).
 func (m Matrix) Multiply(other Matrix) Matrix {
-	return Matrix{
-		A: m.A*other.A + m.B*other.C,
-		B: m.A*other.B + m.B*other.D,
-		C: m.C*other.A + m.D*other.C,
-		D: m.C*other.B + m.D*other.D,
-		E: m.A*other.E + m.C*other.F + m.E,
-		F: m.B*other.E + m.D*other.F + m.F,
-	}
-}
-
-// composeColumnAffine returns m × other using the column-vector affine
-// convention used by the positioned Form-text path. Matrix.Multiply retains
-// gxpdf's established behavior because direct-page table extraction and its
-// coordinate normalizer depend on it. Global coordinate unification is tracked
-// separately in issue #99.
-func (m Matrix) composeColumnAffine(other Matrix) Matrix {
 	return Matrix{
 		A: m.A*other.A + m.C*other.B,
 		B: m.B*other.A + m.D*other.B,

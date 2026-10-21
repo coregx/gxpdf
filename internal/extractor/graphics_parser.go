@@ -104,7 +104,6 @@ type GraphicsParser struct {
 	elements   []*GraphicsElement
 	state      *GraphicsState
 	stateStack []*GraphicsState // graphics state stack for q/Q operators
-	pageHeight float64          // page height for Y-coordinate normalization
 }
 
 // GraphicsState tracks the current graphics state during parsing.
@@ -156,12 +155,6 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
 
-	// Read page height from MediaBox for Y-coordinate normalization.
-	// PDFs often use a top-left CTM (1 0 0 -1 0 pageHeight cm) which
-	// produces Y values outside the normal page range. We detect this
-	// after extraction and flip Y coordinates back to bottom-left origin.
-	gp.pageHeight = gp.readPageHeight(page)
-
 	// Get content stream(s)
 	contentData, err := gp.getPageContent(page)
 	if err != nil {
@@ -184,13 +177,6 @@ func (gp *GraphicsParser) ParseFromPage(pageNum int) ([]*GraphicsElement, error)
 	for _, op := range operators {
 		gp.processOperator(op)
 	}
-
-	// Normalize coordinates: align graphics Y-space with text Y-space.
-	// TextExtractor does not apply CTM, so text elements use raw PDF coords
-	// (bottom-left origin). GraphicsParser applies CTM, which can offset Y
-	// by the page height (common in wkhtmltopdf, Chrome, etc.). We detect
-	// the offset and correct it.
-	gp.normalizeCoordinates()
 
 	return gp.elements, nil
 }
@@ -323,7 +309,7 @@ func (gp *GraphicsParser) processOperator(op *Operator) {
 	case "Q": // Restore graphics state
 		gp.restoreState()
 
-	case "cm": // Modify CTM: new CTM = operand × old CTM
+	case "cm": // Concatenate a local transform with the current CTM.
 		if len(op.Operands) >= 6 {
 			a := getNumber(op.Operands[0])
 			b := getNumber(op.Operands[1])
@@ -333,8 +319,7 @@ func (gp *GraphicsParser) processOperator(op *Operator) {
 			f := getNumber(op.Operands[5])
 			if a != nil && b != nil && c != nil && d != nil && e != nil && f != nil {
 				operand := NewMatrix(*a, *b, *c, *d, *e, *f)
-				// PDF spec Section 8.3.4: new CTM = operand × old CTM
-				gp.state.CTM = operand.Multiply(gp.state.CTM)
+				gp.state.CTM = gp.state.CTM.Multiply(operand)
 			}
 		}
 
@@ -584,85 +569,6 @@ func (gp *GraphicsParser) restoreState() {
 	}
 	gp.state = gp.stateStack[n-1]
 	gp.stateStack = gp.stateStack[:n-1]
-}
-
-// readPageHeight extracts the page height from MediaBox.
-func (gp *GraphicsParser) readPageHeight(page *parser.Dictionary) float64 {
-	mb := page.Get("MediaBox")
-	if mb == nil {
-		return 0
-	}
-
-	// Resolve indirect reference
-	if ref, ok := mb.(*parser.IndirectReference); ok {
-		resolved, err := gp.reader.GetObject(ref.Number)
-		if err != nil {
-			return 0
-		}
-		mb = resolved
-	}
-
-	arr, ok := mb.(*parser.Array)
-	if !ok || arr.Len() < 4 {
-		return 0
-	}
-
-	// MediaBox = [llx lly urx ury]
-	if ury := getNumber(arr.Get(3)); ury != nil {
-		if lly := getNumber(arr.Get(1)); lly != nil {
-			return *ury - *lly
-		}
-		return *ury
-	}
-	return 0
-}
-
-// normalizeCoordinates aligns graphics Y-coordinates with the text coordinate
-// space (bottom-left origin, Y increasing upward).
-//
-// TextExtractor uses raw Tm/Td positions without CTM. GraphicsParser applies
-// CTM which often includes a page-height translation. This produces a
-// systematic Y-offset between text and graphics elements.
-//
-// Detection: compute the Y centroid of all graphics points. If it lies outside
-// the page bounds [0, pageHeight], subtract the nearest whole multiple of
-// pageHeight to bring it inside.
-func (gp *GraphicsParser) normalizeCoordinates() {
-	if gp.pageHeight <= 0 || len(gp.elements) == 0 {
-		return
-	}
-
-	var sumY float64
-	var count int
-	for _, elem := range gp.elements {
-		for _, p := range elem.Points {
-			sumY += p.Y
-			count++
-		}
-	}
-	if count == 0 {
-		return
-	}
-	centroidY := sumY / float64(count)
-
-	if centroidY >= 0 && centroidY <= gp.pageHeight {
-		return
-	}
-
-	var offset float64
-	if centroidY > gp.pageHeight {
-		n := int(centroidY / gp.pageHeight)
-		offset = -float64(n) * gp.pageHeight
-	} else {
-		n := int(-centroidY/gp.pageHeight) + 1
-		offset = float64(n) * gp.pageHeight
-	}
-
-	for _, elem := range gp.elements {
-		for i := range elem.Points {
-			elem.Points[i].Y += offset
-		}
-	}
 }
 
 // String returns a string representation of the graphics element.

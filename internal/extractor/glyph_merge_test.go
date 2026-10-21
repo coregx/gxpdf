@@ -242,6 +242,26 @@ func TestAssembleText_MultipleWordsAndLines(t *testing.T) {
 	assert.Equal(t, "N° de seguimiento:\n360002865586280", result)
 }
 
+func TestAssembleText_DoesNotDuplicateBoundaryWhitespace(t *testing.T) {
+	tests := []struct {
+		name     string
+		previous string
+		current  string
+		want     string
+	}{
+		{name: "trailing space", previous: "A ", current: "B", want: "A B"},
+		{name: "leading space", previous: "A", current: " B", want: "A B"},
+		{name: "no existing space", previous: "A", current: "B", want: "A B"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			first := NewTextElement(test.previous, 0, 0, 10, 10, "/F1", 10)
+			second := NewTextElement(test.current, 40, 0, 10, 10, "/F1", 10)
+			assert.Equal(t, test.want, AssembleText([]*TextElement{first, NewTextElement("", 20, 0, 0, 10, "/F1", 10), second}))
+		})
+	}
+}
+
 // ─── Integration test: real Andreani shipping label PDF ───────────────────────
 
 // TestAndreaniShippingLabel_NoPerGlyphSpaces verifies that extracting text from

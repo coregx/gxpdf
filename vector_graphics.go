@@ -75,9 +75,12 @@ func (pm PaintMode) String() string {
 // VectorPath represents a fully resolved vector graphics path extracted from a
 // PDF page, with all coordinates transformed into page user space.
 //
-// Coordinate system: points (1/72 inch), origin at bottom-left of page.
-// All coordinates are post-CTM (Current Transformation Matrix) — they are
-// already in absolute page space and require no further transformation.
+// Coords contains path points in transformed PDF page user space, the same
+// coordinate space used by TextElement bounds. Page-content matrices are
+// applied exactly once. Coordinates are not rebased to MediaBox/CropBox, and
+// page /Rotate remains display metadata. Values are in points
+// (1 pt = 1/72 inch) and require no further PDF matrix transformation.
+// Form XObject vector traversal is not currently part of this API.
 //
 // Iterating verbs and coords:
 //
@@ -105,7 +108,8 @@ type VectorPath struct {
 	// Use VerbCoordCount(verb) to determine how many Coords each verb consumes.
 	Verbs []PathVerb
 
-	// Coords stores the flattened coordinates for all verbs in page space.
+	// Coords stores the flattened path points for all verbs in transformed PDF
+	// page user space.
 	Coords []float64
 
 	// StrokeColor is the stroke color in RGBA (components 0–1).

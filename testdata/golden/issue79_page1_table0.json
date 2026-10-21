@@ -8,7 +8,7 @@
     {
       "row": 0,
       "col": 0,
-      "text": "",
+      "text": "Day 2 : Jul 21, 2026 ( Tuesday )",
       "rowSpan": 1,
       "colSpan": 4
     },
@@ -21,75 +21,110 @@
     },
     {
       "row": 2,
-      "col": 2,
-      "text": "Day 2 : Jul 21,2026 ( Tuesday )",
+      "col": 0,
+      "text": "TIME",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 3,
-      "col": 0,
-      "text": "",
-      "rowSpan": 9,
-      "colSpan": 1
-    },
-    {
-      "row": 3,
-      "col": 3,
-      "text": "",
-      "rowSpan": 9,
-      "colSpan": 1
-    },
-    {
-      "row": 4,
+      "row": 2,
       "col": 1,
       "text": "COURSE TITLE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 4,
+      "row": 2,
       "col": 2,
-      "text": "SECTIONS\nVENUE",
+      "text": "SECTIONS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 5,
+      "row": 2,
+      "col": 3,
+      "text": "VENUE",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "text": "Slot 1: \n9:00 AM\n - \n11:00 AM",
+      "rowSpan": 9,
+      "colSpan": 1
+    },
+    {
+      "row": 3,
       "col": 1,
       "text": "ADVANCE DATABASE MANAGEMENT SYSTEM",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 5,
+      "row": 3,
       "col": 2,
       "text": "A,B,C,D",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 6,
+      "row": 3,
+      "col": 3,
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
+      "rowSpan": 9,
+      "colSpan": 1
+    },
+    {
+      "row": 4,
       "col": 1,
       "text": "APPRECIATION OF PROSE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 6,
+      "row": 4,
       "col": 2,
       "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 7,
+      "row": 5,
       "col": 1,
       "text": "ENGINEERING ECONOMY [IPE]",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 5,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 6,
+      "col": 1,
+      "text": "MANAGERIAL FORECASTING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 6,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 7,
+      "col": 1,
+      "text": "MARKETING STRATEGY",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 7,
       "col": 2,
       "text": "A",
@@ -99,476 +134,560 @@
     {
       "row": 8,
       "col": 1,
-      "text": "MANAGERIAL FORECASTING",
+      "text": "POLITICS, PHILOSOPHY AND PUBLIC AFFAIRS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 8,
       "col": 2,
-      "text": "A",
+      "text": "A,B,C,D,E,F",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 9,
-      "col": 1,
-      "text": "MARKETING STRATEGY\nPOLITICS, PHILOSOPHY AND PUBLIC AFFAIRS",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 9,
-      "col": 2,
-      "text": "A,A,B,C,D,E,F,A,A,A[ARCH],B,B,B,D",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 10,
       "col": 1,
       "text": "PRINCIPLES OF ECONOMICS [FST/FE]",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 10,
+      "row": 9,
       "col": 2,
-      "text": "[ARCH],C,C,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D,D,E,E,F,F,G,H",
+      "text": "A,A,A[ARCH],B,B,B,[ARCH],C,C,C1,C10,C2,C3,C4,C5,C6,C7,C8,C9,D,D,E,E,F,F,G,H",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 12,
-      "col": 0,
-      "text": "DEVELOPMENT\nCOMMUNICATION\n[BMB]",
-      "rowSpan": 19,
-      "colSpan": 1
-    },
-    {
-      "row": 12,
+      "row": 10,
       "col": 1,
       "text": "PROGRAMMING LANGUAGE 2 [EEE]",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 12,
+      "row": 10,
       "col": 2,
       "text": "A,B,C,D,E",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 12,
-      "col": 3,
-      "text": "",
-      "rowSpan": 19,
-      "colSpan": 1
-    },
-    {
-      "row": 13,
+      "row": 11,
       "col": 1,
       "text": "SOCIOLINGUISTICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 13,
+      "row": 11,
       "col": 2,
       "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 14,
+      "row": 12,
+      "col": 0,
+      "text": "Slot 2: \n12:00 PM\n - \n2:00 PM",
+      "rowSpan": 19,
+      "colSpan": 1
+    },
+    {
+      "row": 12,
       "col": 1,
       "text": "ADVERTISING AS SOCIAL COMMUNICATION",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 14,
+      "row": 12,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 15,
+      "row": 12,
+      "col": 3,
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
+      "rowSpan": 19,
+      "colSpan": 1
+    },
+    {
+      "row": 13,
       "col": 1,
       "text": "BANGLA LANGUAGE \u0026 LITERATURE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 15,
+      "row": 13,
       "col": 2,
       "text": "E1,E2",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 16,
+      "row": 14,
       "col": 1,
       "text": "BANGLA LANGUAGE AND LITERATURE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 16,
+      "row": 14,
       "col": 2,
       "text": "J1",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 17,
+      "row": 15,
       "col": 1,
-      "text": "BUILDING AND FINISH MATERIALS\nCOMPARATIVE ECONOMIC ANALYSIS",
+      "text": "BUILDING AND FINISH MATERIALS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 15,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 16,
+      "col": 1,
+      "text": "COMPARATIVE ECONOMIC ANALYSIS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 16,
+      "col": 2,
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 17,
-      "col": 2,
-      "text": "A\nA",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 18,
       "col": 1,
       "text": "COMPUTATIONAL STATISTICS AND PROBABILITY",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 18,
+      "row": 17,
       "col": 2,
       "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 20,
+      "row": 18,
       "col": 1,
-      "text": "ECONOMICS OF POVERTY, INEQUALITY AND GENDER\nENTREPRENEURSHIP DEVELOPMENT",
+      "text": "ECONOMICS OF POVERTY, INEQUALITY AND GENDER",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 20,
+      "row": 18,
       "col": 2,
-      "text": "A\nA",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 21,
+      "row": 19,
       "col": 1,
-      "text": "ETHICS, SUSTAINABILITY, AND COMMUNICATION FOR",
+      "text": "ENTREPRENEURSHIP DEVELOPMENT",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 21,
+      "row": 19,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 20,
+      "col": 1,
+      "text": "ETHICS, SUSTAINABILITY, AND COMMUNICATION FOR \nDEVELOPMENT",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 20,
       "col": 2,
       "text": "A,B,C,D,E",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 21,
+      "col": 1,
+      "text": "HISTORY OF EMERGENCE OF BANGLADESH",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 21,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 22,
+      "col": 1,
+      "text": "INTRODUCTION TO BUSINESS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 22,
+      "col": 2,
+      "text": "A,A1,A2,A3,A4,A5,A6,A7",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 23,
       "col": 1,
-      "text": "HISTORY OF EMERGENCE OF BANGLADESH\nINTRODUCTION TO BUSINESS",
+      "text": "INTRODUCTION TO DIGITAL TOOLS  OF \nCOMMUNICATION",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 23,
       "col": 2,
-      "text": "A,B,A,A1,A2,A3,A4,A5,A6,A7",
+      "text": "J1",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 24,
       "col": 1,
-      "text": "INTRODUCTION TO DIGITAL TOOLS  OF",
+      "text": "INTRODUCTION TO PUBLIC HEALTH \u0026 NUTRITION \n[BMB]",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 24,
-      "col": 2,
-      "text": "D\nJ1",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 25,
-      "col": 1,
-      "text": "INTRODUCTION TO PUBLIC HEALTH \u0026 NUTRITION",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 25,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 26,
+      "row": 25,
       "col": 1,
       "text": "LITERARY THEORY AND CRITICISM",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 26,
+      "row": 25,
       "col": 2,
       "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 27,
+      "row": 26,
       "col": 1,
       "text": "OPERATING SYSTEM",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 27,
+      "row": 26,
       "col": 2,
       "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 29,
+      "row": 27,
       "col": 1,
       "text": "PROGRAMMING LANGUAGE 1 [EEE]",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 29,
+      "row": 27,
       "col": 2,
       "text": "A,B,C,D,E,F,G",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 30,
+      "row": 28,
       "col": 1,
       "text": "PROJECT ANALYSIS AND EVALUATION",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 30,
+      "row": 28,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 31,
-      "col": 0,
-      "text": "TROPICS",
-      "rowSpan": 15,
-      "colSpan": 1
-    },
-    {
-      "row": 31,
+      "row": 29,
       "col": 1,
       "text": "STATISTICS FOR ECONOMICS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 31,
+      "row": 29,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 31,
-      "col": 3,
-      "text": "",
-      "rowSpan": 14,
-      "colSpan": 1
-    },
-    {
-      "row": 32,
+      "row": 30,
       "col": 1,
       "text": "VISUAL ENVIRONMENT",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 32,
+      "row": 30,
       "col": 2,
       "text": "A,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 33,
+      "row": 31,
+      "col": 0,
+      "text": "Slot 3: \n3:00 PM\n - \n5:00 PM",
+      "rowSpan": 15,
+      "colSpan": 1
+    },
+    {
+      "row": 31,
       "col": 1,
       "text": "ARCHITECTURAL SPECIFICATIONS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 33,
+      "row": 31,
       "col": 2,
       "text": "B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 34,
+      "row": 31,
+      "col": 3,
+      "text": "All \nAnnexes \n\u0026 \nBuilding \nD",
+      "rowSpan": 15,
+      "colSpan": 1
+    },
+    {
+      "row": 32,
       "col": 1,
       "text": "BANGLADESH STUDIES",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 34,
+      "row": 32,
       "col": 2,
       "text": "A,A,B,B,C,C,D,E,F,G,H,I,J,K,L,P1",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 35,
+      "row": 33,
       "col": 1,
       "text": "BANGLADESH STUDIES [BBA]",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 35,
+      "row": 33,
       "col": 2,
       "text": "A,A1,A2,A3,A4,A5,A6,A7,B",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 36,
+      "row": 34,
       "col": 1,
-      "text": "COMPUTER INTEGRATED MANUFACTURING\nENTERPRISE RESOURCE PLANNING",
+      "text": "COMPUTER INTEGRATED MANUFACTURING",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 36,
-      "col": 2,
-      "text": "A\nA",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 37,
-      "col": 1,
-      "text": "ENVIRONMENT AND DESIGN - II : DESIGN IN THE",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 37,
+      "row": 34,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 39,
+      "row": 35,
+      "col": 1,
+      "text": "ENTERPRISE RESOURCE PLANNING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 35,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 36,
+      "col": 1,
+      "text": "ENVIRONMENT AND DESIGN - II : DESIGN IN THE \nTROPICS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 36,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 37,
       "col": 1,
       "text": "GLOBAL FINANCE",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 39,
+      "row": 37,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 40,
+      "row": 38,
       "col": 1,
       "text": "INTEGRATED MARKETING COMMUNICATION",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 40,
+      "row": 38,
       "col": 2,
       "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 41,
+      "row": 39,
       "col": 1,
       "text": "MARKETING MANAGEMENT",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 39,
+      "col": 2,
+      "text": "A,B,C,D,E,F,H",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 40,
+      "col": 1,
+      "text": "MARKETING MANAGEMENT [IPE]",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 40,
+      "col": 2,
+      "text": "A,B",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 41,
+      "col": 1,
+      "text": "MATHEMATICS FOR ARCHITECTS",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 41,
       "col": 2,
-      "text": "A,B,C,D,E,F,H\nD",
+      "text": "D1",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
       "row": 42,
-      "col": 1,
-      "text": "MARKETING MANAGEMENT [IPE]\nMATHEMATICS FOR ARCHITECTS",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 42,
-      "col": 2,
-      "text": "A,B\nD1",
-      "rowSpan": 1,
-      "colSpan": 1
-    },
-    {
-      "row": 43,
       "col": 1,
       "text": "MICROPROCESSOR AND EMBEDDED SYSTEMS",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
-      "row": 43,
+      "row": 42,
       "col": 2,
       "text": "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X",
       "rowSpan": 1,
       "colSpan": 1
     },
     {
+      "row": 43,
+      "col": 1,
+      "text": "PRINCIPLES OF MARKETING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 43,
+      "col": 2,
+      "text": "A,B,C,E,F,G,H",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 44,
+      "col": 1,
+      "text": "SELECTION AND STAFFING",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
+      "row": 44,
+      "col": 2,
+      "text": "A",
+      "rowSpan": 1,
+      "colSpan": 1
+    },
+    {
       "row": 45,
       "col": 1,
-      "text": "PRINCIPLES OF MARKETING\nSELECTION AND STAFFING\nSTRUCTURE I: BASIC MECHANICS OF SOLIDS",
+      "text": "STRUCTURE I: BASIC MECHANICS OF SOLIDS",
       "rowSpan": 1,
-      "colSpan": 3
+      "colSpan": 1
     },
     {
       "row": 45,
       "col": 2,
-      "text": "A,B,C,E,F,G,H,A,A",
+      "text": "A",
       "rowSpan": 1,
       "colSpan": 1
     }

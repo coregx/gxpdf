@@ -13,10 +13,11 @@ import (
 //
 // Each TextElement has position information (X, Y coordinates) which is critical
 // for table extraction and layout analysis. The coordinates represent the
-// bottom-left corner of the text element in PDF coordinate space.
+// lower-left corner of the text's axis-aligned envelope in transformed PDF page
+// user space. They are not rebased to a MediaBox or CropBox origin.
 //
 // PDF Coordinate System (Section 8.3.2):
-//   - Origin (0,0) is at bottom-left of page
+//   - Coordinates remain in transformed page user space
 //   - X increases to the right
 //   - Y increases upward
 //   - Coordinates are in points (1 point = 1/72 inch)
@@ -29,12 +30,25 @@ type TextElement struct {
 	Width    float64 // Width of text (in points)
 	Height   float64 // Height of text (in points)
 	FontName string  // Font name (e.g., "/F1", "/Helvetica")
-	FontSize float64 // Font size in points
+	FontSize float64 // Rendered vertical em size in page-space points
 
 	// preciseWidth records whether Width came from the PDF font metrics rather
 	// than the legacy 0.6-em estimate. It intentionally remains internal: it is
 	// extraction metadata used to distinguish glyph kerning from word gaps.
 	preciseWidth bool
+
+	// flow retains the transformed baseline used for line, gap, merge, and
+	// reading-order decisions. Public callers continue to receive the compatible
+	// axis-aligned page-space envelope above.
+	flow *textFlowGeometry
+}
+
+type textFlowGeometry struct {
+	originX, originY       float64
+	endX, endY             float64
+	directionX, directionY float64
+	emAdvance              float64
+	lineHeight             float64
 }
 
 // NewTextElement creates a new TextElement with the given properties.
