@@ -1,6 +1,7 @@
 package gxpdf
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strings"
@@ -137,6 +138,45 @@ func TestHostileDocuments(t *testing.T) {
 			case <-done:
 			case <-time.After(10 * time.Second):
 				t.Fatal("did not finish within 10s")
+			}
+		})
+	}
+}
+
+// xrefStreamPDF assembles a PDF whose only cross-reference section is an XRef
+// stream (object 3) with the given dictionary entries and data. Object 1 is
+// the catalog and object 2 an empty page tree.
+func xrefStreamPDF(dict string, data []byte) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.5\n")
+	buf.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	buf.WriteString("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n")
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "3 0 obj\n<< /Type /XRef /Root 1 0 R %s /Length %d >>\nstream\n", dict, len(data))
+	buf.Write(data)
+	fmt.Fprintf(&buf, "\nendstream\nendobj\nstartxref\n%d\n%%%%EOF\n", xref)
+	return buf.Bytes()
+}
+
+// TestHostileDocumentsRejectedOnOpen covers malformed files that previously
+// crashed the process while being opened. OpenFromBytes must return an error.
+func TestHostileDocumentsRejectedOnOpen(t *testing.T) {
+	tests := []struct {
+		name string
+		pdf  []byte
+	}{
+		{
+			name: "XRef stream /W entry is a name",
+			pdf:  xrefStreamPDF("/Size 4 /W [1 /W 1]", make([]byte, 8)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := OpenFromBytes(tt.pdf)
+			if err == nil {
+				doc.Close()
+				t.Fatal("OpenFromBytes succeeded, want error")
 			}
 		})
 	}
