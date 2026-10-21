@@ -63,15 +63,14 @@ func TestDecodeStreamData_FlateDecode(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-func TestDecodeStreamData_UnsupportedFilter_ReturnsRaw(t *testing.T) {
-	raw := []byte("compressed data")
+func TestDecodeStreamData_UnsupportedFilterReturnsError(t *testing.T) {
 	dict := parser.NewDictionary()
-	dict.Set("Filter", parser.NewName("RunLengthDecode"))
-	stream := parser.NewStream(dict, raw)
+	dict.Set("Filter", parser.NewName("CCITTFaxDecode"))
+	stream := parser.NewStream(dict, []byte("compressed data"))
 
-	got, err := decodeStreamData(stream)
-	require.NoError(t, err)
-	assert.Equal(t, raw, got, "unsupported filter should return raw bytes, not error")
+	_, err := decodeStreamData(stream)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "unsupported filter")
 }
 
 func TestDecodeStreamData_FilterArray_FirstFilter(t *testing.T) {
@@ -96,31 +95,6 @@ func TestDecodeStreamData_InvalidZlib_ReturnsError(t *testing.T) {
 
 	_, err := decodeStreamData(stream)
 	assert.Error(t, err)
-}
-
-// ─── extractFirstFilterName ───────────────────────────────────────────────────
-
-func TestExtractFirstFilterName_Name(t *testing.T) {
-	got := extractFirstFilterName(parser.NewName("FlateDecode"))
-	assert.Equal(t, "FlateDecode", got)
-}
-
-func TestExtractFirstFilterName_NonNameObject(t *testing.T) {
-	got := extractFirstFilterName(parser.NewInteger(42))
-	assert.Equal(t, "", got)
-}
-
-func TestExtractFirstFilterName_EmptyArray(t *testing.T) {
-	got := extractFirstFilterName(parser.NewArray())
-	assert.Equal(t, "", got)
-}
-
-func TestExtractFirstFilterName_ArrayWithName(t *testing.T) {
-	arr := parser.NewArray()
-	arr.Append(parser.NewName("FlateDecode"))
-	arr.Append(parser.NewName("ASCII85Decode"))
-	got := extractFirstFilterName(arr)
-	assert.Equal(t, "FlateDecode", got, "should return first filter only")
 }
 
 // ─── EmbeddedFont struct ──────────────────────────────────────────────────────

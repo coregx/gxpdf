@@ -61,35 +61,6 @@ func TestImageExtractor_getColorSpaceName(t *testing.T) {
 	}
 }
 
-func TestImageExtractor_getFilterName(t *testing.T) {
-	// Create a dummy reader for testing
-	reader := parser.NewReader("dummy.pdf")
-	extractor := NewImageExtractor(reader)
-
-	tests := []struct {
-		name     string
-		obj      interface{} // Will be converted to parser.PdfObject in implementation
-		expected string
-	}{
-		{
-			name:     "nil object",
-			obj:      nil,
-			expected: "", // No filter
-		},
-		// Additional tests would require parser.Name and parser.Array objects
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// This test is simplified - full tests would require mock objects
-			result := extractor.getFilterName(nil)
-			if result != tt.expected {
-				t.Errorf("getFilterName() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
 // Note: Full integration tests require actual PDF files with embedded images.
 // These tests should be added to the examples/image-extraction directory
 // with real PDF test fixtures.

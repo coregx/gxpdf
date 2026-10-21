@@ -1,10 +1,9 @@
 package extractor
 
 import (
-	"compress/zlib"
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"math"
 	"strings"
@@ -84,6 +83,7 @@ var ErrResourceLimitExceeded = errors.New("extractor: content exceeds processing
 // Reference: PDF 1.7 specification, Sections 9.4 (Text Objects), 8.8.1 (Form XObjects).
 type TextExtractor struct {
 	reader         *parser.Reader
+	ctx            context.Context
 	textState      *TextState
 	elements       []*TextElement
 	fontDecoders   map[string]*FontDecoder // fontName -> FontDecoder
@@ -163,8 +163,15 @@ func (te *TextExtractor) restoreGraphicsState(state textExtractorGraphicsState) 
 
 // NewTextExtractor creates a new TextExtractor for the given PDF reader.
 func NewTextExtractor(reader *parser.Reader) *TextExtractor {
+	return NewTextExtractorWithContext(reader, context.Background())
+}
+
+// NewTextExtractorWithContext creates a TextExtractor whose stream decoding
+// observes ctx.
+func NewTextExtractorWithContext(reader *parser.Reader, ctx context.Context) *TextExtractor {
 	return &TextExtractor{
 		reader:        reader,
+		ctx:           contextOrBackground(ctx),
 		textState:     NewTextState(),
 		elements:      []*TextElement{},
 		fontDecoders:  make(map[string]*FontDecoder),
@@ -182,6 +189,9 @@ func NewTextExtractor(reader *parser.Reader) *TextExtractor {
 //
 // Returns a slice of TextElements with position information, or error if extraction fails.
 func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
+	if err := contextOrBackground(te.ctx).Err(); err != nil {
+		return nil, err
+	}
 	// Reset state
 	te.elements = []*TextElement{}
 	te.textState = NewTextState()
@@ -198,7 +208,7 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 	te.limitErr = nil
 
 	// Get page
-	page, err := te.reader.GetPage(pageNum)
+	page, err := te.reader.GetPageWithContext(te.ctx, pageNum)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get page %d: %w", pageNum, err)
 	}
@@ -229,6 +239,9 @@ func (te *TextExtractor) ExtractFromPage(pageNum int) ([]*TextElement, error) {
 	if te.limitErr != nil {
 		// Callers add the (1-based) page number to the message.
 		return nil, te.limitErr
+	}
+	if err := contextOrBackground(te.ctx).Err(); err != nil {
+		return nil, err
 	}
 
 	// Merge per-glyph TextElements that belong to the same word.
@@ -556,7 +569,7 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 
 	// Resolve if it's an indirect reference
 	if ref, ok := contentsObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve contents reference: %w", err)
 		}
@@ -580,28 +593,30 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 		for i := 0; i < obj.Len(); i++ {
 			streamRef := obj.Get(i)
 			if streamRef == nil {
-				continue
+				return nil, fmt.Errorf("content stream %d is null", i)
 			}
 
 			// Resolve indirect reference
 			if ref, ok := streamRef.(*parser.IndirectReference); ok {
-				resolved, err := te.reader.GetObject(ref.Number)
+				resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 				if err != nil {
-					continue
+					return nil, fmt.Errorf("failed to resolve content stream %d: %w", i, err)
 				}
 				streamRef = resolved
 			}
 
 			// Decode stream
-			if stream, ok := streamRef.(*parser.Stream); ok {
-				content, err := te.decodeStream(stream)
-				if err != nil {
-					continue
-				}
-				allContent = append(allContent, content...)
-				// Add space between streams for safety
-				allContent = append(allContent, ' ')
+			stream, ok := streamRef.(*parser.Stream)
+			if !ok {
+				return nil, fmt.Errorf("content stream %d is %T, want Stream", i, streamRef)
 			}
+			content, err := te.decodeStream(stream)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode content stream %d: %w", i, err)
+			}
+			allContent = append(allContent, content...)
+			// Add space between streams for safety
+			allContent = append(allContent, ' ')
 		}
 
 	default:
@@ -611,91 +626,9 @@ func (te *TextExtractor) getPageContent(page *parser.Dictionary) ([]byte, error)
 	return allContent, nil
 }
 
-// decodeStream decodes a PDF stream based on its filters.
-//
-// For Phase 2.5, we implement FlateDecode (most common).
-// Other filters can be added in future phases.
+// decodeStream delegates to the parser's canonical bounded filter pipeline.
 func (te *TextExtractor) decodeStream(stream *parser.Stream) ([]byte, error) {
-	// Get filter
-	filterObj := stream.Dictionary().Get("Filter")
-	if filterObj == nil {
-		// No filter - return raw content
-		return stream.Content(), nil
-	}
-
-	// Get filter name
-	var filterName string
-	if name, ok := filterObj.(*parser.Name); ok {
-		filterName = name.Value()
-	} else if arr, ok := filterObj.(*parser.Array); ok {
-		// Array of filters - for now, just handle first one
-		if arr.Len() > 0 {
-			if name, ok := arr.Get(0).(*parser.Name); ok {
-				filterName = name.Value()
-			}
-		}
-	}
-
-	// Apply filter
-	switch filterName {
-	case filterFlateDecode:
-		return te.decodeFlateDecode(stream.Content())
-
-	case "":
-		// No filter
-		return stream.Content(), nil
-
-	default:
-		// Unsupported filter - return raw content and hope for the best
-		// In production, we should log this
-		return stream.Content(), nil
-	}
-}
-
-// decodeFlateDecode decodes FlateDecode (zlib) compressed data.
-//
-// FlateDecode is the most common compression filter in PDFs.
-//
-// Reference: PDF 1.7 specification, Section 7.4.4 (LZW and Flate Filters).
-func (te *TextExtractor) decodeFlateDecode(data []byte) ([]byte, error) {
-	// Create a bytes buffer wrapper
-	buf := &bytesReaderCloser{data: data, pos: 0}
-
-	// Create zlib reader with actual data
-	reader, err := zlib.NewReader(buf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize zlib reader: %w", err)
-	}
-	defer func() {
-		_ = reader.Close() // Close reader, ignore error
-	}()
-
-	// Read all decoded data
-	decoded, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode FlateDecode: %w", err)
-	}
-
-	return decoded, nil
-}
-
-// bytesReaderCloser wraps a byte slice to implement io.ReadCloser.
-type bytesReaderCloser struct {
-	data []byte
-	pos  int
-}
-
-func (b *bytesReaderCloser) Read(p []byte) (int, error) {
-	if b.pos >= len(b.data) {
-		return 0, io.EOF
-	}
-	n := copy(p, b.data[b.pos:])
-	b.pos += n
-	return n, nil
-}
-
-func (b *bytesReaderCloser) Close() error {
-	return nil
+	return stream.DecodeWithContext(contextOrBackground(te.ctx), parser.DefaultStreamDecodeOptions())
 }
 
 // processOperator processes a single content stream operator.
@@ -1114,11 +1047,14 @@ func (te *TextExtractor) processFormXObject(xobjName string) {
 	}
 }
 
-// processOperators runs content operators until they are exhausted or a
-// processing limit is hit.
+// processOperators runs content operators until they are exhausted, a
+// processing limit is hit, or the context is cancelled. Page and Form content
+// both run through here. A limit error is never replaced: ExtractFromPage
+// reports limitErr before checking the context.
 func (te *TextExtractor) processOperators(operators []*Operator) {
+	ctx := contextOrBackground(te.ctx)
 	for _, op := range operators {
-		if te.limitErr != nil {
+		if te.limitErr != nil || ctx.Err() != nil {
 			return
 		}
 		te.processOperator(op)
@@ -1149,7 +1085,7 @@ func (te *TextExtractor) getFormMatrix(stream *parser.Stream) (Matrix, bool) {
 		return Identity(), true
 	}
 	if ref, ok := matrixObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return Matrix{}, false
 		}
@@ -1194,7 +1130,7 @@ func (te *TextExtractor) resolveXObject(name string) *parser.Stream {
 
 	// Resolve indirect reference
 	if ref, ok := xobjDictObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil
 		}
@@ -1214,7 +1150,7 @@ func (te *TextExtractor) resolveXObject(name string) *parser.Stream {
 
 	// Resolve indirect reference to the XObject itself
 	if ref, ok := xobj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil
 		}
@@ -1237,7 +1173,7 @@ func (te *TextExtractor) getXObjectResources(stream *parser.Stream) *parser.Dict
 	}
 
 	if ref, ok := resourcesObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err != nil {
 			return nil
 		}
@@ -1276,7 +1212,7 @@ func (te *TextExtractor) getPageResources(page *parser.Dictionary) *parser.Dicti
 	if resourcesObj != nil {
 		// Resolve if it's an indirect reference
 		if ref, ok := resourcesObj.(*parser.IndirectReference); ok {
-			resolved, err := te.reader.GetObject(ref.Number)
+			resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 			if err == nil {
 				if dict, ok := resolved.(*parser.Dictionary); ok {
 					return dict
@@ -1346,11 +1282,11 @@ func (te *TextExtractor) resolveFontDictionary(fontName string) *parser.Dictiona
 	if te.pageResources == nil {
 		return nil
 	}
-	fontsDict, _ := resolveObject(te.reader, te.pageResources.Get("Font")).(*parser.Dictionary)
+	fontsDict, _ := resolveObject(te.ctx, te.reader, te.pageResources.Get("Font")).(*parser.Dictionary)
 	if fontsDict == nil {
 		return nil
 	}
-	fontDict, _ := resolveObject(te.reader, fontsDict.Get(fontName)).(*parser.Dictionary)
+	fontDict, _ := resolveObject(te.ctx, te.reader, fontsDict.Get(fontName)).(*parser.Dictionary)
 	return fontDict
 }
 
@@ -1368,7 +1304,7 @@ func (te *TextExtractor) buildFontDecoder(fontDict *parser.Dictionary) *FontDeco
 			// Case 2: Encoding is a dictionary (custom encoding with Differences)
 			// Resolve if its an indirect reference
 			if ref, ok := encodingObj.(*parser.IndirectReference); ok {
-				resolved, err := te.reader.GetObject(ref.Number)
+				resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 				if err == nil {
 					encodingObj = resolved
 				}
@@ -1423,7 +1359,7 @@ func (te *TextExtractor) buildFontDecoder(fontDict *parser.Dictionary) *FontDeco
 	// Resolve ToUnicode stream
 	var toUnicodeStream *parser.Stream
 	if ref, ok := toUnicodeObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err == nil {
 			toUnicodeStream, _ = resolved.(*parser.Stream)
 		}
@@ -1532,7 +1468,7 @@ func (te *TextExtractor) parseDifferencesArray(encodingDict *parser.Dictionary) 
 
 	// Resolve if indirect reference
 	if ref, ok := diffsObj.(*parser.IndirectReference); ok {
-		resolved, err := te.reader.GetObject(ref.Number)
+		resolved, err := te.reader.GetObjectWithContext(te.ctx, ref.Number)
 		if err == nil {
 			diffsObj = resolved
 		} else {
