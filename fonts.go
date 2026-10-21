@@ -51,7 +51,7 @@ type EmbeddedFont struct {
 //	    fmt.Printf("Font: %s (%s), %d bytes\n", f.Name, f.Subtype, len(f.Data))
 //	}
 func (d *Document) GetEmbeddedFonts() ([]EmbeddedFont, error) {
-	fe := extractor.NewFontExtractor(d.reader)
+	fe := extractor.NewFontExtractorWithContext(d.reader, d.ctx)
 	internal, err := fe.ExtractFromDocument()
 	if err != nil {
 		return nil, fmt.Errorf("gxpdf: extract embedded fonts: %w", err)
@@ -78,7 +78,7 @@ func (d *Document) GetEmbeddedFontsForPage(pageNum int) ([]EmbeddedFont, error) 
 		return nil, fmt.Errorf("gxpdf: page %d out of range (1-%d)", pageNum, d.PageCount())
 	}
 
-	fe := extractor.NewFontExtractor(d.reader)
+	fe := extractor.NewFontExtractorWithContext(d.reader, d.ctx)
 	internal, err := fe.ExtractFromPage(pageNum - 1) // convert to 0-based
 	if err != nil {
 		return nil, fmt.Errorf("gxpdf: extract embedded fonts from page %d: %w", pageNum, err)
