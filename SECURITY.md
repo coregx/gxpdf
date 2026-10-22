@@ -121,13 +121,13 @@ Always check errors — a returned error is the only limit signal you get.
 - table-driven tests for malformed input, with the malformed bytes checked in
 - fuzz targets: `FuzzOpenFromBytes`, `FuzzStreamDecodeNeverExceedsLimit`,
   `FuzzLoadImageFromReader`, `FuzzTableRowSpans`, `FuzzSplitWord`
-- the race detector in CI (Linux, macOS, Windows)
-- `golangci-lint` on every push
+- the race detector in CI, on Linux, macOS and Windows
+- `golangci-lint` on every push to `main` and on every pull request
 
 ## Dependencies
 
-Production code depends on `spf13/cobra` (CLI), `xuri/excelize/v2` (XLSX input for
-conversion) and `stretchr/testify` (tests). Everything else in `go.mod` is indirect.
+Production code depends on `spf13/cobra` (CLI) and `xuri/excelize/v2` (XLSX export);
+`stretchr/testify` is used by tests only. Everything else in `go.mod` is indirect.
 Dependency versions are reviewed by hand when they change; there is no automated
 dependency bot on this repository.
 
