@@ -40,20 +40,30 @@ func formPage(t *testing.T, pageContent string, forms map[string]string, order [
 	return r
 }
 
-func extractWithin(t *testing.T, r *parser.Reader, limit time.Duration) ([]*TextElement, error) {
+// extractionWait bounds how long a test waits for extraction before calling it
+// a hang. It is a hang guard, not a performance assertion: the work these tests
+// do is deterministic (maxFormInvocationsPerPage bounds it), while shared CI
+// runners differ in speed by an order of magnitude - the invocation budget test
+// takes about a second under -race on a workstation and took more than ten
+// seconds on a loaded macOS runner, which is how a 10 s leash became a flake.
+// go test's own timeout is ten minutes; this one only has to be faster.
+const extractionWait = 2 * time.Minute
+
+func extractWithin(t *testing.T, r *parser.Reader) ([]*TextElement, error) {
 	t.Helper()
-	return extractorWithin(t, NewTextExtractor(r), limit)
+	return extractorWithin(t, NewTextExtractor(r))
 }
 
 // extractorWithin runs extractor on page 0 and fails the test if it does not
-// finish within limit. Tests use it to inspect the extractor afterwards.
-func extractorWithin(t *testing.T, extractor *TextExtractor, limit time.Duration) ([]*TextElement, error) {
+// finish within extractionWait. Tests use it to inspect the extractor afterwards.
+func extractorWithin(t *testing.T, extractor *TextExtractor) ([]*TextElement, error) {
 	t.Helper()
 	type result struct {
 		elements []*TextElement
 		err      error
 	}
 	done := make(chan result, 1)
+	start := time.Now()
 	go func() {
 		elements, err := extractor.ExtractFromPage(0)
 		done <- result{elements, err}
@@ -61,8 +71,8 @@ func extractorWithin(t *testing.T, extractor *TextExtractor, limit time.Duration
 	select {
 	case res := <-done:
 		return res.elements, res.err
-	case <-time.After(limit):
-		t.Fatalf("extraction did not finish within %v", limit)
+	case <-time.After(extractionWait):
+		t.Fatalf("extraction still running after %v - that is a hang, not slowness", time.Since(start))
 		return nil, nil
 	}
 }
@@ -104,7 +114,7 @@ func TestFormXObject_CyclesAreNotReentered(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := formPage(t, "/X Do", tt.forms, tt.order)
-			elements, err := extractWithin(t, r, 5*time.Second)
+			elements, err := extractWithin(t, r)
 			if err != nil {
 				t.Fatalf("ExtractFromPage: %v", err)
 			}
@@ -132,7 +142,7 @@ func TestFormXObject_InvocationBudget(t *testing.T) {
 	}
 	r := formPage(t, "/X1 Do", forms, order)
 
-	_, err := extractWithin(t, r, 10*time.Second)
+	_, err := extractWithin(t, r)
 	if !errors.Is(err, ErrResourceLimitExceeded) {
 		t.Fatalf("ExtractFromPage error = %v, want ErrResourceLimitExceeded", err)
 	}
@@ -145,7 +155,7 @@ func TestFormXObject_RepeatedInvocationsUseCachedContent(t *testing.T) {
 	r := formPage(t, "/X Do /X Do /X Do",
 		map[string]string{"X": "BT /F1 12 Tf 72 700 Td (A) Tj ET"}, []string{"X"})
 	extractor := NewTextExtractor(r)
-	elements, err := extractorWithin(t, extractor, 5*time.Second)
+	elements, err := extractorWithin(t, extractor)
 	if err != nil {
 		t.Fatalf("ExtractFromPage: %v", err)
 	}
