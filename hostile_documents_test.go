@@ -11,6 +11,14 @@ import (
 	"github.com/coregx/gxpdf/internal/testutil"
 )
 
+// hostileCheckWait bounds how long one case may run before the test calls it a
+// hang. It is a hang guard, not a performance assertion: every case here stops
+// at a fixed limit inside the library, while shared CI runners vary in speed by
+// an order of magnitude - the exponential Form graph finished in about 0.1 s on
+// a workstation and took more than 10 s on a loaded macOS runner, which is how
+// a 10 s leash became a flake. go test's own timeout is ten minutes.
+const hostileCheckWait = 2 * time.Minute
+
 // TestHostileDocuments exercises crafted or corrupted object graphs through
 // the public API. Each case previously crashed the process (fatal stack
 // overflow / out of memory, which recover cannot catch) or ran for minutes.
@@ -136,8 +144,8 @@ func TestHostileDocuments(t *testing.T) {
 			}()
 			select {
 			case <-done:
-			case <-time.After(10 * time.Second):
-				t.Fatal("did not finish within 10s")
+			case <-time.After(hostileCheckWait):
+				t.Fatalf("check still running after %v - that is a hang, not slowness", hostileCheckWait)
 			}
 		})
 	}
