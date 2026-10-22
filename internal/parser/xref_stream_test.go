@@ -378,3 +378,81 @@ func TestParseXRefStreamEntriesRejectsMalformedWAndIndex(t *testing.T) {
 		})
 	}
 }
+
+func TestXRefStreamEntryCount(t *testing.T) {
+	tests := []struct {
+		name    string
+		index   []int
+		wantErr bool
+	}{
+		{name: "empty index", index: nil},
+		{name: "one small pair", index: []int{0, 5}},
+		{name: "exactly at the limit", index: []int{0, maxXRefStreamEntries}},
+		{name: "one over the limit", index: []int{0, maxXRefStreamEntries + 1}, wantErr: true},
+		{name: "spread over pairs", index: []int{0, 600_000, 600_000, 600_000}, wantErr: true},
+		{name: "largest count an /Index may carry", index: []int{0, math.MaxInt32}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := xrefStreamEntryCount(tt.index)
+			if tt.wantErr {
+				assert.ErrorContains(t, err, "more than")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestParseXRefStreamEntriesRejectsHugeEntryCount covers the case that has no
+// data bound at all: /W [0 0 0] consumes nothing, so only the count limits the
+// work. One entry of data is enough to show the guard fires before the loop.
+func TestParseXRefStreamEntriesRejectsHugeEntryCount(t *testing.T) {
+	dict := NewDictionary()
+	dict.Set("W", testIntegers(0, 0, 0))
+	dict.Set("Index", testIntegers(0, math.MaxInt32))
+
+	p := &Parser{}
+	_, err := p.parseXRefStreamEntries(dict, []byte{0})
+	assert.ErrorContains(t, err, "more than 1000000 entries")
+}
+
+// TestParseXRefStreamEntriesRejectsHugeSize covers the default /Index: the
+// /Size is the entry count then, and it needs the same bound.
+func TestParseXRefStreamEntriesRejectsHugeSize(t *testing.T) {
+	dict := NewDictionary()
+	dict.Set("W", testIntegers(0, 0, 0))
+	dict.Set("Size", NewInteger(int64(maxXRefStreamEntries)+1))
+
+	p := &Parser{}
+	_, err := p.parseXRefStreamEntries(dict, []byte{0})
+	assert.ErrorContains(t, err, "more than 1000000 entries")
+}
+
+// TestParseXRefStreamEntriesZeroWidthEntries guards the legitimate zero-width
+// stream: all fields default, and a small count must still be accepted.
+func TestParseXRefStreamEntriesZeroWidthEntries(t *testing.T) {
+	dict := NewDictionary()
+	dict.Set("W", testIntegers(0, 0, 0))
+	dict.Set("Index", testIntegers(0, 3))
+
+	p := &Parser{}
+	table, err := p.parseXRefStreamEntries(dict, []byte{0})
+	require.NoError(t, err)
+	require.NotNil(t, table)
+	assert.Equal(t, 3, table.Size())
+	for objectNum := 0; objectNum < 3; objectNum++ {
+		entry, ok := table.GetEntry(objectNum)
+		require.True(t, ok, "object %d missing", objectNum)
+		assert.Equal(t, XRefEntryInUse, entry.Type)
+	}
+}
+
+// testIntegers builds an /Array of /Integer objects.
+func testIntegers(values ...int64) *Array {
+	array := NewArray()
+	for _, value := range values {
+		array.Append(NewInteger(value))
+	}
+	return array
+}

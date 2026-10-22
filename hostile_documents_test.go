@@ -169,6 +169,10 @@ func TestHostileDocumentsRejectedOnOpen(t *testing.T) {
 			name: "XRef stream /W entry is a name",
 			pdf:  xrefStreamPDF("/Size 4 /W [1 /W 1]", make([]byte, 8)),
 		},
+		{
+			name: "XRef stream /Index asks for a billion entries",
+			pdf:  xrefStreamPDF("/Size 4 /W [0 0 0] /Index [0 2147483647]", []byte{0}),
+		},
 	}
 
 	for _, tt := range tests {

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("%PDF-1.5\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n3 0 obj\n<< /Type /XRef /Root 1 0 R /Size 4 /W [0 0 0] /Index [0 2147483647] /Length 1 >>\nstream\n\x00\nendstream\nendobj\nstartxref\n110\n%%EOF\n")
