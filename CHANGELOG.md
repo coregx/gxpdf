@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.10] - 2026-10-22
 
 ### Fixed
 - **An XRef stream could declare an unbounded number of entries** (#120). With `/W [0 0 0]` no entry data is consumed, so the data-length check never fired and the count from `/Index` or `/Size` alone decided the work: a 241-byte file could ask for 2^31 entries, about 370 GB of allocation. The entry count is now capped at 1,000,000 (the limit folio's reader uses); anything above it is an error, and zero-width streams within the limit still parse.
@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Malformed XRef stream `/W` or `/Index` panicked** (#116, by @kari-pikkarainen): a `/W` or `/Index` entry that was not an integer (a name, string or real), an `/Index` with an odd number of values, or a negative `/W` width panicked while the document was opened. These are now reported as errors, as are a `/W` field wider than 8 bytes, a negative `/Index` start or count, and an `/Index` that is not an array (previously ignored). Files that used to open parse exactly as before.
+
+### Security
+- [GHSA-8g65-h4j3-62jf](https://github.com/coregx/gxpdf/security/advisories/GHSA-8g65-h4j3-62jf) (High, CVSS 7.5, affected `< 0.9.9`): the panic above is reachable from any PDF opened with `Open` or `OpenFromBytes`, and a caller that does not wrap the call in `recover()` loses the process.
 
 ## [0.9.8] - 2026-10-22
 
