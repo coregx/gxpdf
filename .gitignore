@@ -94,6 +94,8 @@ check-*.go
 .claude/
 .goco/
 .goda/
+.gode/
+.mcp.json
 
 # Developers docs
 docs/dev/
