@@ -394,6 +394,24 @@ func (p *Parser) parseStreamUntilEndstream(dict *Dictionary) (*Stream, error) {
 	var content []byte
 	reader := p.getReaderFromLexer()
 
+	// The end-of-line marker after the stream keyword is syntax, not data
+	// (Section 7.3.8.1). This path is taken when /Length is missing or
+	// indirect, and nothing before it removes the marker: a flate stream then
+	// began with the 0x0A of the marker and failed to decode with
+	// "zlib: invalid header" (bug-009: foo.pdf, detect_vertical_false.pdf and
+	// ten more files in the corpus).
+	if b, err := reader.ReadByte(); err == nil {
+		switch b {
+		case '\r':
+			if next, err := reader.ReadByte(); err == nil && next != '\n' {
+				_ = reader.UnreadByte()
+			}
+		case '\n':
+		default:
+			_ = reader.UnreadByte()
+		}
+	}
+
 	buf := make([]byte, 1)
 	lookback := make([]byte, 0, 32)
 
@@ -425,6 +443,13 @@ func (p *Parser) parseStreamUntilEndstream(dict *Dictionary) (*Stream, error) {
 				// Found endstream - trim it from content
 				contentLen := len(content) - (len(lookback) - idx)
 				content = content[:contentLen]
+				// The end-of-line marker before endstream is not stream data
+				// (Section 7.3.8.1), but without /Length there is no way to
+				// tell it from a last byte of 0x0A or 0x0D that belongs to the
+				// data: removing it corrupts the flate streams of golang.pdf,
+				// gobook.0.pdf and us-031a.pdf. The byte is kept - a trailing
+				// newline is harmless to zlib and to the content parser, and
+				// keeping it never loses data.
 				break
 			}
 		}

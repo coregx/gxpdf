@@ -93,7 +93,11 @@ func (l *Lexer) NextToken() (Token, error) {
 		return l.readNumber(line, column)
 
 	case isRegularChar(ch):
-		return l.readKeywordOrBoolean(line, column)
+		token, err := l.readKeywordOrBoolean(line, column)
+		if err == nil && token.Type == TokenKeyword && token.Value == "ID" {
+			l.skipInlineImageData()
+		}
+		return token, err
 
 	default:
 		_, _ = l.readByte() // consume unexpected char
@@ -480,6 +484,45 @@ func (l *Lexer) peek() (byte, error) {
 	l.peekedChar = ch
 	l.hasPeeked = true
 	return ch, nil
+}
+
+// skipInlineImageData consumes the binary payload of an inline image, from the
+// byte after the ID keyword up to and including the EI that ends it.
+//
+// The payload is arbitrary binary - the flate data of a sampled image starts
+// with 0x78 0x9c - so tokenizing it produces "unknown token" errors and the
+// page it appears on cannot be parsed at all. EI is the only reliable marker
+// (Section 8.9.7: "EI" preceded by white space), so a payload that happens to
+// contain those letters without white space before them does not end the scan.
+//
+// The spec puts one white-space byte between ID and the data; some producers
+// emit \r\n instead, so up to two end-of-line bytes are consumed. A payload
+// without EI runs to the end of the stream, which leaves the caller at EOF: a
+// corrupt inline image ends the content stream instead of failing the whole
+// page.
+func (l *Lexer) skipInlineImageData() {
+	separator := byte(' ')
+	if ch, err := l.readByte(); err == nil {
+		separator = ch
+		if ch == '\r' {
+			if next, err := l.peek(); err == nil && next == '\n' {
+				_, _ = l.readByte()
+				separator = '\n'
+			}
+		}
+	}
+
+	before, prev := separator, separator
+	for {
+		ch, err := l.readByte()
+		if err != nil {
+			return
+		}
+		if ch == 'I' && prev == 'E' && isWhitespace(before) {
+			return
+		}
+		before, prev = prev, ch
+	}
 }
 
 // isWhitespace checks if a byte is PDF whitespace.
