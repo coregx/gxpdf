@@ -778,3 +778,116 @@ func BenchmarkLexer_HexStrings(b *testing.B) {
 		_, _ = lexer.NextToken()
 	}
 }
+
+// TestLexerSkipsInlineImageData covers the binary payload of an inline image:
+// tokenizing it as content operators is what made pages that embed one fail
+// with `unknown token "x"` (the 0x78 of a flate header).
+func TestLexerSkipsInlineImageData(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{
+			name:    "payload with flate header",
+			content: "q\nBI\n/CS/R20\n/W 1\n/H 1\n/BPC 8\n/F/Fl\nID x\x9c\x01\x02\nEI Q\n",
+			want:    []string{"q", "BI", "ID", "Q"},
+		},
+		{
+			name:    "payload containing EI without white space before it",
+			content: "BI /W 1 /H 1 ID \x01EI\x02EI\x03\nEI Q",
+			want:    []string{"BI", "ID", "Q"},
+		},
+		{
+			name:    "CRLF after ID",
+			content: "BI /W 1 /H 1 ID\r\n\x9c\x01\x02\nEI Q",
+			want:    []string{"BI", "ID", "Q"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(strings.NewReader(tt.content))
+			var keywords []string
+			for {
+				token, err := lexer.NextToken()
+				require.NoError(t, err)
+				if token.Type == TokenEOF {
+					break
+				}
+				if token.Type == TokenKeyword {
+					keywords = append(keywords, token.Value)
+				}
+			}
+			assert.Equal(t, tt.want, keywords)
+		})
+	}
+}
+
+// TestLexerInlineImageWithoutEI checks that a payload with no EI ends the
+// stream instead of failing it: the rest of the page is unreadable anyway, and
+// an error here would drop the operators parsed before it.
+func TestLexerInlineImageWithoutEI(t *testing.T) {
+	lexer := NewLexer(strings.NewReader("q BI /W 1 /H 1 ID \x9c\x01\x02"))
+	var keywords []string
+	for {
+		token, err := lexer.NextToken()
+		require.NoError(t, err)
+		if token.Type == TokenEOF {
+			break
+		}
+		if token.Type == TokenKeyword {
+			keywords = append(keywords, token.Value)
+		}
+	}
+	assert.Equal(t, []string{"q", "BI", "ID"}, keywords)
+}
+
+// TestLexerInlineImageEdgeCases covers the malformed ends of an inline image:
+// none of them may hang, panic, or swallow the rest of the stream.
+func TestLexerInlineImageEdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    []string
+	}{
+		{
+			name:    "ID at the end of the stream",
+			content: "q BI /W 1 /H 1 ID",
+			want:    []string{"q", "BI", "ID"},
+		},
+		{
+			name:    "EI at the end of the stream without trailing space",
+			content: "BI /W 1 /H 1 ID \x01\x02\nEI",
+			want:    []string{"BI", "ID"},
+		},
+		{
+			name:    "BI without ID",
+			content: "BI /W 1 /H 1 EI Q",
+			want:    []string{"BI", "EI", "Q"},
+		},
+		{
+			name:    "empty payload",
+			content: "BI /W 1 /H 1 ID \nEI Q",
+			want:    []string{"BI", "ID", "Q"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(strings.NewReader(tt.content))
+			var keywords []string
+			for {
+				token, err := lexer.NextToken()
+				require.NoError(t, err)
+				if token.Type == TokenEOF {
+					break
+				}
+				if token.Type == TokenKeyword {
+					keywords = append(keywords, token.Value)
+				}
+			}
+			assert.Equal(t, tt.want, keywords)
+		})
+	}
+}

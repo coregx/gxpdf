@@ -216,3 +216,20 @@ func TestContentParser_ParseOperators_ComplexExample(t *testing.T) {
 	assert.Contains(t, names, "Td")
 	assert.Contains(t, names, "ET")
 }
+
+// TestContentParser_SkipsInlineImage covers an inline image in a content
+// stream: its binary payload must not be tokenized as operators, and parsing
+// must continue with the operators that follow it.
+func TestContentParser_SkipsInlineImage(t *testing.T) {
+	content := []byte("q BI /W 2 /H 2 /BPC 8 /CS /G ID \x78\x9c\x01\x02\xff\nEI Q BT /F1 12 Tf ET")
+	parser := NewContentParser(content)
+
+	ops, err := parser.ParseOperators()
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(ops))
+	for _, op := range ops {
+		names = append(names, op.Name)
+	}
+	assert.Equal(t, []string{"q", "BI", "ID", "Q", "BT", "Tf", "ET"}, names)
+}

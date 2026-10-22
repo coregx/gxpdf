@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"context"
 	"encoding/ascii85"
+	"fmt"
 	"testing"
 
 	"github.com/coregx/gxpdf/internal/parser"
@@ -314,4 +315,57 @@ func TestImageDecodeOptionsBoundaryIsExact(t *testing.T) {
 
 	_, err = extractor.imageDecodeOptions(newDictionary(predictedRows+1, true))
 	require.ErrorIs(t, err, parser.ErrStreamDecodeLimit)
+}
+
+// TestTextExtractorSkipsInlineImage covers a page whose content stream embeds
+// an inline image: its flate payload used to reach the operator parser, which
+// failed the whole page with `unknown token "x"` (the 0x78 header).
+func TestTextExtractorSkipsInlineImage(t *testing.T) {
+	content := "q 100 0 0 100 0 0 cm\nBI /W 1 /H 1 /BPC 8 /CS /G /F /Fl\n" +
+		"ID \x78\x9c\x01\x02\x03\nEI Q\nBT /F1 12 Tf 10 100 Td (After the image) Tj ET"
+	pdf := testutil.BuildPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		testutil.Stream("", content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	)
+	reader, err := parser.OpenPDFFromBytes(pdf)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
+
+	elements, err := NewTextExtractor(reader).ExtractFromPage(0)
+	require.NoError(t, err)
+	assert.Equal(t, "After the image", AssembleText(elements))
+}
+
+// TestTextExtractorReadsStreamWithIndirectLength covers a compressed stream
+// whose /Length is an indirect reference: the parser cannot size the stream and
+// scans for endstream instead. The end-of-line markers around the data are
+// syntax, not content - leaving the one after `stream` in place made every such
+// flate stream fail with "zlib: invalid header" (bug-009).
+func TestTextExtractorReadsStreamWithIndirectLength(t *testing.T) {
+	text := "BT /F1 12 Tf 10 100 Td (Indirect length) Tj ET"
+	var compressed bytes.Buffer
+	writer := zlib.NewWriter(&compressed)
+	_, err := writer.Write([]byte(text))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	pdf := testutil.BuildPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+		// CRLF after the stream keyword, as most producers write it.
+		"<< /Length 6 0 R /Filter /FlateDecode >>\nstream\r\n"+compressed.String()+"\nendstream",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		fmt.Sprintf("%d", compressed.Len()),
+	)
+	reader, err := parser.OpenPDFFromBytes(pdf)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
+
+	elements, err := NewTextExtractor(reader).ExtractFromPage(0)
+	require.NoError(t, err)
+	assert.Equal(t, "Indirect length", AssembleText(elements))
 }

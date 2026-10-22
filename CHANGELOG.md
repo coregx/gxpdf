@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Pages with an inline image could not be read.** The content-stream lexer tokenized the binary payload of an inline image (`BI ... ID <data> EI`) as operators, so the flate data of a sampled image failed the page with `unknown token "x"` — ICDAR 2013 `us-010.pdf` and `us-011a.pdf` failed every extraction this way. The payload is now skipped up to the `EI` that ends it; as the spec requires, that `EI` must be preceded by white space, so binary data that happens to contain those letters does not cut it short, and a payload with no `EI` ends the stream instead of failing it.
+- **Streams whose `/Length` is missing or indirect failed to decode.** The scan-to-`endstream` fallback kept the end-of-line marker that follows the `stream` keyword in the data, so a flate stream began with `0x0A` before its `0x78 0x9C` header and every such stream failed with `zlib: invalid header` (`foo.pdf`, `detect_vertical_false.pdf`, and `electoral_roll.pdf`, which did not even open because its object stream failed). The marker after `stream` is now skipped. The marker before `endstream` is deliberately kept: without `/Length` it cannot be told from a last byte of `0x0A` that belongs to the data, and removing it corrupted three files that used to parse (`golang.pdf`, `gobook.0.pdf`, `us-031a.pdf`).
+
 ## [0.9.10] - 2026-10-22
 
 ### Fixed
