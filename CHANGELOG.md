@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **An XRef stream could declare an unbounded number of entries** (#120). With `/W [0 0 0]` no entry data is consumed, so the data-length check never fired and the count from `/Index` or `/Size` alone decided the work: a 241-byte file could ask for 2^31 entries, about 370 GB of allocation. The entry count is now capped at 1,000,000 (the limit folio's reader uses); anything above it is an error, and zero-width streams within the limit still parse.
+
 ## [0.9.9] - 2026-10-22
 
 ### Fixed

@@ -834,6 +834,30 @@ func xrefStreamIndex(indexObj PdfObject) ([]int, error) {
 	return index, nil
 }
 
+// maxXRefStreamEntries bounds the number of entries one cross-reference stream
+// may declare.
+//
+// The truncation check in parseXRefStreamEntries only bounds work when the
+// entries carry data: with /W [0 0 0] nothing is consumed, so the check never
+// fires and the loop runs exactly as many times as /Index or /Size asks. A file
+// of a few hundred bytes could then require billions of entries and die with an
+// out-of-memory error. Real documents are orders of magnitude below this limit;
+// folio's reader uses the same one for the same reason.
+const maxXRefStreamEntries = 1_000_000
+
+// xrefStreamEntryCount checks that an /Index declares at most
+// maxXRefStreamEntries entries in total, across all pairs.
+func xrefStreamEntryCount(index []int) error {
+	var total int64
+	for i := 1; i < len(index); i += 2 {
+		total += int64(index[i])
+		if total > maxXRefStreamEntries {
+			return fmt.Errorf("xref stream declares more than %d entries", maxXRefStreamEntries)
+		}
+	}
+	return nil
+}
+
 // parseXRefStreamEntries parses binary xref entries from decoded stream data.
 //
 // The /W array specifies field widths: [type_bytes field2_bytes field3_bytes]
@@ -861,6 +885,8 @@ func (p *Parser) parseXRefStreamEntries(dict *Dictionary, data []byte) (*XRefTab
 	// Note: entrySize == 0 is valid per PDF spec. When all widths are 0,
 	// all fields use defaults: type=1 (in-use), offset=0, generation=0.
 	// This is used in stub xref streams that rely on /Prev chain.
+	// No data is consumed in that case, so the entry count alone decides how
+	// much work the loop below does: maxXRefStreamEntries bounds it.
 
 	// Get /Index array (object ranges) - default is [0 Size]
 	var index []int
@@ -876,7 +902,13 @@ func (p *Parser) parseXRefStreamEntries(dict *Dictionary, data []byte) (*XRefTab
 		if size <= 0 {
 			return nil, fmt.Errorf("xref stream missing or invalid /Size")
 		}
+		if size > maxXRefStreamEntries {
+			return nil, fmt.Errorf("xref stream declares more than %d entries", maxXRefStreamEntries)
+		}
 		index = []int{0, int(size)}
+	}
+	if err := xrefStreamEntryCount(index); err != nil {
+		return nil, err
 	}
 
 	// Parse entries
