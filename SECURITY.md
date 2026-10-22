@@ -2,145 +2,135 @@
 
 ## Supported Versions
 
+GxPDF is pre-1.0: security fixes go into the latest minor version, on `main`, and are
+released as a patch. Older minors get no backports.
+
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-
-Security updates are provided for the latest minor version.
+| 0.9.x   | :white_check_mark: |
+| < 0.9   | :x:                |
 
 ## Reporting a Vulnerability
 
-We take security seriously. If you discover a security vulnerability, please report it responsibly.
+**Do not open a public issue for a security problem.** A public report leaves every
+user exposed before a fix exists.
 
-### How to Report
+### How to report
 
-**DO NOT** open a public GitHub issue for security vulnerabilities.
+**Preferred — GitHub private vulnerability reporting:**
+https://github.com/coregx/gxpdf/security/advisories/new
 
-Instead, report security issues via:
+The report stays private until an advisory is published. Use the draft advisory to send
+the description and the reproducer, and to review the fix and the advisory text before
+disclosure.
 
-1. **GitHub Security Advisory** (preferred):
-   https://github.com/coregx/gxpdf/security/advisories/new
+**Alternative — email:** `a.kolkov@gmail.com`, subject `gxpdf security`. Good if GitHub
+is not an option for you; say so in the first message if you want an encrypted channel.
 
-2. **Email**: Create a private GitHub issue or contact via discussions
+### What to include
 
-### What to Include
+- What the problem is and its impact (crash, memory exhaustion, infinite loop, code
+  execution, information disclosure)
+- A reproducer: the malformed PDF, or a short program that builds it
+- Affected versions (`go list -m github.com/coregx/gxpdf`)
+- A suggested fix, if you have one
 
-- Description of the vulnerability
-- Steps to reproduce (include malicious PDF if applicable)
-- Affected versions
-- Potential impact (RCE, DoS, memory exhaustion, etc.)
-- Suggested fix (if available)
+### Response timeline
 
-### Response Timeline
+- **Initial reply**: within 72 hours
+- **Assessment** (confirmed, severity, affected versions): within 7 days
+- **Fix and disclosure**: a patch release and a GitHub security advisory, coordinated
+  with you. We ask for 90 days before public disclosure, and we publish earlier if a fix
+  ships and you agree, or if the issue is already public.
 
-- **Initial Response**: Within 72 hours
-- **Assessment**: Within 1 week
-- **Fix & Disclosure**: Coordinated with reporter
+You are credited in the advisory unless you ask us not to be.
 
-## Security Considerations
+## Scope
 
-GxPDF parses untrusted PDF files. Users should be aware of these risks:
+**In scope** — anything that processes untrusted input:
 
-### Malicious PDF Files
+- the parser and readers: `internal/parser`, `internal/extractor`, `pkg/`
+- the writer and the creator API (`creator/`)
+- the CLI (`cmd/`)
+- crashes and resource exhaustion caused by a malicious PDF: unbounded memory, unbounded
+  stack, quadratic or infinite loops. Availability problems on untrusted input are
+  security issues here, not just bugs.
 
-**Risk**: Crafted PDFs can cause crashes, memory exhaustion, or unexpected behavior.
+**Out of scope:**
 
-**Mitigations**:
-- Recursion depth limits
-- Cycle detection in object references
-- Size limits on decompression
-- Input validation
+- the `reference/` directory — third-party code, not part of the module or the release
+- problems that need a trusted or already-validated file
+- bugs in the caller's own code, and resource limits the caller is expected to set
+  (see below)
 
-**User Recommendations**:
+## Security Considerations for Users
+
+GxPDF parses files you do not control. Treat every PDF as hostile.
+
+### Malicious PDF files
+
+Crafted files can attack the parser: deep object graphs, reference cycles, absurd
+`/Length` values, streams that expand without bound.
+
+Mitigations in the library:
+
+- recursion depth limits and cycle detection in object references
+- a cap on each decode step (64 MiB) and on decoded image data (256 MiB)
+- the whole `/Filter` chain is validated before decoding; unsupported filters are an
+  error, not a silent pass-through
+- fuzzing of the parser and the stream decoder
+
+### Stream decompression (decompression bombs)
+
+A stream can expand far beyond its file size. Each decode step is bounded; the bound
+surfaces as an error, including through `GetImagesWithError`.
+
+### Integer overflow
+
+Object numbers, lengths and offsets come from the file. They are bounds-checked before
+use; see the regression tests for `/Length` handling.
+
+### Recommendations
+
 ```go
-// Use timeout for untrusted PDFs
+// Bound the work, not just the call: a hostile file may be slow rather than huge.
 ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 defer cancel()
 
-reader := pdf.NewReader("untrusted.pdf")
-doc, err := reader.ReadWithContext(ctx)
+doc, err := pdf.NewReader("untrusted.pdf").ReadWithContext(ctx)
+if err != nil {
+    return fmt.Errorf("parsing PDF: %w", err)
+}
 ```
 
-### Stream Decompression (Zip Bombs)
-
-**Risk**: Compressed streams can expand to large sizes.
-
-**Mitigations**:
-- Maximum decompressed size limits
-- Compression ratio limits
-- Streaming decompression
-
-### Integer Overflow
-
-**Risk**: Large values can cause integer overflow.
-
-**Mitigations**:
-- Safe integer arithmetic
-- Bounds checking
-- Validation of object numbers
-
-## Best Practices for Users
-
-### Input Validation
-
 ```go
-// Validate file size
-fi, _ := os.Stat(pdfPath)
+// Reject oversized input before parsing.
+fi, err := os.Stat(path)
+if err != nil {
+    return err
+}
 if fi.Size() > maxPDFSize {
     return errors.New("PDF too large")
 }
-
-// Use timeout
-ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-defer cancel()
 ```
 
-### Resource Limits
-
-```go
-// Limit pages
-const maxPages = 100
-pages := min(doc.PageCount(), maxPages)
-
-// Limit content size
-const maxTextSize = 10 * 1024 * 1024
-text, _ := page.ExtractText()
-if len(text) > maxTextSize {
-    return errors.New("text too large")
-}
-```
-
-### Error Handling
-
-```go
-// Always check errors
-doc, err := reader.Read()
-if err != nil {
-    return fmt.Errorf("PDF parsing failed: %w", err)
-}
-```
+Always check errors — a returned error is the only limit signal you get.
 
 ## Security Testing
 
-- Unit tests with edge cases
-- Fuzz testing for parser
-- Race detector (0 data races)
-- Static analysis with gosec
-- golangci-lint security checks
+- table-driven tests for malformed input, with the malformed bytes checked in
+- fuzz targets: `FuzzOpenFromBytes`, `FuzzStreamDecodeNeverExceedsLimit`,
+  `FuzzLoadImageFromReader`, `FuzzTableRowSpans`, `FuzzSplitWord`
+- the race detector in CI (Linux, macOS, Windows)
+- `golangci-lint` on every push
 
 ## Dependencies
 
-GxPDF minimizes external dependencies:
+Production code depends on `spf13/cobra` (CLI), `xuri/excelize/v2` (XLSX input for
+conversion) and `stretchr/testify` (tests). Everything else in `go.mod` is indirect.
+Dependency versions are reviewed by hand when they change; there is no automated
+dependency bot on this repository.
 
-- Standard library for production code
-- `testify` for testing only
-- Dependabot enabled for updates
+## Thanks
 
-## Security Contact
-
-- **GitHub Security Advisory**: https://github.com/coregx/gxpdf/security/advisories/new
-- **Issues** (non-sensitive): https://github.com/coregx/gxpdf/issues
-
----
-
-**Thank you for helping keep GxPDF secure!**
+Thank you for helping keep GxPDF and its users safe.
