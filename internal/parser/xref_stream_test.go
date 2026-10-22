@@ -339,6 +339,8 @@ func TestParseXRefStreamEntriesRejectsMalformedWAndIndex(t *testing.T) {
 		index   PdfObject
 		wantErr string // "" means the arrays are valid
 	}{
+		{name: "W is not an array", w: NewName("W"), wantErr: "/W"},
+		{name: "W has two entries", w: integers(1, 1), wantErr: "/W"},
 		{name: "W entry is a name", w: NewArrayFromSlice([]PdfObject{NewInteger(1), NewName("W"), NewInteger(1)}), wantErr: "/W"},
 		{name: "W entry is a string", w: NewArrayFromSlice([]PdfObject{NewString("1"), NewInteger(1), NewInteger(1)}), wantErr: "/W"},
 		{name: "W entry is a real", w: NewArrayFromSlice([]PdfObject{NewInteger(1), NewReal(2), NewInteger(1)}), wantErr: "/W"},
