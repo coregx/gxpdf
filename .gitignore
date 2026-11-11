@@ -92,6 +92,7 @@ check-*.go
 
 # AI settings
 .claude/
+.pm/
 .goco/
 .goda/
 .gode/
